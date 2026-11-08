@@ -1,0 +1,66 @@
+{
+  "appName": "DocuRebuild",
+  "tagline": "Document reconstruction workspace",
+  "actions": {
+    "newProject": "New project",
+    "open": "Open",
+    "save": "Save",
+    "cancel": "Cancel",
+    "create": "Create",
+    "delete": "Delete",
+    "rename": "Rename",
+    "close": "Close",
+    "retry": "Try again",
+    "back": "Back",
+    "browse": "Browse files",
+    "copy": "Copy",
+    "copied": "Copied",
+    "import": "Import",
+    "reset": "Reset",
+    "confirm": "Confirm"
+  },
+  "nav": {
+    "projects": "Projects",
+    "settings": "Settings"
+  },
+  "status": {
+    "ready": "System ready",
+    "degraded": "Backend degraded",
+    "offline": "Backend offline",
+    "localFirst": "Local-first",
+    "private": "Private"
+  },
+  "theme": {
+    "label": "Theme",
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "language": {
+    "label": "Language",
+    "english": "English",
+    "burmese": "မြန်မာ",
+    "system": "System language"
+  },
+  "phases": {
+    "label": "Phase {{number}}",
+    "comingSoon": "Coming in phase {{number}}"
+  },
+  "units": {
+    "pages_one": "{{count}} page",
+    "pages_other": "{{count}} pages",
+    "words_one": "{{count}} word",
+    "words_other": "{{count}} words",
+    "characters_one": "{{count}} character",
+    "characters_other": "{{count}} characters"
+  },
+  "menu": {
+    "more": "More options"
+  },
+  "loading": "Loading…",
+  "notFound": {
+    "title": "Page not found",
+    "description": "The page you are looking for does not exist.",
+    "action": "Back to projects"
+  }
+}

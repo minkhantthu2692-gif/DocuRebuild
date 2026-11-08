@@ -1,0 +1,75 @@
+# ---------------------------------------------------------------------------
+# DocuRebuild .gitignore
+# Application source code is committed. User data is NEVER committed.
+# ---------------------------------------------------------------------------
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+dist-ssr/
+build/
+out/
+*.tsbuildinfo
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Local application data and user project data (Category C - never pushed)
+.data/
+data/
+projects/
+user-data/
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Backups, exports and caches generated at runtime
+backups/
+exports/
+thumbnails/
+cache/
+.trash/
+
+# Test artefacts
+test-results/
+playwright-report/
+playwright/.cache/
+coverage/
+
+# Desktop packaging (Tauri)
+src-tauri/target/
+
+# Editor / OS noise
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*

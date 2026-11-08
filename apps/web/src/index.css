@@ -1,0 +1,141 @@
+@import "@docurebuild/design-tokens/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-family: var(--font-ui);
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    margin: 0;
+    min-height: 100dvh;
+  }
+
+  ::selection {
+    background-color: hsl(var(--primary) / 0.22);
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: hsl(var(--muted-foreground) / 0.8);
+  }
+
+  /* Sensible touch behaviour without disabling normal selection. */
+  button {
+    touch-action: manipulation;
+  }
+}
+
+@layer components {
+  /* ---- Document editor typography (independent from UI typography) ---- */
+  .doc-content .ProseMirror {
+    @apply min-h-[26rem] whitespace-pre-wrap break-words text-[1.0625rem] leading-[1.8] outline-none;
+  }
+
+  .doc-content .ProseMirror > * + * {
+    @apply mt-3;
+  }
+
+  .doc-content .ProseMirror h1 {
+    @apply mt-8 text-[1.9rem] font-semibold leading-tight tracking-tight;
+  }
+
+  .doc-content .ProseMirror h2 {
+    @apply mt-7 text-2xl font-semibold leading-snug tracking-tight;
+  }
+
+  .doc-content .ProseMirror h3 {
+    @apply mt-6 text-xl font-semibold leading-snug;
+  }
+
+  .doc-content .ProseMirror p {
+    @apply my-0;
+  }
+
+  .doc-content .ProseMirror ul {
+    @apply list-disc pl-6;
+  }
+
+  .doc-content .ProseMirror ol {
+    @apply list-decimal pl-6;
+  }
+
+  .doc-content .ProseMirror li > p {
+    @apply my-1;
+  }
+
+  .doc-content .ProseMirror blockquote {
+    @apply border-l-4 border-primary/40 pl-4 italic text-muted-foreground;
+  }
+
+  .doc-content .ProseMirror code {
+    @apply rounded-xs bg-muted px-1.5 py-0.5 font-mono text-[0.9em];
+  }
+
+  .doc-content .ProseMirror pre {
+    @apply overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm;
+  }
+
+  .doc-content .ProseMirror pre code {
+    @apply bg-transparent p-0;
+  }
+
+  .doc-content .ProseMirror a {
+    @apply text-primary underline underline-offset-2;
+  }
+
+  .doc-content .ProseMirror hr {
+    @apply my-8 border-t;
+  }
+
+  .doc-content .ProseMirror .is-empty::before {
+    @apply pointer-events-none float-left h-0 text-muted-foreground/70;
+    content: attr(data-placeholder);
+  }
+
+  .doc-content .ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+  }
+
+  .doc-content .ProseMirror:focus {
+    outline: none;
+  }
+
+  /* ---- Workspace panels ---- */
+  .panel-sheen {
+    background-image: linear-gradient(
+      150deg,
+      hsl(var(--glass-surface) / 0.9),
+      hsl(var(--glass-tint) / 0.55)
+    );
+  }
+}
+
+/* Respect reduced-motion at the framework level as well. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

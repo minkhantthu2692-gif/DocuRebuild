@@ -1,0 +1,60 @@
+{
+  "eyebrow": "Local-first workspace",
+  "title": "Your reconstruction workspace",
+  "subtitle": "Turn scans, photos and PDFs into structured, editable documents — privately, on this device.",
+  "projects": "Projects",
+  "projectsCount_one": "{{count}} project",
+  "projectsCount_other": "{{count}} projects",
+  "searchPlaceholder": "Search projects…",
+  "loading": "Loading projects…",
+  "loadError": {
+    "title": "Projects couldn’t be loaded",
+    "description": "The local backend may not be running. Your project files have not been changed.",
+    "action": "Try again"
+  },
+  "empty": {
+    "title": "No projects yet",
+    "description": "Create a project to start rebuilding a book, page or document. Source files stay on this device.",
+    "action": "Create your first project"
+  },
+  "noResults": {
+    "title": "No matching projects",
+    "description": "Try a different search term.",
+    "action": "Clear search"
+  },
+  "localNote": "Projects are stored locally. Nothing is uploaded.",
+  "phaseNote": "PDF import, OCR, AI tools and export are built in phases. Only working features are shown.",
+  "card": {
+    "updated": "Updated {{date}}",
+    "neverOpened": "Not opened yet",
+    "open": "Open project"
+  },
+  "menu": {
+    "open": "Open project",
+    "rename": "Rename",
+    "delete": "Delete"
+  },
+  "createDialog": {
+    "title": "Create a project",
+    "description": "Give this reconstruction project a name. You can import pages next.",
+    "name": "Project name",
+    "namePlaceholder": "e.g. Quantum Mechanics — Chapter 3",
+    "descriptionLabel": "Description (optional)",
+    "descriptionPlaceholder": "What are you reconstructing?",
+    "submit": "Create project",
+    "creating": "Creating…"
+  },
+  "renameDialog": {
+    "title": "Rename project",
+    "name": "Project name",
+    "submit": "Save name",
+    "saving": "Saving…"
+  },
+  "deleteDialog": {
+    "title": "Delete “{{name}}”?",
+    "description": "The project folder will be moved to the local trash folder. Imported source files are not permanently deleted.",
+    "confirm": "Move to trash",
+    "deleting": "Moving…",
+    "deleted": "Project moved to the local trash folder."
+  }
+}

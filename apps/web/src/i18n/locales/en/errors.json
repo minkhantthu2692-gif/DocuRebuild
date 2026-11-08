@@ -1,0 +1,22 @@
+{
+  "generic": "Something went wrong. Please try again.",
+  "network_unreachable": "The local backend is not reachable. Start the API and try again.",
+  "request_failed": "The request could not be completed.",
+  "validation_error": "The information provided is not valid.",
+  "project_not_found": "This project could not be found.",
+  "project_storage_missing": "The project folder is missing. Restore it from a backup or remove the project.",
+  "invalid_project_name": "Please enter a project name.",
+  "unsupported_file_type": "That file type isn’t supported yet. Use JPG, PNG, WEBP, BMP or TIFF.",
+  "image_unreadable": "One of the images could not be read.",
+  "file_too_large": "The file is larger than the current import limit.",
+  "empty_file": "The file is empty.",
+  "too_many_files": "Too many files were selected for one batch.",
+  "no_files": "No files were selected.",
+  "invalid_page_order": "The new page order was invalid. Nothing was changed.",
+  "page_not_found": "This page could not be found.",
+  "asset_not_found": "The image file could not be found.",
+  "asset_file_missing": "The image file is missing from the project folder.",
+  "invalid_settings": "Those settings are not valid.",
+  "not_found": "The requested item could not be found.",
+  "internal_error": "The local backend encountered an unexpected error."
+}

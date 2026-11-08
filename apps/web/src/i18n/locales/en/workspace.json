@@ -1,0 +1,113 @@
+{
+  "source": "Source",
+  "document": "Document",
+  "thumbnails": "Source pages",
+  "localProject": "Local project",
+  "importPages": "Import pages",
+  "importing_one": "Importing {{count}} file…",
+  "importing_other": "Importing {{count}} files…",
+  "importSuccess_one": "Imported {{count}} page.",
+  "importSuccess_other": "Imported {{count}} pages.",
+  "dropTitle": "Drop images here",
+  "dropHint": "or click to browse",
+  "supported": "JPG, PNG, WEBP, BMP, TIFF · up to {{size}} MB each",
+  "supportedNoSize": "JPG, PNG, WEBP, BMP, TIFF",
+  "pdfSoon": "PDF import is next on the roadmap.",
+  "importErrors": {
+    "unsupported": "“{{name}}” is not a supported image type.",
+    "tooLarge": "“{{name}}” is larger than {{size}} MB.",
+    "tooMany": "Select at most {{count}} files at a time.",
+    "noneAccepted": "No supported images were selected.",
+    "moreRejected_one": "{{count}} more file was skipped.",
+    "moreRejected_other": "{{count}} more files were skipped."
+  },
+  "noPages": "No source pages yet",
+  "sourceLoadError": {
+    "title": "Source pages couldn’t be loaded",
+    "description": "Your imported files have not been changed. Try loading the page list again."
+  },
+  "loading": "Opening project…",
+  "notFound": "This project could not be opened.",
+  "backToProjects": "Back to projects",
+  "save": {
+    "saved": "Saved",
+    "saving": "Saving…",
+    "unsaved": "Unsaved changes",
+    "failed": "Couldn’t save",
+    "retry": "Retry"
+  },
+  "viewer": {
+    "fit": "Fit",
+    "actual": "Actual size",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "rotateLeft": "Rotate left",
+    "rotateRight": "Rotate right",
+    "reset": "Reset rotation",
+    "delete": "Delete page",
+    "previous": "Previous page",
+    "next": "Next page",
+    "moveLeft": "Move page left",
+    "moveRight": "Move page right",
+    "pageOf": "Page {{page}} of {{total}}",
+    "emptyValue": "No page selected"
+  },
+  "deletePageDialog": {
+    "title": "Delete this page?",
+    "description": "The source image will be moved to this project’s local trash folder. The rest of the document is not changed.",
+    "confirm": "Delete page"
+  },
+  "editor": {
+    "placeholder": "Start typing, or import a page and reconstruct it here.",
+    "undo": "Undo",
+    "redo": "Redo",
+    "bold": "Bold",
+    "italic": "Italic",
+    "underline": "Underline",
+    "strike": "Strikethrough",
+    "bulletList": "Bulleted list",
+    "orderedList": "Numbered list",
+    "quote": "Blockquote",
+    "code": "Code block",
+    "paragraph": "Paragraph",
+    "heading1": "Heading 1",
+    "heading2": "Heading 2",
+    "heading3": "Heading 3",
+    "alignLeft": "Align left",
+    "alignCenter": "Align center",
+    "alignRight": "Align right",
+    "wordCount": "Word count",
+    "documentSettings": "Document style",
+    "typeface": "Typeface",
+    "serif": "Serif",
+    "sans": "Sans-serif",
+    "format": "Text style",
+    "loadError": {
+      "title": "The document couldn’t be loaded",
+      "description": "Editing is paused until the local document is available. Nothing has been overwritten."
+    }
+  },
+  "tools": {
+    "title": "Reconstruction tools",
+    "ocr": "Extract text (OCR)",
+    "tables": "Detect tables",
+    "figures": "Detect figures",
+    "equations": "Detect equations",
+    "ai": "AI assistant",
+    "coming": "In development"
+  },
+  "projectMenu": {
+    "rename": "Rename project",
+    "delete": "Delete project"
+  },
+  "panels": {
+    "collapseLeft": "Hide source panel",
+    "expandLeft": "Show source panel",
+    "collapseRight": "Hide document panel",
+    "expandRight": "Show document panel",
+    "resize": "Resize panels",
+    "switch": "Switch workspace panel"
+  },
+  "autosave": "Autosave on",
+  "phaseNote": "This workspace grows phase by phase. Tools appear only when they actually work."
+}

@@ -1,0 +1,111 @@
+{
+  "title": "Settings",
+  "subtitle": "Make DocuRebuild yours. Everything is stored locally.",
+  "backToProjects": "Back to projects",
+  "nav": {
+    "label": "Settings sections"
+  },
+  "sections": {
+    "appearance": "Appearance",
+    "language": "Language & region",
+    "editor": "Editor",
+    "storage": "Storage",
+    "about": "About"
+  },
+  "appearance": {
+    "theme": "Theme",
+    "themeDescription": "Choose light, dark, or follow your system setting.",
+    "accent": "Accent colour",
+    "accentDescription": "Used for primary actions, selections, and highlights.",
+    "accentNames": {
+      "indigo": "Indigo",
+      "violet": "Violet",
+      "blue": "Blue",
+      "teal": "Teal",
+      "emerald": "Emerald",
+      "amber": "Amber",
+      "rose": "Rose"
+    },
+    "radius": "Corner style",
+    "radiusDescription": "Adjust how rounded panels and controls feel.",
+    "radiusValues": {
+      "compact": "Compact",
+      "soft": "Soft",
+      "rounded": "Rounded"
+    },
+    "blur": "Glass blur",
+    "blurDescription": "Transparency and blur on panels and dialogs.",
+    "blurValues": {
+      "off": "Off",
+      "subtle": "Subtle",
+      "strong": "Strong"
+    },
+    "density": "Interface density",
+    "densityDescription": "Controls the height of toolbars and form fields.",
+    "densityValues": {
+      "comfortable": "Comfortable",
+      "compact": "Compact"
+    },
+    "fontSize": "Interface text size",
+    "fontSizeDescription": "Only the application interface changes. Documents keep their own typography.",
+    "fontSizeValues": {
+      "sm": "Small",
+      "md": "Medium",
+      "lg": "Large"
+    },
+    "motion": "Animations",
+    "motionDescription": "Reduce motion for comfort or accessibility.",
+    "motionValues": {
+      "full": "Full",
+      "reduced": "Reduced"
+    }
+  },
+  "language": {
+    "title": "Application language",
+    "description": "Only the interface language changes. Your documents and OCR content are never translated.",
+    "system": "System language",
+    "burmeseNote": "Burmese uses Unicode. Zawgyi text is preserved exactly as imported and is never converted automatically."
+  },
+  "editor": {
+    "font": "Document typeface",
+    "description": "Used for the document editor and future exports. Interface typography stays independent.",
+    "serif": "Serif",
+    "sans": "Sans-serif",
+    "preview": "The quick brown fox jumps over the lazy dog. မြန်မာစာ စမ်းသပ်ချက်။"
+  },
+  "storage": {
+    "title": "Local storage",
+    "path": "Data folder",
+    "pathDescription": "The application database, project folders, and immutable source files live here. Nothing is uploaded to a cloud service.",
+    "projects": "Projects",
+    "version": "Version",
+    "copyPath": "Copy path",
+    "copied": "Path copied",
+    "copyFailed": "The path couldn’t be copied.",
+    "offline": "The storage location is unavailable while the local backend is offline.",
+    "privacyNote": "GitHub backs up source code and documentation only — never your documents or imported pages."
+  },
+  "about": {
+    "title": "About DocuRebuild",
+    "version": "Version",
+    "principles": "Built around local-first, free-first, accuracy-first principles.",
+    "repo": "Source repository",
+    "docs": "Documentation",
+    "phaseStatus": "Implementation status"
+  },
+  "roadmap": {
+    "title": "Implementation status",
+    "foundation": "Foundation, local storage & workspace",
+    "import": "Image import & page transforms",
+    "pdf": "PDF import",
+    "processing": "Adaptive background processing",
+    "ocr": "OCR & layout detection",
+    "ai": "AI gateway & verification",
+    "editor": "Tables, figures & equations",
+    "export": "DOCX export",
+    "history": "History & recovery",
+    "done": "Ready",
+    "inProgress": "In progress",
+    "planned": "Planned"
+  }
+}

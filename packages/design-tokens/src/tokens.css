@@ -1,0 +1,401 @@
+/* ==========================================================================
+   DocuRebuild design tokens
+   Single source of truth for colour, type, spacing, radius, blur and motion.
+   Components must consume these tokens (directly or through Tailwind) instead
+   of hardcoding visual values.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* --- Semantic colour (HSL channels, consumed as hsl(var(--token) / a)) --- */
+  --background: 240 45% 98%;
+  --foreground: 231 32% 12%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 231 32% 12%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 231 32% 12%;
+
+  --primary: 245 72% 58%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 240 28% 95%;
+  --secondary-foreground: 231 25% 22%;
+
+  --muted: 240 24% 95.5%;
+  --muted-foreground: 232 12% 43%;
+
+  --accent: 240 34% 94%;
+  --accent-foreground: 231 32% 16%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  --success: 152 60% 36%;
+  --success-foreground: 0 0% 100%;
+
+  --warning: 32 92% 46%;
+  --warning-foreground: 0 0% 100%;
+
+  --info: 210 88% 48%;
+  --info-foreground: 0 0% 100%;
+
+  --border: 235 24% 89%;
+  --input: 235 24% 86%;
+  --ring: var(--primary);
+
+  /* Glass surfaces */
+  --glass-surface: 0 0% 100%;
+  --glass-tint: 248 60% 99%;
+  --glass-opacity: 0.72;
+  --glass-strong-opacity: 0.88;
+  --glass-border-opacity: 0.7;
+  --blur-glass: 18px;
+
+  /* --- Typography ---------------------------------------------------------
+     UI and exported document typography are intentionally independent.
+     Burmese fallbacks are bundled into both stacks. */
+  --font-ui: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui,
+    -apple-system, "Noto Sans Myanmar", "Myanmar Text", "Pyidaungsu", sans-serif;
+  --font-document: "Source Serif 4", "Iowan Old Style", Georgia,
+    "Noto Serif Myanmar", "Myanmar Text", "Pyidaungsu", serif;
+  --font-document-sans: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui,
+    -apple-system, "Noto Sans Myanmar", "Myanmar Text", "Pyidaungsu", sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  --font-scale: 1;
+
+  /* --- Layout ------------------------------------------------------------- */
+  --header-height: 3.5rem;
+  --statusbar-height: 1.875rem;
+  --panel-header-height: 2.75rem;
+  --control-height-xs: 1.5rem;
+  --control-height-sm: 1.875rem;
+  --control-height: 2.25rem;
+  --control-height-lg: 2.5rem;
+  --page-max-width: 52rem;
+  --content-max-width: 64rem;
+  --icon-sm: 0.9375rem;
+  --icon: 1.0625rem;
+  --icon-lg: 1.25rem;
+
+  /* --- Radius -------------------------------------------------------------
+     `--radius` is user-configurable through the appearance settings. */
+  --radius: 0.75rem;
+  --radius-xs: calc(var(--radius) * 0.5);
+  --radius-sm: calc(var(--radius) * 0.68);
+  --radius-md: calc(var(--radius) * 0.86);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.3);
+  --radius-2xl: calc(var(--radius) * 1.7);
+  --radius-pill: 999px;
+
+  /* --- Motion ------------------------------------------------------------- */
+  --duration-instant: 90ms;
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-slow: 340ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* --- Elevation ---------------------------------------------------------- */
+  --shadow-xs: 0 1px 2px 0 hsl(231 40% 12% / 0.05);
+  --shadow-sm: 0 1px 3px 0 hsl(231 40% 12% / 0.06),
+    0 1px 2px -1px hsl(231 40% 12% / 0.06);
+  --shadow-md: 0 6px 18px -6px hsl(231 40% 12% / 0.14),
+    0 2px 6px -2px hsl(231 40% 12% / 0.08);
+  --shadow-lg: 0 20px 44px -18px hsl(231 40% 12% / 0.22),
+    0 6px 16px -8px hsl(231 40% 12% / 0.1);
+  --shadow-glow: 0 10px 30px -10px hsl(var(--primary) / 0.45);
+
+  /* --- Z-index ------------------------------------------------------------ */
+  --z-base: 0;
+  --z-panel: 10;
+  --z-header: 40;
+  --z-overlay: 60;
+  --z-toast: 80;
+}
+
+/* --------------------------------------------------------------------------
+   Dark theme
+   -------------------------------------------------------------------------- */
+.dark {
+  color-scheme: dark;
+
+  --background: 232 30% 7%;
+  --foreground: 230 30% 94%;
+
+  --card: 232 24% 11%;
+  --card-foreground: 230 30% 94%;
+
+  --popover: 232 24% 12%;
+  --popover-foreground: 230 30% 94%;
+
+  --primary: 245 85% 67%;
+  --primary-foreground: 245 60% 10%;
+
+  --secondary: 232 18% 17%;
+  --secondary-foreground: 230 24% 90%;
+
+  --muted: 232 17% 16%;
+  --muted-foreground: 231 12% 66%;
+
+  --accent: 232 18% 19%;
+  --accent-foreground: 230 26% 94%;
+
+  --destructive: 0 78% 62%;
+  --destructive-foreground: 0 40% 10%;
+
+  --success: 152 55% 48%;
+  --success-foreground: 150 60% 10%;
+
+  --warning: 32 92% 56%;
+  --warning-foreground: 32 70% 10%;
+
+  --info: 210 88% 60%;
+  --info-foreground: 210 60% 10%;
+
+  --border: 232 16% 22%;
+  --input: 232 16% 26%;
+
+  --glass-surface: 232 26% 12%;
+  --glass-tint: 245 30% 14%;
+  --glass-opacity: 0.58;
+  --glass-strong-opacity: 0.86;
+  --glass-border-opacity: 0.55;
+
+  --shadow-xs: 0 1px 2px 0 hsl(0 0% 0% / 0.3);
+  --shadow-sm: 0 1px 3px 0 hsl(0 0% 0% / 0.35),
+    0 1px 2px -1px hsl(0 0% 0% / 0.35);
+  --shadow-md: 0 6px 18px -6px hsl(0 0% 0% / 0.5),
+    0 2px 6px -2px hsl(0 0% 0% / 0.35);
+  --shadow-lg: 0 20px 44px -18px hsl(0 0% 0% / 0.6),
+    0 6px 16px -8px hsl(0 0% 0% / 0.4);
+}
+
+/* --------------------------------------------------------------------------
+   Accent presets — selected in Settings > Appearance.
+   -------------------------------------------------------------------------- */
+:root[data-accent="indigo"] {
+  --primary: 245 72% 58%;
+}
+:root[data-accent="violet"] {
+  --primary: 262 80% 61%;
+}
+:root[data-accent="blue"] {
+  --primary: 216 88% 55%;
+}
+:root[data-accent="teal"] {
+  --primary: 174 72% 36%;
+}
+:root[data-accent="emerald"] {
+  --primary: 156 64% 37%;
+}
+:root[data-accent="amber"] {
+  --primary: 32 92% 45%;
+}
+:root[data-accent="rose"] {
+  --primary: 346 78% 56%;
+}
+
+/* Accent preview swatches for Settings (independent of the active accent). */
+.accent-swatch {
+  background-color: hsl(var(--swatch, var(--primary)));
+}
+
+.accent-swatch[data-swatch="indigo"] {
+  --swatch: 245 72% 58%;
+}
+.accent-swatch[data-swatch="violet"] {
+  --swatch: 262 80% 61%;
+}
+.accent-swatch[data-swatch="blue"] {
+  --swatch: 216 88% 55%;
+}
+.accent-swatch[data-swatch="teal"] {
+  --swatch: 174 72% 36%;
+}
+.accent-swatch[data-swatch="emerald"] {
+  --swatch: 156 64% 37%;
+}
+.accent-swatch[data-swatch="amber"] {
+  --swatch: 32 92% 45%;
+}
+.accent-swatch[data-swatch="rose"] {
+  --swatch: 346 78% 56%;
+}
+
+.dark[data-accent="indigo"] {
+  --primary: 245 85% 68%;
+  --primary-foreground: 245 60% 10%;
+}
+.dark[data-accent="violet"] {
+  --primary: 262 96% 72%;
+  --primary-foreground: 262 60% 10%;
+}
+.dark[data-accent="blue"] {
+  --primary: 216 95% 66%;
+  --primary-foreground: 216 60% 10%;
+}
+.dark[data-accent="teal"] {
+  --primary: 174 70% 52%;
+  --primary-foreground: 174 60% 8%;
+}
+.dark[data-accent="emerald"] {
+  --primary: 156 64% 52%;
+  --primary-foreground: 156 60% 8%;
+}
+.dark[data-accent="amber"] {
+  --primary: 36 96% 58%;
+  --primary-foreground: 32 70% 10%;
+}
+.dark[data-accent="rose"] {
+  --primary: 346 90% 68%;
+  --primary-foreground: 346 60% 10%;
+}
+
+/* --------------------------------------------------------------------------
+   User-adjustable visual styles
+   -------------------------------------------------------------------------- */
+:root[data-radius="compact"] {
+  --radius: 0.45rem;
+}
+:root[data-radius="soft"] {
+  --radius: 0.75rem;
+}
+:root[data-radius="rounded"] {
+  --radius: 1.05rem;
+}
+
+:root[data-blur="off"] {
+  --blur-glass: 0px;
+  --glass-opacity: 0.97;
+  --glass-strong-opacity: 1;
+}
+:root[data-blur="subtle"] {
+  --blur-glass: 18px;
+}
+:root[data-blur="strong"] {
+  --blur-glass: 30px;
+  --glass-opacity: 0.6;
+}
+
+:root[data-density="compact"] {
+  --control-height-sm: 1.75rem;
+  --control-height: 2rem;
+  --control-height-lg: 2.25rem;
+  --panel-header-height: 2.5rem;
+}
+:root[data-density="comfortable"] {
+  --control-height-sm: 1.875rem;
+  --control-height: 2.25rem;
+  --control-height-lg: 2.5rem;
+}
+
+:root[data-font-size="sm"] {
+  font-size: 15px;
+}
+:root[data-font-size="md"] {
+  font-size: 16px;
+}
+:root[data-font-size="lg"] {
+  font-size: 17px;
+}
+
+:root[data-motion="reduced"] {
+  --duration-instant: 0ms;
+  --duration-fast: 0ms;
+  --duration-base: 0ms;
+  --duration-slow: 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) {
+    --duration-instant: 0ms;
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Reusable primitives
+   -------------------------------------------------------------------------- */
+.glass-panel {
+  background-color: hsl(var(--glass-surface) / var(--glass-opacity));
+  -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(140%);
+  backdrop-filter: blur(var(--blur-glass)) saturate(140%);
+  border: 1px solid hsl(var(--border) / var(--glass-border-opacity));
+}
+
+.glass-strong {
+  background-color: hsl(var(--glass-surface) / var(--glass-strong-opacity));
+  -webkit-backdrop-filter: blur(calc(var(--blur-glass) * 1.2)) saturate(150%);
+  backdrop-filter: blur(calc(var(--blur-glass) * 1.2)) saturate(150%);
+  border: 1px solid hsl(var(--border) / var(--glass-border-opacity));
+}
+
+.app-ambient {
+  background-color: hsl(var(--background));
+  background-image:
+    radial-gradient(
+      55rem 38rem at 10% -12%,
+      hsl(var(--primary) / 0.16),
+      transparent 62%
+    ),
+    radial-gradient(
+      48rem 34rem at 94% -4%,
+      hsl(var(--info) / 0.1),
+      transparent 58%
+    ),
+    radial-gradient(
+      42rem 30rem at 50% 112%,
+      hsl(var(--primary) / 0.08),
+      transparent 62%
+    );
+}
+
+.dark .app-ambient {
+  background-image:
+    radial-gradient(
+      55rem 38rem at 10% -12%,
+      hsl(var(--primary) / 0.18),
+      transparent 62%
+    ),
+    radial-gradient(
+      48rem 34rem at 94% -4%,
+      hsl(var(--info) / 0.08),
+      transparent 58%
+    ),
+    radial-gradient(
+      42rem 30rem at 50% 112%,
+      hsl(var(--primary) / 0.07),
+      transparent 62%
+    );
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  border-radius: var(--radius-pill);
+  background-color: hsl(var(--muted-foreground) / 0.25);
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Focus ring shared by all interactive primitives. */
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
