@@ -8,6 +8,8 @@ import type {
   HealthStatus,
   JSONContent,
   LanguageCode,
+  OcrCapabilities,
+  OcrRun,
   PageSummary,
   ProjectDetail,
   ProjectSummary,
@@ -127,6 +129,31 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ page_ids: pageIds }),
     }),
+
+  getOcrCapabilities: (refresh = false) =>
+    request<OcrCapabilities>(`/ocr/capabilities${refresh ? "?refresh=true" : ""}`),
+  getLatestOcr: (projectId: string, pageId: string) =>
+    request<OcrRun | null>(`/projects/${projectId}/pages/${pageId}/ocr`),
+  startOcr: (projectId: string, pageId: string, languages: string[]) =>
+    request<OcrRun>(`/projects/${projectId}/pages/${pageId}/ocr`, {
+      method: "POST",
+      body: JSON.stringify({ languages }),
+    }),
+  getOcrRun: (projectId: string, runId: string) =>
+    request<OcrRun>(`/projects/${projectId}/ocr/runs/${runId}`),
+  updateOcrBlock: (
+    projectId: string,
+    pageId: string,
+    blockId: string,
+    patch: { text?: string; verified?: boolean },
+  ) =>
+    request<OcrRun>(
+      `/projects/${projectId}/pages/${pageId}/ocr/blocks/${blockId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      },
+    ),
 
   assetUrl: (projectId: string, assetId: string | null, version?: string) => {
     if (!assetId) return null;

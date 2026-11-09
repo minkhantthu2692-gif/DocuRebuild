@@ -48,8 +48,10 @@ import { useAppSettings, useUpdateSettings } from "@/hooks/use-app";
 import { useDocument, useSaveDocument } from "@/hooks/use-document";
 import { api } from "@/lib/api";
 import { resolveLocale } from "@/lib/format";
+import { ocrInsertionContent } from "@/lib/ocr-insertion";
 import { countCharacters, countWords } from "@/lib/text";
 import { cn } from "@/lib/utils";
+import { useWorkspaceActions } from "./workspace-actions-context";
 
 const EMPTY_DOCUMENT: Content = {
   type: "doc",
@@ -108,6 +110,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const updateSettings = useUpdateSettings();
   const errorMessage = useApiErrorMessage();
   const { mutate: saveDocument, isPending: isSaving } = useSaveDocument(projectId);
+  const { insertion, consumeInsertion } = useWorkspaceActions();
 
   const [initialized, setInitialized] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -179,6 +182,16 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
       if (previousLabel !== null) editor.view.dom.setAttribute("aria-label", previousLabel);
     };
   }, [editor, initialized, t]);
+
+  useEffect(() => {
+    if (!editor || !initialized || !insertion) return;
+    editor
+      .chain()
+      .focus("end")
+      .insertContent(ocrInsertionContent(insertion.text, insertion.note))
+      .run();
+    consumeInsertion(insertion.id);
+  }, [editor, initialized, insertion, consumeInsertion]);
 
   const saveSnapshot = useCallback(() => {
     if (!editor || !initialized) return;

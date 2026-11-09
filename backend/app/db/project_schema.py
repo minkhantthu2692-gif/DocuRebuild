@@ -75,6 +75,54 @@ PROJECT_MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        2,
+        """
+        CREATE TABLE IF NOT EXISTS ocr_runs (
+            id TEXT PRIMARY KEY,
+            page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'queued',
+            engine TEXT NOT NULL DEFAULT 'tesseract',
+            engine_version TEXT,
+            languages TEXT NOT NULL DEFAULT 'eng',
+            source_asset_id TEXT,
+            rotation INTEGER NOT NULL DEFAULT 0,
+            mean_confidence REAL,
+            text TEXT NOT NULL DEFAULT '',
+            error TEXT,
+            error_code TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            completed_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_ocr_runs_page_created
+            ON ocr_runs(page_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS ocr_blocks (
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL REFERENCES ocr_runs(id) ON DELETE CASCADE,
+            page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+            block_index INTEGER NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'paragraph',
+            text TEXT NOT NULL DEFAULT '',
+            confidence REAL,
+            x INTEGER,
+            y INTEGER,
+            width INTEGER,
+            height INTEGER,
+            line_count INTEGER NOT NULL DEFAULT 0,
+            word_count INTEGER NOT NULL DEFAULT 0,
+            verified INTEGER NOT NULL DEFAULT 0,
+            corrected INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_ocr_blocks_run
+            ON ocr_blocks(run_id, block_index);
+        CREATE INDEX IF NOT EXISTS idx_ocr_blocks_page
+            ON ocr_blocks(page_id);
+        """,
+    ),
 ]
 
 

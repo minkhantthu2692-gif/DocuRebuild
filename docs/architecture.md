@@ -39,6 +39,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.pages` | Image validation, import, EXIF orientation, display copies, thumbnails, rotation, ordering |
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps |
 | `services.settings` | Persisted appearance, language and editor settings |
+| `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence, corrections, staleness |
 | `api.routes.*` | HTTP surface (`/api/...`) |
 
 ### Storage model
@@ -55,7 +56,9 @@ Each project owns a portable folder and its own `project.db`:
 - `assets` — relative path, MIME type, size, checksum, dimensions
 - `pages` — page order, source/display/thumbnail asset references, rotation, status
 - `history_events` — append-only local event log
-- `jobs` — reserved for Phase 4 background processing
+- `jobs` — reserved for general background processing
+- `ocr_runs` — page OCR attempts: status, engine/version, languages, source asset, rotation, mean confidence, error, timestamps
+- `ocr_blocks` — reviewable text blocks with bbox, confidence, kind, line/word counts, correction and verification flags
 - `schema_migrations` — per-project migration versions
 
 Project folder layout:
@@ -91,6 +94,7 @@ without rewriting paths. `resolve_within` rejects path traversal.
 ```text
 GET    /api/health
 GET    /api/meta
+GET    /api/ocr/capabilities
 GET    /api/settings
 PATCH  /api/settings
 GET    /api/projects
@@ -106,6 +110,10 @@ POST   /api/projects/{id}/pages/import
 POST   /api/projects/{id}/pages/{page_id}/rotate
 DELETE /api/projects/{id}/pages/{page_id}
 PUT    /api/projects/{id}/pages/order
+GET    /api/projects/{id}/pages/{page_id}/ocr
+POST   /api/projects/{id}/pages/{page_id}/ocr
+GET    /api/projects/{id}/ocr/runs/{run_id}
+PATCH  /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}
 GET    /api/projects/{id}/assets/{asset_id}/file
 ```
 
@@ -120,7 +128,7 @@ src/
   pages/                  Dashboard, Workspace, Settings, 404
   components/layout/      header, shell, status bar, brand
   components/projects/    project dialogs and cards
-  components/workspace/   SourcePanel, EditorPanel
+  components/workspace/   SourcePanel, EditorPanel, OcrDialog, workspace actions
   components/ui/          reusable Radix-based primitives
   hooks/                  React Query data hooks and breakpoints
   lib/                    API client, formatting, appearance, layout, validation
@@ -141,6 +149,30 @@ src/
   dirty state remains visible. `Ctrl/Cmd+S` saves immediately.
 - A best-effort flush runs when leaving the workspace; it is not a substitute for
   revision history.
+
+### Local OCR workflow
+
+- The source panel starts OCR for the active page. The dialog first calls
+  `GET /api/ocr/capabilities` and shows an honest setup state when Tesseract or a
+  requested language pack is missing; no request is sent to a cloud service.
+- Runs are executed by the backend in a bounded `ThreadPoolExecutor`; the client
+  polls the run until it reaches `succeeded` or `failed`.
+- Each run stores engine, version, requested languages, source asset id, page
+  rotation and timestamps so the result can be audited and invalidated.
+- Results are split into reviewable blocks with bounding boxes and confidence.
+  Low-confidence blocks are flagged; every block can be edited and marked as
+  verified, and corrections are persisted in `ocr_blocks`.
+- Existing results stay reviewable and insertable even when the engine is later
+  unavailable or a language pack is missing; the dialog shows the setup banner
+  and the stored run together instead of hiding the user's prior work.
+- A run becomes stale when the page image or its rotation changes after
+  completion; the UI surfaces this instead of silently reusing stale text.
+- Selected blocks are appended to the Tiptap document through the workspace
+  actions context. The insertion is a normal document edit and is autosaved; an
+  optional localized source note records the page and verification status.
+- OCR settings are environment-driven: `DOCUREBUILD_TESSERACT_CMD`,
+  `DOCUREBUILD_TESSDATA_DIR`, timeout, maximum edge and worker limits. These are
+  reported through capabilities rather than exposed as arbitrary UI controls.
 
 ### Design system
 
@@ -170,6 +202,10 @@ src/
 - Security headers (`nosniff`, `DENY`, `no-referrer`, `same-origin`) are applied
   to every response.
 - No secrets are stored in the frontend. No AI provider keys exist yet.
+- OCR runs entirely on the local machine. Page images are never uploaded; the
+  backend reads the project's own display copy and invokes a local Tesseract
+  binary. Missing engine/language packs are reported, never bypassed with a cloud
+  fallback.
 - Uploaded file names are validated and generated asset names are independent of
   user input.
 - The source repository URL is configuration (`DOCUREBUILD_REPOSITORY_URL`),

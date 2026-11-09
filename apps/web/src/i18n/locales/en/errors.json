@@ -17,6 +17,16 @@
   "asset_not_found": "The image file could not be found.",
   "asset_file_missing": "The image file is missing from the project folder.",
   "invalid_settings": "Those settings are not valid.",
+  "ocr_unavailable": "A local OCR engine is not available. Install Tesseract and try again.",
+  "ocr_language_unavailable": "The selected OCR language data is not installed.",
+  "ocr_page_has_no_source": "This page has no image to process.",
+  "ocr_run_not_found": "The OCR result could not be found.",
+  "ocr_block_not_found": "That OCR text block could not be found.",
+  "ocr_not_ready": "OCR has not finished for this page yet.",
+  "ocr_image_unreadable": "The page image could not be prepared for OCR.",
+  "ocr_timeout": "OCR timed out. Try a smaller page or increase the OCR timeout.",
+  "ocr_failed": "OCR could not read this page. Check the local engine and try again.",
+  "ocr_worker_unavailable": "The local OCR worker is not available.",
   "not_found": "The requested item could not be found.",
   "internal_error": "The local backend encountered an unexpected error."
 }

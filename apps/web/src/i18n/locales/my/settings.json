@@ -9,6 +9,7 @@
     "appearance": "အသွင်အပြင်",
     "language": "ဘာသာစကားနှင့် ဒေသ",
     "editor": "အယ်ဒီတာ",
+    "ocr": "ဒေသတွင်း OCR",
     "storage": "သိမ်းဆည်းမှု",
     "about": "အကြောင်း"
   },
@@ -72,6 +73,33 @@
     "serif": "Serif",
     "sans": "Sans-serif",
     "preview": "မြန်မာစာ စမ်းသပ်ချက်။ The quick brown fox jumps over the lazy dog."
+  },
+  "ocr": {
+    "title": "ဒေသတွင်း OCR အင်ဂျင်",
+    "description": "Tesseract သည် ဤစက်ပစ္စည်းပေါ်တွင် စာသားကို ထုတ်ယူသည်။ စာမျက်နှာပုံများကို OCR ဝန်ဆောင်မှုသို့ မည်သည့်အခါမျှ တင်ပို့မည် မဟုတ်ပါ။",
+    "status": "အင်ဂျင် အခြေအနေ",
+    "ready": "အဆင်သင့်",
+    "unavailable": "မရရှိနိုင်ပါ",
+    "version": "ဗားရှင်း",
+    "command": "အမိန့်",
+    "tessdata": "ဘာသာစကား အချက်အလက် ဖိုဒါ",
+    "notConfigured": "သတ်မှတ်ထားခြင်း မရှိပါ",
+    "languages": "ထည့်သွင်းထားသော ဘာသာစကားများ",
+    "noLanguages": "ဘာသာစကား အချက်အလက် မတွေ့ပါ",
+    "missingBurmese": "မြန်မာ (mya) ဘာသာစကား အချက်အလက် မထည့်သွင်းရသေးပါ။ မြန်မာ OCR မလုပ်မီ ထည့်သွင်းပါ။",
+    "refresh": "ထပ်စစ်ဆေးရန်",
+    "checking": "စစ်ဆေးနေသည်…",
+    "setupTitle": "ဒေသတွင်း OCR ပြင်ဆင်ရန်",
+    "setupDescription": "Tesseract ကို ထည့်သွင်းပြီး eng နှင့် mya traineddata ဖိုင်များကို ၎င်း၏ tessdata ဖိုဒါထဲ ထည့်ပါ။ Tesseract သည် PATH တွင် မရှိပါက DOCUREBUILD_TESSERACT_CMD ကို executable လမ်းကြောင်းသို့ သတ်မှတ်ပါ။",
+    "setupLink": "Tesseract ထည့်သွင်းရေး လမ်းညွှန်",
+    "privacy": "OCR အလုပ်များကို ကန့်သတ်ထားသော ဒေသတွင်း အလုပ်သမားဖြင့် လုပ်ဆောင်သည်။ မည်သည့် အဝေးဝန်ဆောင်မှုသို့မျှ မပို့ပါ၊ ငွေပေးရသော API ကိုလည်း အသုံးမပြုပါ။",
+    "unavailableReasons": {
+      "not_configured": "Tesseract အမိန့်ကို သတ်မှတ်ထားခြင်း မရှိပါ။",
+      "not_found": "ဤစက်ပစ္စည်းပေါ်တွင် Tesseract ကို ရှာမတွေ့ပါ။",
+      "not_executable": "သတ်မှတ်ထားသော Tesseract အမိန့်ကို လုပ်ဆောင်၍ မရပါ။",
+      "no_languages": "Tesseract ထည့်သွင်းထားသော်လည်း ဘာသာစကား အချက်အလက် မရှိပါ။",
+      "error": "OCR အင်ဂျင်ကို စစ်ဆေး၍ မရပါ။"
+    }
   },
   "storage": {
     "title": "ဒေသတွင်း သိမ်းဆည်းမှု",

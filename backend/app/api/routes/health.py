@@ -7,6 +7,7 @@ from app.api.deps import DbSession
 from app.core.config import get_settings
 from app.db.models import Project
 from app.schemas.meta import AppCapabilities, AppMeta, HealthStatus
+from app.services import ocr as ocr_service
 
 router = APIRouter(tags=["system"])
 
@@ -40,7 +41,7 @@ def meta() -> AppMeta:
             import_images=True,
             import_pdf=False,
             image_transform=True,
-            ocr=False,
+            ocr=ocr_service.engine_available(),
             ai=False,
             export=False,
         ),

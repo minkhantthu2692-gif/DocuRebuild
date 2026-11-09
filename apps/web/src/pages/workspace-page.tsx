@@ -19,6 +19,7 @@ import { DeleteProjectDialog } from "@/components/projects/delete-project-dialog
 import { RenameProjectDialog } from "@/components/projects/rename-project-dialog";
 import { EditorPanel } from "@/components/workspace/editor-panel";
 import { SourcePanel } from "@/components/workspace/source-panel";
+import { WorkspaceActionsProvider } from "@/components/workspace/workspace-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -141,7 +142,8 @@ export function WorkspacePage() {
   const editorRendered = isDesktop ? layout.editorVisible : true;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <WorkspaceActionsProvider>
+      <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-panel shrink-0 items-center gap-1.5 border-b border-border/60 bg-background/40 px-2.5 backdrop-blur-md">
         <Tooltip>
           <TooltipTrigger asChild>
@@ -262,7 +264,11 @@ export function WorkspacePage() {
                 : undefined
             }
           >
-            <SourcePanel projectId={projectId} className="w-full" />
+            <SourcePanel
+              projectId={projectId}
+              className="w-full"
+              onContentInserted={() => setMobilePanel("document")}
+            />
           </div>
         ) : null}
 
@@ -324,6 +330,7 @@ export function WorkspacePage() {
         onOpenChange={setDeleteOpen}
         onDeleted={() => navigate("/", { replace: true })}
       />
-    </div>
+      </div>
+    </WorkspaceActionsProvider>
   );
 }

@@ -9,6 +9,7 @@
     "appearance": "Appearance",
     "language": "Language & region",
     "editor": "Editor",
+    "ocr": "Local OCR",
     "storage": "Storage",
     "about": "About"
   },
@@ -72,6 +73,33 @@
     "serif": "Serif",
     "sans": "Sans-serif",
     "preview": "The quick brown fox jumps over the lazy dog. မြန်မာစာ စမ်းသပ်ချက်။"
+  },
+  "ocr": {
+    "title": "Local OCR engine",
+    "description": "Tesseract extracts text on this device. Page images are never uploaded to an OCR service.",
+    "status": "Engine status",
+    "ready": "Ready",
+    "unavailable": "Not available",
+    "version": "Version",
+    "command": "Command",
+    "tessdata": "Language data folder",
+    "notConfigured": "Not configured",
+    "languages": "Installed languages",
+    "noLanguages": "No language data found",
+    "missingBurmese": "Burmese (mya) language data is not installed. Install it before running Burmese OCR.",
+    "refresh": "Check again",
+    "checking": "Checking…",
+    "setupTitle": "Set up local OCR",
+    "setupDescription": "Install Tesseract and add the eng and mya traineddata files to its tessdata folder. If Tesseract is not on PATH, set DOCUREBUILD_TESSERACT_CMD to the executable.",
+    "setupLink": "Tesseract installation guide",
+    "privacy": "OCR jobs run in a bounded local worker. Nothing is sent to a remote service, and no paid API is used.",
+    "unavailableReasons": {
+      "not_configured": "No Tesseract command is configured.",
+      "not_found": "Tesseract could not be found on this device.",
+      "not_executable": "The configured Tesseract command cannot be run.",
+      "no_languages": "Tesseract is installed, but no language data is available.",
+      "error": "The OCR engine could not be checked."
+    }
   },
   "storage": {
     "title": "Local storage",

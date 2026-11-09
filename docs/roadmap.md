@@ -12,7 +12,7 @@ presented in the UI until it actually works.
 | 1. Local storage and project management | **Complete** | App/project DBs, folders, manifest, CRUD, trash |
 | 2. Main UI and workspace | **Complete** | Header navigation, dashboard, two-panel workspace, settings, i18n |
 | 3. Import and image processing | **In progress** | Image import/rotation/reorder done; PDF import pending |
-| 4. Local OCR and layout detection | **Next** | Engine adapters and review UI not started |
+| 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | Planned | Depends on Phase 4 |
 | 6. AI integration and free usage first | Planned | Depends on elements and review model |
 | 7. Table, figure and equation reconstruction | Planned | Depends on Phase 5/6 |
@@ -98,33 +98,44 @@ for theme/language switching and mobile panel switching.
 
 ---
 
-## Phase 4 — Local OCR and layout detection (next)
+## Phase 4 — Local OCR and layout detection (in progress)
 
-**Objectives**
+**Delivered**
 
-- Add a provider-agnostic OCR engine interface with at least one local engine.
-- Detect text blocks, paragraphs, headings, lists, tables, figures, captions,
-  equations, headers/footers and page numbers where the engine supports them.
-- Preserve bounding boxes, confidence, language, reading order and processing
-  metadata.
-- Provide a review UI for uncertain results; never auto-approve uncertain text.
-- Keep manual entry available for every OCR output.
-- Benchmark English, Burmese and mixed-language pages independently.
+- Provider-agnostic OCR service with a Tesseract adapter, runtime engine and
+  language-pack detection, and honest unavailable states.
+- Persistent `ocr_runs` and `ocr_blocks` tables with status, engine version,
+  languages, source asset, rotation, confidence, bounding boxes and reading
+  order.
+- Bounded local worker pool; OCR never runs on the UI thread and never contacts a
+  remote service.
+- Source-panel OCR dialog with English, Burmese and mixed-language choices,
+  progress polling, confidence badges, editable blocks, per-block verification,
+  correction persistence and stale-result detection after page changes.
+- Stored results remain reviewable and insertable when Tesseract becomes
+  unavailable; the setup state and the existing run are shown together.
+- Insert selected blocks into the editor as paragraphs with a localized source
+  note; unverified text is visibly marked.
+- Capability reporting in `/api/meta`, `/api/ocr/capabilities` and Settings, with
+  Tesseract path and language-data setup guidance.
+- Backend tests for persistence, correction, verification, stale detection,
+  missing language data and unavailable engines; frontend i18n parity tests.
 
-**Planned tasks**
+**Remaining before completion**
 
-1. Define OCR/layout result schemas in `packages/shared-types` and the project DB.
-2. Implement engine adapters (Tesseract and/or PaddleOCR) with runtime capability
-   detection, language-pack checks and clear “unavailable” states.
-3. Add persistent job rows and a bounded background worker (no UI-thread work).
-4. Add OCR controls to the source panel and a confidence/review surface.
-5. Add insert-to-editor actions with source references and verification status.
-6. Add fixtures and accuracy tests (CER/WER) for English, Burmese and mixed text.
+- Table, figure, caption, equation, header/footer and page-number detection.
+  Current heading and list-item labels are conservative heuristics, not layout
+  guarantees.
+- OCR accuracy benchmarks (CER/WER) for English, Burmese and mixed pages using
+  fixtures from real documents.
+- A bounding-box overlay on the source viewer and block-to-image highlighting.
+- Optional richer engines (for example PaddleOCR) behind the same adapter, only
+  if they can preserve the same review and verification guarantees.
 
-**Open decision** — Tesseract is lighter and easier to package but Burmese quality
-depends on installed language data; PaddleOCR can be stronger but brings a large
-dependency footprint. The engine must remain replaceable behind the adapter.
-Do not advertise either as universally free or universally accurate.
+**Current limitation** — Tesseract must be installed locally with `eng` and/or
+`mya` traineddata. OCR is not advertised as available otherwise, and Burmese
+accuracy depends on scan quality, fonts and language data. No engine is
+described as universally free or universally accurate.
 
 ---
 

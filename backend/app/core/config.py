@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     max_upload_batch: int = 50
     repository_url: str = "https://github.com/minkhantthu2692-gif/DocuRebuild"
 
+    # Local OCR. Nothing here contacts a remote service.
+    tesseract_cmd: str = "tesseract"
+    tessdata_dir: Path | None = None
+    ocr_default_languages: list[str] = ["eng"]
+    ocr_timeout_seconds: int = 180
+    ocr_max_image_edge: int = 4000
+    ocr_max_workers: int = 2
+
     @property
     def database_path(self) -> Path:
         return self.data_dir / "app.db"
@@ -57,8 +65,12 @@ class Settings(BaseSettings):
     def trash_dir(self) -> Path:
         return self.data_dir / "trash"
 
+    @property
+    def tmp_dir(self) -> Path:
+        return self.data_dir / "tmp"
+
     def ensure_layout(self) -> None:
-        for path in (self.data_dir, self.projects_dir, self.trash_dir):
+        for path in (self.data_dir, self.projects_dir, self.trash_dir, self.tmp_dir):
             path.mkdir(parents=True, exist_ok=True)
 
 
@@ -66,5 +78,7 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     settings = Settings()
     settings.data_dir = settings.data_dir.expanduser().resolve()
+    if settings.tessdata_dir is not None:
+        settings.tessdata_dir = settings.tessdata_dir.expanduser().resolve()
     settings.ensure_layout()
     return settings

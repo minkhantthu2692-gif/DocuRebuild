@@ -6,11 +6,13 @@ DocuRebuild turns scans, photographs and (in a later phase) PDF pages into accur
 structured and editable documents. It keeps original source files immutable, keeps
 project data on your device, and treats every AI result as a reviewable proposal.
 
-> **Project status — early development (Phase 3 of 12).**
-> The workspace, local project storage, image import and the rich-text editor are
-> implemented and usable. PDF import, OCR, AI providers, element reconstruction,
-> export and history are **not implemented yet** and are clearly marked as
-> unavailable in the UI. Nothing in this repository fakes those features.
+> **Project status — early development (Phase 4 of 12).**
+> The workspace, local project storage, image import, the rich-text editor and
+> local Tesseract OCR are implemented. OCR is only advertised when a working
+> Tesseract installation and language data are detected. PDF import, AI
+> providers, element reconstruction, export and history are **not implemented
+> yet** and are clearly marked as unavailable in the UI. Nothing in this
+> repository fakes those features.
 
 ---
 
@@ -26,6 +28,12 @@ project data on your device, and treats every AI result as a reviewable proposal
   Limits and validation errors come from the backend, not hardcoded UI values.
 - **Source viewer** — page navigation, thumbnail rail, zoom, fit, actual size,
   rotation with non-destructive display copies, page reordering and page deletion.
+- **Local OCR (optional)** — Tesseract runs on the local machine when installed.
+  English and Burmese language data are supported. Results include text blocks,
+  confidence values and source bounding boxes; each block can be corrected,
+  marked verified, copied or inserted into the document with a source note.
+  OCR is never advertised as available unless the engine and language data are
+  actually detected.
 - **Document editor** — Tiptap rich text with headings, paragraphs, lists,
   blockquotes, code blocks, alignment, inline formatting, undo/redo, word and
   character counts, and debounced autosave.
@@ -36,9 +44,11 @@ project data on your device, and treats every AI result as a reviewable proposal
 
 ### Not available yet
 
-PDF import and rendering, OCR, layout detection, tables, figures, equations,
-AI providers, DOCX/TXT export, revision history, backups/restore UI, desktop
-packaging and PWA install support are planned but not implemented. See
+PDF import and rendering, full layout detection (tables, figures, equations,
+headers and footers), AI providers, DOCX/TXT export, revision history,
+backups/restore UI, desktop packaging and PWA install support are planned but
+not implemented. OCR currently extracts text blocks and reading order; it does
+not yet detect tables, figures or equations. See
 [`docs/roadmap.md`](docs/roadmap.md).
 
 ---
@@ -100,7 +110,7 @@ Local runtime data is **never** stored in this repository. See
 
 - Node.js **20 or newer** (Node 24 tested) and npm 10+
 - Python **3.11 or newer** (3.12 tested)
-- Optional: Tesseract/PaddleOCR and local AI servers in later phases only
+- Optional: Tesseract 5+ for local OCR, with `eng` and/or `mya` traineddata
 
 ---
 
@@ -133,6 +143,26 @@ The backend creates its data directory automatically:
 - Linux: `~/.local/share/DocuRebuild`
 
 Override it with `DOCUREBUILD_DATA_DIR`.
+
+### Optional local OCR
+
+OCR is free and local, but it needs a working Tesseract installation:
+
+1. Install Tesseract (Windows builds are available from UB Mannheim; macOS and
+   Linux packages are also available).
+2. Make sure the `eng` and/or `mya` traineddata files are present in the
+   Tesseract `tessdata` folder.
+3. If `tesseract` is not on `PATH`, set the executable path:
+
+```bash
+# Windows example
+DOCUREBUILD_TESSERACT_CMD="C:/Program Files/Tesseract-OCR/tesseract.exe"
+DOCUREBUILD_TESSDATA_DIR="C:/Program Files/Tesseract-OCR/tessdata"
+```
+
+The Settings page and the OCR dialog inspect the engine at runtime. If it cannot
+be found, they show setup guidance instead of a fake OCR result. OCR jobs run in
+a bounded local worker and never contact a remote service.
 
 ### Run in development
 
@@ -217,6 +247,12 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   bundle; no fixed upstream release is available yet.
 - The web client currently requires the local API; browser-only OCR/PDF
   processing is not claimed.
+- OCR quality depends on the installed Tesseract version, traineddata and page
+  quality. Burmese text is especially difficult; heading/list labels are
+  heuristics and are never presented as certain structure. Tables, figures and
+  equations are not detected yet.
+- OCR results become marked stale when the page image or rotation changes. They
+  are never silently applied to the document.
 - npm install scripts for `esbuild` are blocked by the local npm policy; Vite
   still runs because its binary is already present. If a fresh install fails,
   review the blocked install script with `npm install-scripts ls`.
@@ -231,7 +267,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 1. Local storage and project management | Complete |
 | 2. Main UI and workspace | Complete |
 | 3. Import and image processing | In progress (images; PDF pending) |
-| 4. Local OCR and layout detection | Next |
+| 4. Local OCR and layout detection | In progress (text OCR; layout pending) |
 | 5. Element extraction | Planned |
 | 6. AI integration and free usage first | Planned |
 | 7. Table, figure and equation reconstruction | Planned |

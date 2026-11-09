@@ -8,6 +8,8 @@ import {
   Info,
   Languages,
   Palette,
+  RefreshCw,
+  ScanText,
   ShieldCheck,
   Type,
   type LucideIcon,
@@ -35,6 +37,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Separator } from "@/components/ui/separator";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAppMeta, useAppSettings, useHealth, useUpdateSettings } from "@/hooks/use-app";
+import { useOcrCapabilities } from "@/hooks/use-ocr";
 import { formatNumber, resolveLocale } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -56,7 +59,7 @@ const ROADMAP: Array<{
   { key: "import", status: "done" },
   { key: "pdf", status: "planned" },
   { key: "processing", status: "inProgress" },
-  { key: "ocr", status: "planned" },
+  { key: "ocr", status: "inProgress" },
   { key: "ai", status: "planned" },
   { key: "editor", status: "inProgress" },
   { key: "export", status: "planned" },
@@ -128,6 +131,7 @@ export function SettingsPage() {
   const settingsQuery = useAppSettings();
   const metaQuery = useAppMeta();
   const healthQuery = useHealth();
+  const ocrQuery = useOcrCapabilities();
   const updateSettings = useUpdateSettings();
   const errorMessage = useApiErrorMessage();
   const [copied, setCopied] = useState(false);
@@ -138,6 +142,14 @@ export function SettingsPage() {
   const documentFont = settings?.editor.document_font ?? "serif";
   const locale = resolveLocale(i18n.resolvedLanguage);
   const health = healthQuery.data;
+  const ocr = ocrQuery.data;
+  const ocrReason =
+    ocr?.reason &&
+    ["not_configured", "not_found", "not_executable", "no_languages", "error"].includes(
+      ocr.reason,
+    )
+      ? ocr.reason
+      : "error";
 
   const change = (patch: Parameters<typeof updateSettings.mutate>[0]) => {
     updateSettings.mutate(patch, {
@@ -149,6 +161,7 @@ export function SettingsPage() {
     { id: "appearance", label: t("sections.appearance") },
     { id: "language", label: t("sections.language") },
     { id: "editor", label: t("sections.editor") },
+    { id: "ocr", label: t("sections.ocr") },
     { id: "storage", label: t("sections.storage") },
     { id: "about", label: t("sections.about") },
   ];
@@ -391,6 +404,127 @@ export function SettingsPage() {
                 }}
               >
                 {t("editor.preview")}
+              </div>
+            </SettingsSection>
+
+            <SettingsSection id="ocr" icon={ScanText} title={t("sections.ocr")}>
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold">{t("ocr.title")}</h3>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("ocr.description")}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-background/40 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-medium">{t("ocr.status")}</span>
+                  <Badge
+                    variant={
+                      ocrQuery.isLoading
+                        ? "outline"
+                        : ocr?.available
+                          ? "success"
+                          : "warning"
+                    }
+                  >
+                    {ocrQuery.isLoading
+                      ? t("ocr.checking")
+                      : ocr?.available
+                        ? t("ocr.ready")
+                        : t("ocr.unavailable")}
+                  </Badge>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 self-start sm:self-auto"
+                  disabled={ocrQuery.isFetching}
+                  onClick={() =>
+                    void ocrQuery.refetch()
+                  }
+                >
+                  <RefreshCw className={ocrQuery.isFetching ? "animate-spin" : undefined} />
+                  {t("ocr.refresh")}
+                </Button>
+              </div>
+
+              {ocr?.available ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg border border-border/60 bg-background/40 p-3">
+                    <p className="text-2xs uppercase tracking-wider text-muted-foreground">
+                      {t("ocr.version")}
+                    </p>
+                    <p className="mt-1 font-mono text-sm font-semibold">
+                      {ocr.version ?? "—"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background/40 p-3">
+                    <p className="text-2xs uppercase tracking-wider text-muted-foreground">
+                      {t("ocr.languages")}
+                    </p>
+                    <p className="mt-1 break-words font-mono text-sm font-semibold">
+                      {ocr.languages.length > 0 ? ocr.languages.join(", ") : t("ocr.noLanguages")}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background/40 p-3 sm:col-span-2">
+                    <p className="text-2xs uppercase tracking-wider text-muted-foreground">
+                      {t("ocr.command")}
+                    </p>
+                    <code className="mt-1 block break-all font-mono text-2xs text-foreground/90">
+                      {ocr.command || t("ocr.notConfigured")}
+                    </code>
+                  </div>
+                  {ocr.tessdata_dir ? (
+                    <div className="rounded-lg border border-border/60 bg-background/40 p-3 sm:col-span-2">
+                      <p className="text-2xs uppercase tracking-wider text-muted-foreground">
+                        {t("ocr.tessdata")}
+                      </p>
+                      <code className="mt-1 block break-all font-mono text-2xs text-foreground/90">
+                        {ocr.tessdata_dir}
+                      </code>
+                    </div>
+                  ) : null}
+                </div>
+              ) : ocrQuery.isError ? (
+                <div className="flex gap-2 rounded-lg border border-border/60 bg-background/50 p-3 text-2xs leading-relaxed text-muted-foreground">
+                  <Info className="mt-0.5 size-icon-sm shrink-0 text-primary" aria-hidden="true" />
+                  <p>{errorMessage(ocrQuery.error)}</p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border/60 bg-background/50 p-3 text-xs leading-relaxed text-muted-foreground">
+                  {t(`ocr.unavailableReasons.${ocrReason}`)}
+                </div>
+              )}
+
+              {ocr?.available && !ocr.languages.includes("mya") ? (
+                <div className="flex gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-2xs leading-relaxed text-muted-foreground">
+                  <Info className="mt-0.5 size-icon-sm shrink-0 text-warning" aria-hidden="true" />
+                  <p>{t("ocr.missingBurmese")}</p>
+                </div>
+              ) : null}
+
+              {!ocr?.available ? (
+                <div className="space-y-2 rounded-lg border border-border/60 bg-background/50 p-3">
+                  <h3 className="text-xs font-semibold">{t("ocr.setupTitle")}</h3>
+                  <p className="text-2xs leading-relaxed text-muted-foreground">
+                    {t("ocr.setupDescription")}
+                  </p>
+                  <Button asChild variant="ghost" size="sm" className="gap-1.5 px-0">
+                    <a
+                      href="https://tesseract-ocr.github.io/tessdoc/Installation.html"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <ExternalLink />
+                      {t("ocr.setupLink")}
+                    </a>
+                  </Button>
+                </div>
+              ) : null}
+
+              <div className="flex gap-2 rounded-lg border border-border/60 bg-background/50 p-3 text-2xs leading-relaxed text-muted-foreground">
+                <ShieldCheck className="mt-0.5 size-icon-sm shrink-0 text-success" aria-hidden="true" />
+                <p>{t("ocr.privacy")}</p>
               </div>
             </SettingsSection>
 

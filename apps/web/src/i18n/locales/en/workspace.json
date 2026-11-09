@@ -87,6 +87,79 @@
       "description": "Editing is paused until the local document is available. Nothing has been overwritten."
     }
   },
+  "ocr": {
+    "open": "Extract text (OCR)",
+    "title": "Extract text from page {{page}}",
+    "description": "Local OCR runs on this device. Results are proposals and must be reviewed.",
+    "unavailable": {
+      "title": "OCR engine not available",
+      "not_configured": "No Tesseract command is configured.",
+      "not_found": "Tesseract could not be found on this device.",
+      "not_executable": "The configured Tesseract command cannot be run.",
+      "no_languages": "Tesseract is installed, but no language data is available.",
+      "error": "The OCR engine could not be checked."
+    },
+    "setupHint": "Install Tesseract locally and add the eng and mya traineddata files. If Tesseract is not on PATH, set DOCUREBUILD_TESSERACT_CMD to the executable. No page image leaves this device.",
+    "setupGuide": "Tesseract installation guide",
+    "refresh": "Check again",
+    "language": "Recognition language",
+    "languageEnglish": "English",
+    "languageBurmese": "Burmese",
+    "languageMixed": "English + Burmese",
+    "run": "Run OCR",
+    "rerun": "Run OCR again",
+    "running": "Extracting text…",
+    "queued": "Waiting for the OCR engine…",
+    "notRun": "Not run yet",
+    "notRunTitle": "No OCR result for this page",
+    "notRunDescription": "Choose a recognition language and run OCR. You can always type or correct the text manually.",
+    "status": {
+      "queued": "Queued",
+      "running": "Running",
+      "succeeded": "Complete",
+      "failed": "Failed"
+    },
+    "reviewNote": "OCR can misread characters, especially in Burmese. Compare each block with the source image before using it.",
+    "loadError": {
+      "title": "The OCR result could not be loaded",
+      "description": "The source page is unchanged. Try loading the result again."
+    },
+    "stale": {
+      "title": "This page changed after OCR",
+      "description": "The image or rotation is different from the one that was processed. Run OCR again before inserting this text."
+    },
+    "failed": "OCR failed",
+    "engine": "Engine",
+    "meanConfidence": "Average confidence {{value}}%",
+    "blocks": "Text blocks",
+    "selectAll": "Select all",
+    "selectBlock": "Include block {{index}}",
+    "block": "Text for block {{index}}",
+    "kind": {
+      "heading": "Heading candidate",
+      "paragraph": "Paragraph",
+      "list_item": "List item candidate"
+    },
+    "verified": "Verified",
+    "unverified": "Unverified",
+    "corrected": "Corrected",
+    "markVerified": "Mark verified",
+    "unsavedCorrection": "Correction not saved yet.",
+    "noText": {
+      "title": "No text detected",
+      "description": "The page may be blank or the recognition language may be wrong. You can still transcribe it manually."
+    },
+    "saved": "Corrections saved.",
+    "saveCorrections": "Save corrections",
+    "copy": "Copy text",
+    "copied": "Copied to clipboard.",
+    "copyFailed": "Couldn’t copy the text.",
+    "insertNote": "Include a source note",
+    "insertSelected": "Insert selected",
+    "inserted": "OCR text inserted into the document.",
+    "sourceNote": "Source: page {{page}} · OCR · {{confidence}}% confidence · {{status}}",
+    "noSelection": "Select at least one text block to insert."
+  },
   "tools": {
     "title": "Reconstruction tools",
     "ocr": "Extract text (OCR)",

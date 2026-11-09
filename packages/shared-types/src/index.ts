@@ -91,6 +91,65 @@ export interface ProjectManifest {
 }
 
 /* -------------------------------------------------------------------------- */
+/*                                    OCR                                     */
+/* -------------------------------------------------------------------------- */
+
+export type OcrRunStatus = "queued" | "running" | "succeeded" | "failed";
+export type OcrBlockKind = "paragraph" | "heading" | "list_item";
+
+export interface OcrBlock {
+  id: string;
+  run_id: string;
+  page_id: string;
+  block_index: number;
+  kind: OcrBlockKind;
+  text: string;
+  confidence: number | null;
+  x: number | null;
+  y: number | null;
+  width: number | null;
+  height: number | null;
+  line_count: number;
+  word_count: number;
+  verified: boolean;
+  corrected: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OcrRun {
+  id: string;
+  page_id: string;
+  status: OcrRunStatus;
+  engine: string;
+  engine_version: string | null;
+  languages: string[];
+  source_asset_id: string | null;
+  rotation: number;
+  mean_confidence: number | null;
+  text: string;
+  error: string | null;
+  error_code: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  stale: boolean;
+  blocks: OcrBlock[];
+}
+
+export interface OcrCapabilities {
+  engine: string;
+  available: boolean;
+  version: string | null;
+  command: string;
+  tessdata_dir: string | null;
+  languages: string[];
+  preferred_languages: string[];
+  reason: string | null;
+  setup_hint: string | null;
+}
+
+/* -------------------------------------------------------------------------- */
 /*                               Document model                               */
 /* -------------------------------------------------------------------------- */
 

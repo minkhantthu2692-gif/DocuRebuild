@@ -8,6 +8,7 @@ import {
   MoreHorizontal,
   RotateCcw,
   RotateCw,
+  ScanText,
   Trash2,
   Undo2,
   Upload,
@@ -53,10 +54,12 @@ import {
 import { api } from "@/lib/api";
 import { IMAGE_ACCEPT_ATTRIBUTE, partitionImageFiles } from "@/lib/image-files";
 import { cn } from "@/lib/utils";
+import { OcrDialog } from "./ocr-dialog";
 
 interface SourcePanelProps {
   projectId: string;
   className?: string;
+  onContentInserted?: () => void;
 }
 
 type ViewScale =
@@ -188,7 +191,7 @@ function PageThumbnails({
   );
 }
 
-export function SourcePanel({ projectId, className }: SourcePanelProps) {
+export function SourcePanel({ projectId, className, onContentInserted }: SourcePanelProps) {
   const { t } = useTranslation("workspace");
   const { t: tCommon } = useTranslation("common");
   const pagesQuery = usePages(projectId);
@@ -206,6 +209,7 @@ export function SourcePanel({ projectId, className }: SourcePanelProps) {
   const [scale, setScale] = useState<ViewScale>({ kind: "fit" });
   const [dragging, setDragging] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PageSummary | null>(null);
+  const [ocrOpen, setOcrOpen] = useState(false);
   const dragDepth = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -327,6 +331,7 @@ export function SourcePanel({ projectId, className }: SourcePanelProps) {
 
   return (
     <section
+      aria-label={t("source")}
       className={cn(
         "relative flex h-full min-h-0 flex-col bg-background/20",
         dragging && "ring-2 ring-inset ring-primary/40",
@@ -536,6 +541,14 @@ export function SourcePanel({ projectId, className }: SourcePanelProps) {
               onClick={() => rotate(-currentPage.rotation)}
             />
 
+            <span className="mx-1 h-5 w-px bg-border/70" aria-hidden="true" />
+
+            <ToolButton
+              label={t("ocr.open")}
+              icon={ScanText}
+              onClick={() => setOcrOpen(true)}
+            />
+
             <div className="ml-auto flex items-center gap-0.5">
               <ToolButton
                 label={t("viewer.zoomOut")}
@@ -627,6 +640,14 @@ export function SourcePanel({ projectId, className }: SourcePanelProps) {
           </div>
         </div>
       ) : null}
+
+      <OcrDialog
+        projectId={projectId}
+        page={currentPage}
+        open={ocrOpen}
+        onOpenChange={setOcrOpen}
+        onInserted={onContentInserted}
+      />
 
       <Dialog
         open={Boolean(deleteTarget)}
