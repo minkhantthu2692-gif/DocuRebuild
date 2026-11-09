@@ -164,6 +164,12 @@ The Settings page and the OCR dialog inspect the engine at runtime. If it cannot
 be found, they show setup guidance instead of a fake OCR result. OCR jobs run in
 a bounded local worker and never contact a remote service.
 
+If the Tesseract install directory is read-only (for example `Program Files` on
+Windows), keep a user-writable copy of the `tessdata` folder containing the
+language files you need and point `DOCUREBUILD_TESSDATA_DIR` at it. The folder
+must contain the required `*.traineddata` files; OCR returns an explicit error
+instead of an empty success when the engine cannot produce structured output.
+
 ### Run in development
 
 ```bash

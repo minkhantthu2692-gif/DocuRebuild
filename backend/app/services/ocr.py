@@ -74,6 +74,11 @@ def _run_command(args: list[str], timeout: float) -> subprocess.CompletedProcess
     )
 
 
+def _parse_version(text: str) -> str | None:
+    match = re.search(r"tesseract\s+v?([0-9][0-9A-Za-z.\-]*)", text, re.IGNORECASE)
+    return match.group(1) if match else None
+
+
 def _setup_hint(reason: str) -> str:
     if reason == "not_configured":
         return (
@@ -155,8 +160,7 @@ def detect_engine(force: bool = False) -> dict[str, Any]:
         base.update(reason="not_executable", setup_hint=_setup_hint("not_executable"))
         return _store_engine_status(base)
 
-    match = re.search(r"tesseract\s+([0-9][0-9A-Za-z.\-]*)", version_text, re.IGNORECASE)
-    version = match.group(1) if match else None
+    version = _parse_version(version_text)
 
     try:
         languages_result = _run_command([*tokens, "--list-langs"], timeout=10)
@@ -615,7 +619,8 @@ def _perform_ocr(
                 "+".join(languages),
                 "--psm",
                 "3",
-                "tsv",
+                "-c",
+                "tessedit_create_tsv=1",
             ],
             timeout=max(10, settings.ocr_timeout_seconds),
         )
@@ -626,6 +631,13 @@ def _perform_ocr(
         detail = (result.stderr or result.stdout or "").strip().splitlines()
         message = detail[-1] if detail else "Tesseract could not process this page."
         raise AppError(422, "ocr_failed", message[:500])
+
+    if not result.stdout.lstrip().startswith("level\t"):
+        raise AppError(
+            422,
+            "ocr_failed",
+            "Tesseract did not return structured text. Check the tessdata configuration.",
+        )
 
     text, blocks, mean_confidence = _parse_tsv(result.stdout, scale)
     return {

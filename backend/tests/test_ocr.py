@@ -204,3 +204,44 @@ def test_ocr_rejects_when_engine_is_unavailable(
     )
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "ocr_unavailable"
+
+
+def test_ocr_fails_when_engine_returns_unstructured_output(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    import subprocess
+
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(
+        ocr,
+        "_run_command",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="UREBUILD\n", stderr=""
+        ),
+    )
+
+    page = upload_pages(client, project["id"], ["ocr-plain.png"])[0]
+    response = client.post(
+        f"/api/projects/{project['id']}/pages/{page['id']}/ocr",
+        json={"languages": ["eng"]},
+    )
+    assert response.status_code == 202, response.text
+
+    run = _wait_for_run(client, project["id"], page["id"])
+    assert run["status"] == "failed", run
+    assert run["error_code"] == "ocr_failed"
+    assert "structured text" in (run["error"] or "")
+    assert run["blocks"] == []
+
+
+def test_parse_version_accepts_common_tesseract_output() -> None:
+    from app.services import ocr
+
+    assert (
+        ocr._parse_version("tesseract v5.4.0.20240606\n leptonica-1.84.1")
+        == "5.4.0.20240606"
+    )
+    assert ocr._parse_version("tesseract 5.3.3") == "5.3.3"
+    assert ocr._parse_version("not a tesseract banner") is None

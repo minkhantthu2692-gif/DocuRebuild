@@ -173,6 +173,11 @@ src/
 - OCR settings are environment-driven: `DOCUREBUILD_TESSERACT_CMD`,
   `DOCUREBUILD_TESSDATA_DIR`, timeout, maximum edge and worker limits. These are
   reported through capabilities rather than exposed as arbitrary UI controls.
+- Tesseract is invoked with `-c tessedit_create_tsv=1` rather than the optional
+  `tsv` config file, so a minimal custom `tessdata` directory works as long as it
+  contains the required traineddata files. If the engine returns plain text
+  instead of structured TSV, the run fails explicitly instead of reporting an
+  empty success.
 
 ### Design system
 
