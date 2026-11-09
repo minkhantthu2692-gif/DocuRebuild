@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   ACCEPTED_IMAGE_EXTENSIONS,
   isSupportedImageFile,
-  partitionImageFiles,
-} from "@/lib/image-files";
+  partitionImportFiles,
+} from "@/lib/import-files";
 
 function file(name: string, size = 10): File {
   return new File([new Uint8Array(size)], name, { type: "application/octet-stream" });
 }
 
-describe("image file pre-validation", () => {
+describe("import file pre-validation", () => {
   it("accepts every documented image extension case-insensitively", () => {
     for (const extension of ACCEPTED_IMAGE_EXTENSIONS) {
       expect(isSupportedImageFile(file(`page${extension.toUpperCase()}`))).toBe(true);
@@ -18,7 +18,7 @@ describe("image file pre-validation", () => {
   });
 
   it("rejects unsupported types and oversized files separately", () => {
-    const result = partitionImageFiles(
+    const result = partitionImportFiles(
       [file("scan.png", 5), file("notes.txt", 5), file("huge.tiff", 500)],
       100,
     );
@@ -31,8 +31,18 @@ describe("image file pre-validation", () => {
   });
 
   it("does not enforce a size limit when the backend limit is unknown", () => {
-    const result = partitionImageFiles([file("huge.tiff", 10_000)], null);
+    const result = partitionImportFiles([file("huge.tiff", 10_000)], null);
     expect(result.accepted).toHaveLength(1);
     expect(result.rejected).toHaveLength(0);
+  });
+
+  it("only accepts PDFs when PDF import is available", () => {
+    const pdf = file("book.pdf");
+    const withoutPdf = partitionImportFiles([pdf], null, false);
+    expect(withoutPdf.accepted).toHaveLength(0);
+    expect(withoutPdf.rejected[0]?.reason).toBe("unsupported");
+
+    const withPdf = partitionImportFiles([pdf], null, true);
+    expect(withPdf.accepted.map((item) => item.name)).toEqual(["book.pdf"]);
   });
 });

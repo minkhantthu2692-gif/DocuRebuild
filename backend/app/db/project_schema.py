@@ -123,6 +123,12 @@ PROJECT_MIGRATIONS: list[tuple[int, str]] = [
             ON ocr_blocks(page_id);
         """,
     ),
+    (
+        3,
+        """
+        ALTER TABLE pages ADD COLUMN pdf_page_number INTEGER;
+        """,
+    ),
 ]
 
 

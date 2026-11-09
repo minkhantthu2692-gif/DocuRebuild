@@ -11,7 +11,7 @@ presented in the UI until it actually works.
 | 0. Foundation and architecture | **Complete** | Monorepo, tokens, contracts, API scaffold, migrations, tests |
 | 1. Local storage and project management | **Complete** | App/project DBs, folders, manifest, CRUD, trash |
 | 2. Main UI and workspace | **Complete** | Header navigation, dashboard, two-panel workspace, settings, i18n |
-| 3. Import and image processing | **In progress** | Image import/rotation/reorder done; PDF import pending |
+| 3. Import and image processing | **In progress** | Image + PDF import/rotation/reorder done; advanced image processing pending |
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | Planned | Depends on Phase 4 |
 | 6. AI integration and free usage first | Planned | Depends on elements and review model |
@@ -85,16 +85,27 @@ for theme/language switching and mobile panel switching.
   rotation with reset.
 - Zoom, fit, actual size and page navigation; responsive thumbnail rail.
 - Asset streaming with content-type and path containment.
+- PDF import for text-based, image-based and mixed PDFs, with one page per PDF
+  page, immutable original storage, 150 DPI local rendering and WebP thumbnails.
+- Embedded PDF text extraction into the existing review model (`pdf-text`,
+  null confidence), so text can be corrected, verified or inserted without a
+  second extraction UI.
+- Password/empty PDF rejection, configurable page limit, honest PDF capability
+  reporting, and reference-counted deletion of a PDF shared by many pages.
+- PDF rotation re-renders from the original PDF and marks any embedded text run
+  stale instead of reusing mismatched text.
 
 **Remaining before completion**
 
-- PDF import, page rendering, embedded text extraction and mixed-PDF handling.
 - Crop, deskew, perspective correction, contrast, sharpening, denoising,
   thresholding, shadow removal and background cleanup.
 - Processed-version comparison/restore UI.
 - Large-file and batch progress reporting.
+- Cancellable PDF import for very large documents (rendering is page-batched but
+  currently runs to completion once started).
 
-**Dependencies** — PyMuPDF for PDFs, OpenCV for advanced image processing.
+**Dependencies** — PyMuPDF for PDF rendering (installed and verified); OpenCV for
+advanced image processing.
 
 ---
 
@@ -118,6 +129,9 @@ for theme/language switching and mobile panel switching.
   note; unverified text is visibly marked.
 - Capability reporting in `/api/meta`, `/api/ocr/capabilities` and Settings, with
   Tesseract path and language-data setup guidance.
+- PDF pages with an embedded text layer are stored as reviewable `pdf-text` runs
+  in the same dialog as OCR, clearly labelled with no confidence score and
+  invalidated on rotation; image-only PDF pages fall back to local OCR.
 - Backend tests for persistence, correction, verification, stale detection,
   missing language data and unavailable engines; frontend i18n parity tests.
 
@@ -199,8 +213,10 @@ headers/footers, page numbers, find/replace, DOCX/TXT export and OMML validation
   careful benchmarking. No conversion is ever automatic.
 - **Offline processing is bounded by hardware.** Browser-only PWA builds cannot
   run arbitrary Python/PyTorch stacks; capabilities must be reported honestly.
-- **Large documents need streaming.** Current imports load individual images;
-  future PDF/OCR work must stay page-batched and cancellable.
+- **Large documents need streaming.** Imports stream uploads and PDFs are rendered
+  one page at a time, but a batch still completes synchronously from the client's
+  point of view. Future work should add progress and cancellation for very large
+  batches.
 - **SQLite on network shares is unsafe.** Connected devices must use the local
   API, not direct database access.
 - **Dependency audit.** ESLint/TypeScript-ESLint currently pull a vulnerable
@@ -211,8 +227,8 @@ headers/footers, page numbers, find/replace, DOCX/TXT export and OMML validation
 
 ## Definition of done for the next milestone
 
-1. PDF import can render and extract text page-by-page without blocking the UI.
-2. Image processing operations are non-destructive and reversible.
-3. Import progress, cancellation and failures are visible and localized.
-4. Backend and frontend tests cover the new paths, including Burmese filenames.
-5. Documentation and capability flags match the implemented behaviour.
+1. Advanced image processing operations are non-destructive and reversible.
+2. Import progress, cancellation and failures are visible and localized.
+3. Backend and frontend tests cover the new paths, including Burmese filenames.
+4. Documentation and capability flags match the implemented behaviour.
+5. Phase 3 acceptance checks pass for images, PDFs and processed-version restore.

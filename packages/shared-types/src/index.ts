@@ -78,6 +78,8 @@ export interface PageSummary {
   thumbnail_asset_id: string | null;
   original_filename: string | null;
   rotation: number;
+  /** 1-based page number inside the original PDF, or null for image pages. */
+  pdf_page_number: number | null;
   created_at: string;
   updated_at: string;
 }

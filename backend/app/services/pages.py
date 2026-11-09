@@ -9,13 +9,17 @@ from typing import Any
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.storage import resolve_within
 from app.db.project_schema import project_db, utc_iso
+from app.services import pdf as pdf_service
 
 logger = logging.getLogger(__name__)
 
 THUMBNAIL_EDGE = 480
+PDF_EXTENSION = ".pdf"
+PDF_TEXT_ENGINE = "pdf-text"
 
 # Formats the browser can display directly.
 BROWSER_SAFE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -34,6 +38,7 @@ MIME_BY_EXTENSION = {
 }
 
 SUPPORTED_EXTENSIONS = set(MIME_BY_EXTENSION)
+SUPPORTED_IMPORT_EXTENSIONS = SUPPORTED_EXTENSIONS | {PDF_EXTENSION}
 
 Image.MAX_IMAGE_PIXELS = 180_000_000
 
@@ -53,6 +58,23 @@ def validate_image_name(filename: str) -> str:
             400,
             "unsupported_file_type",
             f"Unsupported file type for '{filename}'. Use JPG, PNG, WEBP, BMP or TIFF.",
+        )
+    return extension
+
+
+def validate_import_name(filename: str) -> str:
+    extension = normalise_extension(filename)
+    if extension not in SUPPORTED_IMPORT_EXTENSIONS:
+        raise AppError(
+            400,
+            "unsupported_file_type",
+            f"Unsupported file type for '{filename}'. Use JPG, PNG, WEBP, BMP, TIFF or PDF.",
+        )
+    if extension == PDF_EXTENSION and not pdf_service.pdf_available():
+        raise AppError(
+            409,
+            "pdf_unavailable",
+            "PDF support is not installed on this device.",
         )
     return extension
 
@@ -124,27 +146,315 @@ def _insert_asset(
     )
 
 
-def import_images(project_dir: Path, uploads: list[tuple[str, Path]]) -> list[dict[str, Any]]:
-    """Import validated temporary image files as immutable source pages.
+def _import_image(
+    conn,
+    project_dir: Path,
+    *,
+    filename: str,
+    temp_path: Path,
+    extension: str,
+    width: int,
+    height: int,
+    page_number: int,
+    created_files: list[Path],
+) -> dict[str, Any]:
+    page_id = str(uuid.uuid4())
+    original_id = str(uuid.uuid4())
+    thumbnail_id = str(uuid.uuid4())
+    relative_source = f"source/{original_id}{extension}"
+    source_path = project_dir / relative_source
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(temp_path), str(source_path))
+    created_files.append(source_path)
 
-    Each source file is stored once under ``source/`` and never modified again.
+    image = _load_image(source_path)
+    display_id: str | None = None
+    display_width, display_height = image.width, image.height
+
+    if extension in CONVERTED_EXTENSIONS:
+        display_id = str(uuid.uuid4())
+        relative_display = f"processed/{page_id}-display.png"
+        display_path = project_dir / relative_display
+        display_path.parent.mkdir(parents=True, exist_ok=True)
+        _flatten_for_web(image).save(display_path, format="PNG", optimize=False)
+        created_files.append(display_path)
+        _insert_asset(
+            conn,
+            asset_id=display_id,
+            kind="processed",
+            relative_path=relative_display,
+            mime_type="image/png",
+            byte_size=display_path.stat().st_size,
+            checksum=None,
+            width=display_width,
+            height=display_height,
+        )
+
+    thumbnail_relative = f"thumbnails/{page_id}.webp"
+    thumbnail_path = project_dir / thumbnail_relative
+    thumb_width, thumb_height, thumb_size = _write_thumbnail(image, thumbnail_path)
+    created_files.append(thumbnail_path)
+    image.close()
+
+    _insert_asset(
+        conn,
+        asset_id=original_id,
+        kind="original",
+        relative_path=relative_source,
+        mime_type=MIME_BY_EXTENSION[extension],
+        byte_size=source_path.stat().st_size,
+        checksum=_sha256(source_path),
+        width=width,
+        height=height,
+    )
+    _insert_asset(
+        conn,
+        asset_id=thumbnail_id,
+        kind="thumbnail",
+        relative_path=thumbnail_relative,
+        mime_type="image/webp",
+        byte_size=thumb_size,
+        checksum=None,
+        width=thumb_width,
+        height=thumb_height,
+    )
+
+    now = _now()
+    conn.execute(
+        """
+        INSERT INTO pages (id, page_number, source_kind, status, width, height,
+                           original_asset_id, display_asset_id, thumbnail_asset_id,
+                           original_filename, rotation, created_at, updated_at)
+        VALUES (?, ?, 'image', 'ready', ?, ?, ?, ?, ?, ?, 0, ?, ?)
+        """,
+        (
+            page_id,
+            page_number,
+            display_width,
+            display_height,
+            original_id,
+            display_id,
+            thumbnail_id,
+            filename,
+            now,
+            now,
+        ),
+    )
+    return dict(conn.execute("SELECT * FROM pages WHERE id = ?", (page_id,)).fetchone())
+
+
+def _insert_embedded_text_run(
+    conn, page_id: str, display_asset_id: str, text: str, blocks: list[dict]
+) -> None:
+    if not text.strip() or not blocks:
+        return
+    run_id = str(uuid.uuid4())
+    now = _now()
+    conn.execute(
+        """
+        INSERT INTO ocr_runs (id, page_id, status, engine, engine_version, languages,
+                              source_asset_id, rotation, mean_confidence, text,
+                              created_at, updated_at, completed_at)
+        VALUES (?, ?, 'succeeded', ?, ?, '', ?, 0, NULL, ?, ?, ?, ?)
+        """,
+        (
+            run_id,
+            page_id,
+            PDF_TEXT_ENGINE,
+            pdf_service.engine_version(),
+            display_asset_id,
+            text,
+            now,
+            now,
+            now,
+        ),
+    )
+    for block in blocks:
+        conn.execute(
+            """
+            INSERT INTO ocr_blocks (id, run_id, page_id, block_index, kind, text,
+                                    confidence, x, y, width, height, line_count,
+                                    word_count, verified, corrected, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+            """,
+            (
+                str(uuid.uuid4()),
+                run_id,
+                page_id,
+                block["block_index"],
+                block["kind"],
+                block["text"],
+                block["x"],
+                block["y"],
+                block["width"],
+                block["height"],
+                block["line_count"],
+                block["word_count"],
+                now,
+                now,
+            ),
+        )
+
+
+def _import_pdf(
+    conn,
+    project_dir: Path,
+    *,
+    filename: str,
+    temp_path: Path,
+    page_count: int,
+    next_number: int,
+    created_files: list[Path],
+) -> list[dict[str, Any]]:
+    settings = get_settings()
+    pdf_asset_id = str(uuid.uuid4())
+    relative_source = f"source/{pdf_asset_id}.pdf"
+    source_path = project_dir / relative_source
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(temp_path), str(source_path))
+    created_files.append(source_path)
+
+    _insert_asset(
+        conn,
+        asset_id=pdf_asset_id,
+        kind="original",
+        relative_path=relative_source,
+        mime_type="application/pdf",
+        byte_size=source_path.stat().st_size,
+        checksum=_sha256(source_path),
+        width=None,
+        height=None,
+    )
+
+    document = pdf_service.open_document(source_path)
+    rows: list[dict[str, Any]] = []
+    try:
+        scale = settings.pdf_render_dpi / 72.0
+        for index in range(page_count):
+            page_id = str(uuid.uuid4())
+            display_id = str(uuid.uuid4())
+            thumbnail_id = str(uuid.uuid4())
+
+            image = pdf_service.render_page(document, index, settings.pdf_render_dpi)
+            relative_display = f"processed/{page_id}-page.png"
+            display_path = project_dir / relative_display
+            display_path.parent.mkdir(parents=True, exist_ok=True)
+            image.save(display_path, format="PNG", optimize=False)
+            created_files.append(display_path)
+            width, height = image.width, image.height
+
+            thumbnail_relative = f"thumbnails/{page_id}.webp"
+            thumbnail_path = project_dir / thumbnail_relative
+            thumb_width, thumb_height, thumb_size = _write_thumbnail(image, thumbnail_path)
+            created_files.append(thumbnail_path)
+            image.close()
+
+            _insert_asset(
+                conn,
+                asset_id=display_id,
+                kind="processed",
+                relative_path=relative_display,
+                mime_type="image/png",
+                byte_size=display_path.stat().st_size,
+                checksum=None,
+                width=width,
+                height=height,
+            )
+            _insert_asset(
+                conn,
+                asset_id=thumbnail_id,
+                kind="thumbnail",
+                relative_path=thumbnail_relative,
+                mime_type="image/webp",
+                byte_size=thumb_size,
+                checksum=None,
+                width=thumb_width,
+                height=thumb_height,
+            )
+
+            now = _now()
+            conn.execute(
+                """
+                INSERT INTO pages (id, page_number, source_kind, status, width, height,
+                                   original_asset_id, display_asset_id, thumbnail_asset_id,
+                                   original_filename, rotation, pdf_page_number,
+                                   created_at, updated_at)
+                VALUES (?, ?, 'pdf', 'ready', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+                """,
+                (
+                    page_id,
+                    next_number + index,
+                    width,
+                    height,
+                    pdf_asset_id,
+                    display_id,
+                    thumbnail_id,
+                    filename,
+                    index + 1,
+                    now,
+                    now,
+                ),
+            )
+
+            text, blocks = pdf_service.extract_text(document, index, scale)
+            _insert_embedded_text_run(conn, page_id, display_id, text, blocks)
+            rows.append(
+                dict(
+                    conn.execute(
+                        "SELECT * FROM pages WHERE id = ?", (page_id,)
+                    ).fetchone()
+                )
+            )
+    finally:
+        document.close()
+    return rows
+
+
+def import_files(project_dir: Path, uploads: list[tuple[str, Path]]) -> list[dict[str, Any]]:
+    """Import validated temporary image or PDF files as immutable source pages.
+
+    Original uploads are stored once under ``source/`` and never modified again.
+    PDF pages are rendered into display copies; their embedded text layer (when
+    present) is stored as a reviewable extraction run.
     """
     if not uploads:
         raise AppError(400, "no_files", "No files were provided.")
 
+    settings = get_settings()
+
     # Validate every file before mutating the project so a bad file cannot
     # leave a half-imported batch.
-    inspected: list[tuple[str, Path, str, int, int, int]] = []
+    inspected: list[dict[str, Any]] = []
     for filename, temp_path in uploads:
-        extension = validate_image_name(filename)
-        try:
-            image = _load_image(temp_path)
-        except AppError:
-            raise AppError(422, "image_unreadable", f"'{filename}' is not a readable image.")
-        inspected.append((filename, temp_path, extension, image.width, image.height, 0))
-        image.close()
+        extension = validate_import_name(filename)
+        if extension == PDF_EXTENSION:
+            page_count = pdf_service.validate_document(temp_path, settings.pdf_max_pages)
+            inspected.append(
+                {
+                    "filename": filename,
+                    "temp_path": temp_path,
+                    "extension": extension,
+                    "page_count": page_count,
+                }
+            )
+        else:
+            try:
+                image = _load_image(temp_path)
+            except AppError:
+                raise AppError(422, "image_unreadable", f"'{filename}' is not a readable image.")
+            inspected.append(
+                {
+                    "filename": filename,
+                    "temp_path": temp_path,
+                    "extension": extension,
+                    "width": image.width,
+                    "height": image.height,
+                }
+            )
+            image.close()
 
     imported: list[dict[str, Any]] = []
+    created_files: list[Path] = []
     try:
         with project_db(project_dir) as conn:
             next_number = (
@@ -152,89 +462,33 @@ def import_images(project_dir: Path, uploads: list[tuple[str, Path]]) -> list[di
                     "SELECT COALESCE(MAX(page_number), 0) + 1 AS next FROM pages"
                 ).fetchone()["next"]
             )
-            for index, (filename, temp_path, extension, width, height, _) in enumerate(inspected):
-                page_id = str(uuid.uuid4())
-                original_id = str(uuid.uuid4())
-                thumbnail_id = str(uuid.uuid4())
-                relative_source = f"source/{original_id}{extension}"
-                source_path = project_dir / relative_source
-                source_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(temp_path), str(source_path))
-
-                image = _load_image(source_path)
-                display_id: str | None = None
-                display_width, display_height = image.width, image.height
-
-                if extension in CONVERTED_EXTENSIONS:
-                    display_id = str(uuid.uuid4())
-                    relative_display = f"processed/{page_id}-display.png"
-                    display_path = project_dir / relative_display
-                    display_path.parent.mkdir(parents=True, exist_ok=True)
-                    _flatten_for_web(image).save(display_path, format="PNG", optimize=False)
-                    _insert_asset(
+            for item in inspected:
+                if item["extension"] == PDF_EXTENSION:
+                    rows = _import_pdf(
                         conn,
-                        asset_id=display_id,
-                        kind="processed",
-                        relative_path=relative_display,
-                        mime_type="image/png",
-                        byte_size=display_path.stat().st_size,
-                        checksum=None,
-                        width=display_width,
-                        height=display_height,
+                        project_dir,
+                        filename=item["filename"],
+                        temp_path=item["temp_path"],
+                        page_count=item["page_count"],
+                        next_number=next_number,
+                        created_files=created_files,
                     )
-
-                thumb_width, thumb_height, thumb_size = _write_thumbnail(
-                    image, project_dir / "thumbnails" / f"{page_id}.webp"
-                )
-                image.close()
-
-                _insert_asset(
-                    conn,
-                    asset_id=original_id,
-                    kind="original",
-                    relative_path=relative_source,
-                    mime_type=MIME_BY_EXTENSION[extension],
-                    byte_size=source_path.stat().st_size,
-                    checksum=_sha256(source_path),
-                    width=width,
-                    height=height,
-                )
-                _insert_asset(
-                    conn,
-                    asset_id=thumbnail_id,
-                    kind="thumbnail",
-                    relative_path=f"thumbnails/{page_id}.webp",
-                    mime_type="image/webp",
-                    byte_size=thumb_size,
-                    checksum=None,
-                    width=thumb_width,
-                    height=thumb_height,
-                )
-
-                now = _now()
-                page_number = int(next_number) + index
-                conn.execute(
-                    """
-                    INSERT INTO pages (id, page_number, source_kind, status, width, height,
-                                       original_asset_id, display_asset_id, thumbnail_asset_id,
-                                       original_filename, rotation, created_at, updated_at)
-                    VALUES (?, ?, 'image', 'ready', ?, ?, ?, ?, ?, ?, 0, ?, ?)
-                    """,
-                    (
-                        page_id,
-                        page_number,
-                        display_width,
-                        display_height,
-                        original_id,
-                        display_id,
-                        thumbnail_id,
-                        filename,
-                        now,
-                        now,
-                    ),
-                )
-                row = conn.execute("SELECT * FROM pages WHERE id = ?", (page_id,)).fetchone()
-                imported.append(dict(row))
+                else:
+                    rows = [
+                        _import_image(
+                            conn,
+                            project_dir,
+                            filename=item["filename"],
+                            temp_path=item["temp_path"],
+                            extension=item["extension"],
+                            width=item["width"],
+                            height=item["height"],
+                            page_number=next_number,
+                            created_files=created_files,
+                        )
+                    ]
+                imported.extend(rows)
+                next_number += len(rows)
 
             conn.execute(
                 "INSERT INTO history_events (id, event_type, summary, payload, created_at)"
@@ -247,9 +501,10 @@ def import_images(project_dir: Path, uploads: list[tuple[str, Path]]) -> list[di
                 ),
             )
     except Exception:
-        for filename, temp_path, *_ in inspected:
-            if temp_path.exists():
-                temp_path.unlink(missing_ok=True)
+        for path in created_files:
+            path.unlink(missing_ok=True)
+        for _filename, temp_path in uploads:
+            temp_path.unlink(missing_ok=True)
         raise
     return imported
 
@@ -299,13 +554,13 @@ def _update_thumbnail(path: Path, image: Image.Image) -> tuple[int, int, int]:
 
 
 def rotate_page(project_dir: Path, page_id: str, degrees: int) -> dict[str, Any]:
+    settings = get_settings()
     with project_db(project_dir) as conn:
         page = _get_page(conn, page_id)
         original_id = page["original_asset_id"]
         if not original_id:
             raise AppError(409, "page_missing_source", "This page has no source image.")
         original_path = _asset_path(conn, project_dir, original_id)
-        image = _load_image(original_path)
         total = (int(page["rotation"]) + degrees) % 360
 
         thumbnail_path = project_dir / "thumbnails" / f"{page_id}.webp"
@@ -313,16 +568,24 @@ def rotate_page(project_dir: Path, page_id: str, degrees: int) -> dict[str, Any]
             "SELECT * FROM assets WHERE id = ?", (page["thumbnail_asset_id"],)
         ).fetchone()
 
-        _remove_display_asset(conn, project_dir, page)
+        if page["source_kind"] == "pdf":
+            # Re-render from the immutable PDF page so repeated rotations never
+            # accumulate resampling artifacts. A display copy always exists.
+            document = pdf_service.open_document(original_path)
+            try:
+                index = max(0, int(page["pdf_page_number"] or 1) - 1)
+                base = pdf_service.render_page(document, index, settings.pdf_render_dpi)
+            finally:
+                document.close()
 
-        if total == 0:
-            display_id = None
-            width, height = image.width, image.height
-            rendered = image
-        else:
-            rendered = image.rotate(total, expand=True, resample=Image.Resampling.BICUBIC)
+            rendered = (
+                base.rotate(total, expand=True, resample=Image.Resampling.BICUBIC)
+                if total
+                else base
+            )
+            _remove_display_asset(conn, project_dir, page)
             display_id = str(uuid.uuid4())
-            relative_display = f"processed/{page_id}-rotate-{total}.png"
+            relative_display = f"processed/{page_id}-page-{total}.png"
             display_path = project_dir / relative_display
             display_path.parent.mkdir(parents=True, exist_ok=True)
             _flatten_for_web(rendered).save(display_path, format="PNG", optimize=False)
@@ -338,16 +601,48 @@ def rotate_page(project_dir: Path, page_id: str, degrees: int) -> dict[str, Any]
                 height=rendered.height,
             )
             width, height = rendered.width, rendered.height
+            thumb_width, thumb_height, thumb_size = _update_thumbnail(thumbnail_path, rendered)
+            if rendered is not base:
+                rendered.close()
+            base.close()
+        else:
+            image = _load_image(original_path)
+            _remove_display_asset(conn, project_dir, page)
 
-        thumb_width, thumb_height, thumb_size = _update_thumbnail(thumbnail_path, rendered)
+            if total == 0:
+                display_id = None
+                width, height = image.width, image.height
+                rendered = image
+            else:
+                rendered = image.rotate(total, expand=True, resample=Image.Resampling.BICUBIC)
+                display_id = str(uuid.uuid4())
+                relative_display = f"processed/{page_id}-rotate-{total}.png"
+                display_path = project_dir / relative_display
+                display_path.parent.mkdir(parents=True, exist_ok=True)
+                _flatten_for_web(rendered).save(display_path, format="PNG", optimize=False)
+                _insert_asset(
+                    conn,
+                    asset_id=display_id,
+                    kind="processed",
+                    relative_path=relative_display,
+                    mime_type="image/png",
+                    byte_size=display_path.stat().st_size,
+                    checksum=None,
+                    width=rendered.width,
+                    height=rendered.height,
+                )
+                width, height = rendered.width, rendered.height
+
+            thumb_width, thumb_height, thumb_size = _update_thumbnail(thumbnail_path, rendered)
+            image.close()
+            if rendered is not image:
+                rendered.close()
+
         if thumb_asset is not None:
             conn.execute(
                 "UPDATE assets SET width = ?, height = ?, byte_size = ? WHERE id = ?",
                 (thumb_width, thumb_height, thumb_size, thumb_asset["id"]),
             )
-        image.close()
-        if rendered is not image:
-            rendered.close()
 
         conn.execute(
             "UPDATE pages SET rotation = ?, width = ?, height = ?, display_asset_id = ?,"
@@ -370,6 +665,18 @@ def delete_page(project_dir: Path, page_id: str) -> None:
         for asset_id in asset_ids:
             if not asset_id:
                 continue
+            # A PDF's original asset is shared by all of its pages. Only move a
+            # file to trash when no other page still references it.
+            others = conn.execute(
+                """
+                SELECT COUNT(*) AS count FROM pages
+                WHERE id != ?
+                  AND (original_asset_id = ? OR display_asset_id = ? OR thumbnail_asset_id = ?)
+                """,
+                (page_id, asset_id, asset_id, asset_id),
+            ).fetchone()["count"]
+            if others:
+                continue
             row = conn.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
             if row is None:
                 continue
@@ -380,10 +687,8 @@ def delete_page(project_dir: Path, page_id: str) -> None:
             if path.exists():
                 trash_dir.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(path), str(trash_dir / path.name))
+            conn.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
         conn.execute("DELETE FROM pages WHERE id = ?", (page_id,))
-        for asset_id in asset_ids:
-            if asset_id:
-                conn.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
         _renumber(conn)
         conn.execute(
             "INSERT INTO history_events (id, event_type, summary, payload, created_at)"

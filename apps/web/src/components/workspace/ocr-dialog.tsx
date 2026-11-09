@@ -147,6 +147,7 @@ export function OcrDialog({
     run?.error_code && i18n.exists(run.error_code, { ns: "errors" })
       ? tErrors(run.error_code)
       : run?.error || t("ocr.failed");
+  const embeddedText = run?.engine === "pdf-text";
 
   const reasonKey =
     capabilities?.reason &&
@@ -301,10 +302,10 @@ export function OcrDialog({
                   onClick={handleStart}
                   disabled={busy || languageOptions.length === 0}
                 >
-                  {busy ? <Spinner className="size-icon-sm" /> : run ? <RefreshCw /> : <Play />}
+                  {busy ? <Spinner className="size-icon-sm" /> : run && !embeddedText ? <RefreshCw /> : <Play />}
                   {busy
                     ? t("ocr.running")
-                    : run
+                    : run && !embeddedText
                       ? t("ocr.rerun")
                       : t("ocr.run")}
                 </Button>
@@ -316,7 +317,13 @@ export function OcrDialog({
 
                 <div className="flex gap-2 rounded-lg border border-border/60 bg-background/50 p-3 text-2xs leading-relaxed text-muted-foreground">
                   <CircleAlert className="mt-0.5 size-icon-sm shrink-0 text-warning" aria-hidden="true" />
-                  <p>{t("ocr.reviewNote")}</p>
+                  <p>
+                    {t(
+                      embeddedText
+                        ? "ocr.reviewNoteEmbedded"
+                        : "ocr.reviewNote",
+                    )}
+                  </p>
                 </div>
               </>
             ) : (
@@ -376,8 +383,20 @@ export function OcrDialog({
                 <>
                   {run.stale ? (
                     <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-2xs leading-relaxed">
-                      <p className="font-semibold text-warning">{t("ocr.stale.title")}</p>
-                      <p className="mt-0.5 text-muted-foreground">{t("ocr.stale.description")}</p>
+                      <p className="font-semibold text-warning">
+                        {t(
+                          embeddedText
+                            ? "ocr.stale.embeddedTitle"
+                            : "ocr.stale.title",
+                        )}
+                      </p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        {t(
+                          embeddedText
+                            ? "ocr.stale.embeddedDescription"
+                            : "ocr.stale.description",
+                        )}
+                      </p>
                     </div>
                   ) : null}
 
@@ -392,20 +411,27 @@ export function OcrDialog({
                     <>
                       <div className="flex flex-wrap items-center gap-1.5 text-2xs text-muted-foreground">
                         <Badge variant="outline">
-                          {t("ocr.engine")}: {run.engine}
+                          {t("ocr.engine")}:{" "}
+                          {embeddedText ? t("ocr.embeddedEngine") : run.engine}
                           {run.engine_version ? ` ${run.engine_version}` : ""}
                         </Badge>
-                        <Badge variant="outline">
-                          {run.languages.map((code) => languageLabel(code, t)).join(" + ")}
-                        </Badge>
-                        <Badge variant={confidenceVariant(run.mean_confidence)}>
-                          {t("ocr.meanConfidence", {
-                            value:
-                              run.mean_confidence === null
-                                ? "—"
-                                : Math.round(run.mean_confidence),
-                          })}
-                        </Badge>
+                        {run.languages.length > 0 ? (
+                          <Badge variant="outline">
+                            {run.languages.map((code) => languageLabel(code, t)).join(" + ")}
+                          </Badge>
+                        ) : null}
+                        {embeddedText ? (
+                          <Badge variant="outline">{t("ocr.embeddedConfidence")}</Badge>
+                        ) : (
+                          <Badge variant={confidenceVariant(run.mean_confidence)}>
+                            {t("ocr.meanConfidence", {
+                              value:
+                                run.mean_confidence === null
+                                  ? "—"
+                                  : Math.round(run.mean_confidence),
+                            })}
+                          </Badge>
+                        )}
                         <span>
                           {formatDateTime(run.completed_at ?? run.created_at, locale)}
                         </span>

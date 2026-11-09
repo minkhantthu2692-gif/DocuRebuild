@@ -15,6 +15,7 @@ class PageOut(BaseModel):
     thumbnail_asset_id: str | None
     original_filename: str | None
     rotation: int
+    pdf_page_number: int | None = None
     created_at: str
     updated_at: str
 

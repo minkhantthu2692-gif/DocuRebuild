@@ -2,17 +2,19 @@
 
 **A local-first, AI-assisted document reconstruction workspace.**
 
-DocuRebuild turns scans, photographs and (in a later phase) PDF pages into accurate,
-structured and editable documents. It keeps original source files immutable, keeps
-project data on your device, and treats every AI result as a reviewable proposal.
+DocuRebuild turns scans, photographs and PDF documents into accurate, structured
+and editable documents. It keeps original source files immutable, keeps project
+data on your device, and treats every AI result as a reviewable proposal.
 
 > **Project status — early development (Phase 4 of 12).**
-> The workspace, local project storage, image import, the rich-text editor and
-> local Tesseract OCR are implemented. OCR is only advertised when a working
-> Tesseract installation and language data are detected. PDF import, AI
-> providers, element reconstruction, export and history are **not implemented
-> yet** and are clearly marked as unavailable in the UI. Nothing in this
-> repository fakes those features.
+> The workspace, local project storage, image and PDF import, the rich-text
+> editor and local Tesseract OCR are implemented. PDF pages are rendered locally
+> and embedded text layers are stored as reviewable proposals; image-only PDF
+> pages can be processed with OCR. OCR and PDF import are only advertised when
+> their local dependencies actually work. AI providers, element reconstruction,
+> export, history and advanced image processing are **not implemented yet** and
+> are clearly marked as unavailable in the UI. Nothing in this repository fakes
+> those features.
 
 ---
 
@@ -26,8 +28,15 @@ project data on your device, and treats every AI result as a reviewable proposal
   source files, processed copies, thumbnails, exports and backups folders.
 - **Image import** — drag and drop or file picker; JPG, PNG, WebP, BMP and TIFF.
   Limits and validation errors come from the backend, not hardcoded UI values.
+- **PDF import** — text-based, image-based and mixed PDFs. The original PDF is
+  stored once as an immutable source asset, and every page is rendered locally at
+  150 DPI into a display copy with a thumbnail. Embedded text is stored as a
+  reviewable extraction run, so image-only pages can be OCR'd separately.
+  Password-protected PDFs are rejected with a clear message.
 - **Source viewer** — page navigation, thumbnail rail, zoom, fit, actual size,
   rotation with non-destructive display copies, page reordering and page deletion.
+  PDF pages are re-rendered from the original PDF when rotated, so repeated
+  rotations do not accumulate resampling artifacts.
 - **Local OCR (optional)** — Tesseract runs on the local machine when installed.
   English and Burmese language data are supported. Results include text blocks,
   confidence values and source bounding boxes; each block can be corrected,
@@ -44,12 +53,13 @@ project data on your device, and treats every AI result as a reviewable proposal
 
 ### Not available yet
 
-PDF import and rendering, full layout detection (tables, figures, equations,
+Advanced image processing (crop, deskew, perspective correction, contrast,
+sharpening, denoising, thresholding, shadow removal, background cleanup and
+processed-version comparison), full layout detection (tables, figures, equations,
 headers and footers), AI providers, DOCX/TXT export, revision history,
-backups/restore UI, desktop packaging and PWA install support are planned but
-not implemented. OCR currently extracts text blocks and reading order; it does
-not yet detect tables, figures or equations. See
-[`docs/roadmap.md`](docs/roadmap.md).
+backups/restore UI, desktop packaging and PWA install support are planned but not
+implemented. OCR currently extracts text blocks and reading order; it does not yet
+detect tables, figures or equations. See [`docs/roadmap.md`](docs/roadmap.md).
 
 ---
 
@@ -74,6 +84,7 @@ not yet detect tables, figures or equations. See
 | i18n | i18next / react-i18next (English default, Burmese secondary) |
 | Local API | Python, FastAPI, SQLAlchemy, Alembic, SQLite |
 | Image processing | Pillow |
+| PDF rendering | PyMuPDF (AGPL, runs locally; no external service) |
 | Tests | Pytest, Vitest, Testing Library |
 
 The repository is an npm-workspaces monorepo. `packages/shared-types` holds the
@@ -111,6 +122,9 @@ Local runtime data is **never** stored in this repository. See
 - Node.js **20 or newer** (Node 24 tested) and npm 10+
 - Python **3.11 or newer** (3.12 tested)
 - Optional: Tesseract 5+ for local OCR, with `eng` and/or `mya` traineddata
+
+PDF import needs no separate system package: PyMuPDF is installed with the
+backend requirements and runs entirely on the local machine.
 
 ---
 
@@ -170,6 +184,28 @@ language files you need and point `DOCUREBUILD_TESSDATA_DIR` at it. The folder
 must contain the required `*.traineddata` files; OCR returns an explicit error
 instead of an empty success when the engine cannot produce structured output.
 
+### PDF import
+
+PDF support is local and works without an AI provider or API key:
+
+- Each imported PDF is stored once under `source/`; the file is never rewritten.
+- Every page is rendered at import time (`DOCUREBUILD_PDF_RENDER_DPI`, default
+  150) into `processed/<page-id>-page.png`, with a WebP thumbnail.
+- An embedded text layer, when present, is stored as a normal reviewable
+  extraction run with `engine = pdf-text` and no confidence score. It appears in
+  the same Extract text dialog as OCR, so blocks can be corrected, verified or
+  inserted into the document.
+- Image-only pages simply have no embedded run; run local OCR on them when
+  Tesseract is available.
+- Rotation re-renders the page from the immutable PDF instead of rotating the PDF
+  or repeatedly resampling the previous display copy.
+- Password-protected and empty PDFs are rejected with a localized error. The
+  default per-file limit is 1,000 pages (`DOCUREBUILD_PDF_MAX_PAGES`).
+
+Embedded PDF text is exact source data, but it can still contain encoding errors,
+missing glyphs or an incorrect reading order. The dialog marks it as a proposal
+and offers no confidence score rather than pretending it was OCR-verified.
+
 ### Run in development
 
 ```bash
@@ -211,8 +247,8 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   projects/<project-id>/
     project.db           project database (document, pages, assets, history, jobs)
     manifest.json        portable project manifest
-    source/              immutable imported originals
-    processed/           non-destructive display copies (e.g. rotations)
+    source/              immutable imported originals (images and PDFs)
+    processed/           non-destructive display copies (rotations, PDF page renders)
     thumbnails/          cached WebP thumbnails
     exports/             future export output
     backups/             future project backups
@@ -221,7 +257,8 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 ```
 
 - API keys and user documents are never committed or uploaded by the application.
-- The source images are immutable; transformations write new display assets.
+- Source images and PDFs are immutable; transformations write new display assets.
+  Deleting a PDF page keeps the shared original until its last page is removed.
 - Asset paths stored in databases are relative and validated against traversal.
 - The local API binds to loopback by default and sends no telemetry.
 - GitHub is used only for source code and documentation. User data is **not** a
@@ -257,8 +294,18 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   quality. Burmese text is especially difficult; heading/list labels are
   heuristics and are never presented as certain structure. Tables, figures and
   equations are not detected yet.
+- Embedded PDF text is not OCR and has no confidence score. Encoding problems,
+  missing glyphs and unusual reading order are possible; text is never claimed to
+  be verified until the user marks it.
+- PDF import does not support password-protected files, forms, annotations,
+  digital signatures or PDFs above the configured page limit. Page rendering uses
+  a fixed DPI rather than per-page dynamic resolution.
+- PyMuPDF (the PDF rendering library) is dual-licensed under AGPL-3.0 or a
+  commercial Artifex licence. Running DocuRebuild locally is unaffected, but
+  anyone distributing a packaged build should review those terms before release.
 - OCR results become marked stale when the page image or rotation changes. They
-  are never silently applied to the document.
+  are never silently applied to the document. The same applies to embedded PDF
+  text after a page is rotated.
 - npm install scripts for `esbuild` are blocked by the local npm policy; Vite
   still runs because its binary is already present. If a fresh install fails,
   review the blocked install script with `npm install-scripts ls`.
@@ -272,7 +319,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 0. Foundation and architecture | Complete |
 | 1. Local storage and project management | Complete |
 | 2. Main UI and workspace | Complete |
-| 3. Import and image processing | In progress (images; PDF pending) |
+| 3. Import and image processing | In progress (images and PDF; advanced image processing pending) |
 | 4. Local OCR and layout detection | In progress (text OCR; layout pending) |
 | 5. Element extraction | Planned |
 | 6. AI integration and free usage first | Planned |

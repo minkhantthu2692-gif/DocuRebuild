@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     max_upload_batch: int = 50
     repository_url: str = "https://github.com/minkhantthu2692-gif/DocuRebuild"
 
+    # Local PDF rendering. Pages are rendered one at a time on the backend.
+    pdf_render_dpi: int = 150
+    pdf_max_pages: int = 1000
+
     # Local OCR. Nothing here contacts a remote service.
     tesseract_cmd: str = "tesseract"
     tessdata_dir: Path | None = None

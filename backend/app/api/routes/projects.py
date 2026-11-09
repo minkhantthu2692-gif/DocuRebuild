@@ -126,7 +126,7 @@ async def import_pages(
     try:
         for upload in files:
             filename = Path(upload.filename or "unnamed").name
-            extension = page_service.validate_image_name(filename)
+            extension = page_service.validate_import_name(filename)
             handle, temp_name = tempfile.mkstemp(dir=str(temp_dir), suffix=extension)
             temp_path = Path(temp_name)
             pending.append((filename, temp_path))
@@ -147,7 +147,7 @@ async def import_pages(
             if size == 0:
                 raise AppError(422, "empty_file", f"'{filename}' is empty.")
 
-        rows = await run_in_threadpool(page_service.import_images, directory, pending)
+        rows = await run_in_threadpool(page_service.import_files, directory, pending)
         touch_project(session, project)
         return sorted(rows, key=lambda row: row["page_number"])
     finally:

@@ -52,7 +52,11 @@ import {
   useRotatePage,
 } from "@/hooks/use-projects";
 import { api } from "@/lib/api";
-import { IMAGE_ACCEPT_ATTRIBUTE, partitionImageFiles } from "@/lib/image-files";
+import {
+  IMAGE_ACCEPT_ATTRIBUTE,
+  IMPORT_ACCEPT_ATTRIBUTE,
+  partitionImportFiles,
+} from "@/lib/import-files";
 import { cn } from "@/lib/utils";
 import { OcrDialog } from "./ocr-dialog";
 
@@ -234,12 +238,13 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     () => (meta ? meta.max_import_mb * 1024 * 1024 : null),
     [meta],
   );
+  const allowPdf = meta?.capabilities.import_pdf ?? false;
 
   const handleFiles = (files: FileList | File[]) => {
     const list = Array.from(files);
     if (list.length === 0 || importPages.isPending) return;
 
-    const { accepted, rejected } = partitionImageFiles(list, maxBytes);
+    const { accepted, rejected } = partitionImportFiles(list, maxBytes, allowPdf);
     rejected.slice(0, 3).forEach(({ file, reason }) => {
       toast.error(
         t(reason === "unsupported" ? "importErrors.unsupported" : "importErrors.tooLarge", {
@@ -442,7 +447,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
       <input
         ref={inputRef}
         type="file"
-        accept={IMAGE_ACCEPT_ATTRIBUTE}
+        accept={allowPdf ? IMPORT_ACCEPT_ATTRIBUTE : IMAGE_ACCEPT_ATTRIBUTE}
         multiple
         className="sr-only"
         onChange={(event) => {
@@ -486,18 +491,19 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
               {importPages.isPending ? <Spinner className="size-icon-lg" /> : <Upload className="size-icon-lg" />}
             </span>
             <span className="space-y-1">
-              <span className="block text-sm font-semibold tracking-tight">{t("dropTitle")}</span>
+              <span className="block text-sm font-semibold tracking-tight">
+                {t(allowPdf ? "dropTitlePdf" : "dropTitle")}
+              </span>
               <span className="block text-xs text-muted-foreground">{t("dropHint")}</span>
             </span>
             <span className="text-2xs text-muted-foreground">
               {meta
-                ? t("supported", { size: meta.max_import_mb })
+                ? t(allowPdf ? "supported" : "supportedNoPdf", {
+                    size: meta.max_import_mb,
+                  })
                 : t("supportedNoSize")}
             </span>
           </button>
-          <p className="max-w-sm text-center text-2xs leading-relaxed text-muted-foreground">
-            {t("pdfSoon")}
-          </p>
         </div>
       ) : null}
 
@@ -513,6 +519,11 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
             <span className="px-1 font-mono text-2xs text-muted-foreground">
               {t("viewer.pageOf", { page: currentPage.page_number, total: pages.length })}
             </span>
+            {currentPage.source_kind === "pdf" && currentPage.pdf_page_number ? (
+              <Badge variant="outline" className="font-mono">
+                {t("viewer.pdfBadge", { page: currentPage.pdf_page_number })}
+              </Badge>
+            ) : null}
             <ToolButton
               label={t("viewer.next")}
               icon={ChevronRight}
@@ -633,9 +644,15 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
         <div className="pointer-events-none absolute inset-0 z-panel flex items-center justify-center bg-background/70 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-primary/60 bg-card/90 px-8 py-6 text-center shadow-lg">
             <Upload className="size-icon-lg text-primary" />
-            <p className="text-sm font-semibold">{t("dropTitle")}</p>
+            <p className="text-sm font-semibold">
+              {t(allowPdf ? "dropTitlePdf" : "dropTitle")}
+            </p>
             <p className="text-xs text-muted-foreground">
-              {meta ? t("supported", { size: meta.max_import_mb }) : t("supportedNoSize")}
+              {meta
+                ? t(allowPdf ? "supported" : "supportedNoPdf", {
+                    size: meta.max_import_mb,
+                  })
+                : t("supportedNoSize")}
             </p>
           </div>
         </div>

@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.db.models import Project
 from app.schemas.meta import AppCapabilities, AppMeta, HealthStatus
 from app.services import ocr as ocr_service
+from app.services import pdf as pdf_service
 
 router = APIRouter(tags=["system"])
 
@@ -39,7 +40,7 @@ def meta() -> AppMeta:
         version=settings.version,
         capabilities=AppCapabilities(
             import_images=True,
-            import_pdf=False,
+            import_pdf=pdf_service.pdf_available(),
             image_transform=True,
             ocr=ocr_service.engine_available(),
             ai=False,

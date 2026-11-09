@@ -36,9 +36,9 @@ def test_meta_is_honest_about_available_capabilities(
     body = client.get("/api/meta").json()
     capabilities = body["capabilities"]
     assert capabilities["import_images"] is True
+    assert capabilities["import_pdf"] is True
     assert capabilities["image_transform"] is True
     # Not yet implemented; must not be advertised.
-    assert capabilities["import_pdf"] is False
     assert capabilities["ocr"] is False
     assert capabilities["ai"] is False
     assert capabilities["export"] is False

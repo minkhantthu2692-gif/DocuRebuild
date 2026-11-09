@@ -9,15 +9,16 @@
   "importSuccess_one": "Imported {{count}} page.",
   "importSuccess_other": "Imported {{count}} pages.",
   "dropTitle": "Drop images here",
+  "dropTitlePdf": "Drop images or PDFs here",
   "dropHint": "or click to browse",
-  "supported": "JPG, PNG, WEBP, BMP, TIFF · up to {{size}} MB each",
+  "supported": "JPG, PNG, WEBP, BMP, TIFF, PDF · up to {{size}} MB each",
+  "supportedNoPdf": "JPG, PNG, WEBP, BMP, TIFF · up to {{size}} MB each",
   "supportedNoSize": "JPG, PNG, WEBP, BMP, TIFF",
-  "pdfSoon": "PDF import is next on the roadmap.",
   "importErrors": {
-    "unsupported": "“{{name}}” is not a supported image type.",
+    "unsupported": "“{{name}}” is not a supported file type.",
     "tooLarge": "“{{name}}” is larger than {{size}} MB.",
     "tooMany": "Select at most {{count}} files at a time.",
-    "noneAccepted": "No supported images were selected.",
+    "noneAccepted": "No supported files were selected.",
     "moreRejected_one": "{{count}} more file was skipped.",
     "moreRejected_other": "{{count}} more files were skipped."
   },
@@ -50,6 +51,7 @@
     "moveLeft": "Move page left",
     "moveRight": "Move page right",
     "pageOf": "Page {{page}} of {{total}}",
+    "pdfBadge": "PDF · {{page}}",
     "emptyValue": "No page selected"
   },
   "deletePageDialog": {
@@ -88,9 +90,11 @@
     }
   },
   "ocr": {
-    "open": "Extract text (OCR)",
+    "open": "Extract text",
     "title": "Extract text from page {{page}}",
-    "description": "Local OCR runs on this device. Results are proposals and must be reviewed.",
+    "description": "Text is extracted on this device. Results are proposals and must be reviewed.",
+    "embeddedEngine": "Embedded PDF text",
+    "embeddedConfidence": "No OCR confidence score",
     "unavailable": {
       "title": "OCR engine not available",
       "not_configured": "No Tesseract command is configured.",
@@ -120,13 +124,16 @@
       "failed": "Failed"
     },
     "reviewNote": "OCR can misread characters, especially in Burmese. Compare each block with the source image before using it.",
+    "reviewNoteEmbedded": "Embedded PDF text can contain encoding errors or a wrong reading order. Compare each block with the source page before using it.",
     "loadError": {
       "title": "The OCR result could not be loaded",
       "description": "The source page is unchanged. Try loading the result again."
     },
     "stale": {
       "title": "This page changed after OCR",
-      "description": "The image or rotation is different from the one that was processed. Run OCR again before inserting this text."
+      "description": "The image or rotation is different from the one that was processed. Run OCR again before inserting this text.",
+      "embeddedTitle": "This page changed after text extraction",
+      "embeddedDescription": "The image or rotation is different from the one the text was extracted from. Extract the text again before inserting it."
     },
     "failed": "OCR failed",
     "engine": "Engine",
