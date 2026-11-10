@@ -9,6 +9,7 @@ import {
   Pilcrow,
   ScanSearch,
   ScanText,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -16,7 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import type { ElementKind, PageSummary } from "@docurebuild/shared-types";
+import type { ElementKind, PageSummary, RegionProposal } from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,9 @@ interface ElementsDialogProps {
   /** A marquee selection made on the source page, in source pixels. */
   pendingSelection: SourceRect | null;
   onPendingConsumed: () => void;
+  /** A reviewed suggestion chosen on the source page overlay. */
+  pendingProposal: RegionProposal | null;
+  onProposalConsumed: () => void;
   onRequestSelection: () => void;
   onInserted?: () => void;
 }
@@ -137,6 +141,8 @@ export function ElementsDialog({
   onOpenChange,
   pendingSelection,
   onPendingConsumed,
+  pendingProposal,
+  onProposalConsumed,
   onRequestSelection,
   onInserted,
 }: ElementsDialogProps) {
@@ -169,6 +175,7 @@ export function ElementsDialog({
   const [textDraft, setTextDraft] = useState("");
   const [languageValue, setLanguageValue] = useState("eng");
   const [saving, setSaving] = useState(false);
+  const [fromProposal, setFromProposal] = useState(false);
 
   const languageOptions = useMemo(
     () => buildLanguageOptions(capabilities?.languages, t),
@@ -200,6 +207,7 @@ export function ElementsDialog({
       setCaptionDraft("");
       setEditingTextId(null);
       setTextDraft("");
+      setFromProposal(false);
       return;
     }
     if (!pendingSelection) return;
@@ -207,10 +215,20 @@ export function ElementsDialog({
     onPendingConsumed();
   }, [open, pendingSelection, onPendingConsumed]);
 
+  useEffect(() => {
+    if (!open || !pendingProposal) return;
+    setKind(pendingProposal.kind);
+    setCaption(pendingProposal.caption);
+    setDraft(draftFromRect(pendingProposal));
+    setFromProposal(true);
+    onProposalConsumed();
+  }, [open, pendingProposal, onProposalConsumed]);
+
   const resetForm = () => {
     setCaption("");
     setDraft(EMPTY_DRAFT);
     setKind("figure");
+    setFromProposal(false);
   };
 
   const save = async (insert: boolean) => {
@@ -437,6 +455,13 @@ export function ElementsDialog({
                 {t("elements.selectOnPage")}
               </Button>
             </div>
+
+            {fromProposal ? (
+              <p className="mt-2 flex items-start gap-1.5 rounded-md border border-primary/25 bg-primary/5 px-2 py-1.5 text-2xs leading-relaxed text-primary">
+                <Sparkles className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+                {t("elements.proposals.prefilled")}
+              </p>
+            ) : null}
 
             <div className="mt-3 flex flex-col gap-3 sm:flex-row">
               <RegionPreview

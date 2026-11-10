@@ -202,6 +202,25 @@
     "select": "Select region",
     "cancelSelect": "Stop selecting",
     "selectHint": "Drag a rectangle on the page. Press Esc to cancel.",
+    "proposals": {
+      "show": "Suggest regions",
+      "hide": "Hide suggestions",
+      "use": "Use {{kind}} suggestion",
+      "title_one": "Suggested regions ({{count}})",
+      "title_other": "Suggested regions ({{count}})",
+      "note": "Suggestions come from the latest local OCR text layout. Review each region before saving.",
+      "loading": "Reading the latest local OCR layout…",
+      "error": "Region suggestions could not be loaded.",
+      "empty": "No regions were suggested for this page.",
+      "prefilled": "Suggested region. Check the type, rectangle and caption before saving; nothing is saved yet.",
+      "status": {
+        "no_ocr_run": "Run OCR on this page to get region suggestions.",
+        "ocr_not_ready": "OCR is still running. Suggestions appear when it finishes.",
+        "ocr_failed": "The latest OCR run failed, so there are no suggestions.",
+        "ocr_stale": "The latest OCR result is stale after a page change. Run OCR again.",
+        "no_geometry": "The latest OCR result has no text geometry to suggest regions from."
+      }
+    },
     "title": "Extracted regions · page {{page}}",
     "description": "Crop a table, figure or equation from the source page. The original page and the crop stay available; nothing is generated.",
     "newRegion": "New region",

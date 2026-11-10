@@ -13,6 +13,7 @@ import {
   ScanSearch,
   ScanText,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
   Undo2,
   Upload,
@@ -26,7 +27,12 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
-import type { ImportJob, OcrBlockKind, PageSummary } from "@docurebuild/shared-types";
+import type {
+  ImportJob,
+  OcrBlockKind,
+  PageSummary,
+  RegionProposal,
+} from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,7 +56,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAppMeta } from "@/hooks/use-app";
-import { useElements } from "@/hooks/use-elements";
+import { useElements, useRegionProposals } from "@/hooks/use-elements";
 import { useLatestOcr } from "@/hooks/use-ocr";
 import {
   useCancelImportJob,
@@ -74,7 +80,7 @@ import {
   IMPORT_ACCEPT_ATTRIBUTE,
   partitionImportFiles,
 } from "@/lib/import-files";
-import { containFrame, layoutBoxes, type ImageFrame } from "@/lib/layout-overlay";
+import { containFrame, layoutBoxes, layoutRect, type ImageFrame } from "@/lib/layout-overlay";
 import { cn } from "@/lib/utils";
 import { OcrDialog } from "./ocr-dialog";
 import { EditsDialog } from "./edits-dialog";
@@ -299,6 +305,8 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   const [elementsOpen, setElementsOpen] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<SourceRect | null>(null);
+  const [proposalsOn, setProposalsOn] = useState(false);
+  const [pendingProposal, setPendingProposal] = useState<RegionProposal | null>(null);
   const [dragStart, setDragStart] = useState<DisplayPoint | null>(null);
   const [dragCurrent, setDragCurrent] = useState<DisplayPoint | null>(null);
   const [overlayOn, setOverlayOn] = useState(false);
@@ -377,11 +385,18 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     setDragStart(null);
     setDragCurrent(null);
     setPendingSelection(null);
+    setProposalsOn(false);
+    setPendingProposal(null);
     activeFrameRef.current = null;
   }, [currentPage?.id]);
 
   const elementsQuery = useElements(projectId, currentPage?.id ?? null);
   const elementCount = elementsQuery.data?.length ?? 0;
+  const proposalsQuery = useRegionProposals(
+    projectId,
+    currentPage?.id ?? null,
+    proposalsOn,
+  );
 
   // The overlay loads the latest OCR run only when the user turns it on, so a
   // page viewer without OCR does not poll the API.
@@ -425,12 +440,27 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     setPendingSelection(null);
   }, []);
 
+  const consumePendingProposal = useCallback(() => {
+    setPendingProposal(null);
+  }, []);
+
+  const applyProposal = (proposal: RegionProposal) => {
+    setSelectMode(false);
+    setDragStart(null);
+    setDragCurrent(null);
+    setPendingSelection(null);
+    setProposalsOn(false);
+    setPendingProposal(proposal);
+    setElementsOpen(true);
+  };
+
   const handleElementsOpenChange = (open: boolean) => {
     setElementsOpen(open);
     if (!open) {
       setSelectMode(false);
       setDragStart(null);
       setDragCurrent(null);
+      setPendingProposal(null);
       activeFrameRef.current = null;
     }
   };
@@ -438,6 +468,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   const beginRegionSelect = () => {
     if (!currentPage) return;
     setElementsOpen(false);
+    setProposalsOn(false);
     setSelectMode(true);
     setDragStart(null);
     setDragCurrent(null);
@@ -638,7 +669,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   }, []);
 
   useEffect(() => {
-    if (!overlayOn && !selectMode) {
+    if (!overlayOn && !selectMode && !proposalsOn) {
       setImageFrame(null);
       return;
     }
@@ -648,7 +679,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     if (imageRef.current) observer.observe(imageRef.current);
     if (viewportRef.current) observer.observe(viewportRef.current);
     return () => observer.disconnect();
-  }, [measureImage, overlayOn, selectMode, imageSrc]);
+  }, [measureImage, overlayOn, selectMode, proposalsOn, imageSrc]);
 
   const overlayBoxes = useMemo(() => {
     if (!overlayOn || !imageFrame || !latestOcr) return [];
@@ -665,6 +696,15 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     }));
   }, [overlayBoxes]);
 
+  const proposalBoxes = useMemo(() => {
+    const data = proposalsQuery.data;
+    if (!proposalsOn || !imageFrame || !data || data.status !== "ready") return [];
+    return data.proposals.flatMap((proposal) => {
+      const box = layoutRect(proposal, imageFrame);
+      return box ? [{ proposal, box }] : [];
+    });
+  }, [proposalsOn, imageFrame, proposalsQuery.data]);
+
   let overlayMessage: string | null = null;
   if (overlayOn) {
     if (latestOcrQuery.isLoading) overlayMessage = "viewer.overlay.loading";
@@ -675,6 +715,19 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
       overlayMessage = "viewer.overlay.running";
     } else if (latestOcr.stale) overlayMessage = "viewer.overlay.stale";
     else if (overlayBoxes.length === 0) overlayMessage = "viewer.overlay.empty";
+  }
+
+  let proposalMessage: string | null = null;
+  if (proposalsOn) {
+    const status = proposalsQuery.data?.status;
+    if (proposalsQuery.isLoading) proposalMessage = "elements.proposals.loading";
+    else if (proposalsQuery.isError) proposalMessage = "elements.proposals.error";
+    else if (!status) proposalMessage = "elements.proposals.loading";
+    else if (status !== "ready") {
+      proposalMessage = `elements.proposals.status.${status}`;
+    } else if (proposalBoxes.length === 0) {
+      proposalMessage = "elements.proposals.empty";
+    }
   }
 
   return (
@@ -969,6 +1022,18 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
             />
 
             <ToolButton
+              label={t(
+                proposalsOn ? "elements.proposals.hide" : "elements.proposals.show",
+              )}
+              icon={Sparkles}
+              active={proposalsOn}
+              onClick={() => {
+                cancelRegionSelect();
+                setProposalsOn((value) => !value);
+              }}
+            />
+
+            <ToolButton
               label={
                 elementCount > 0
                   ? t("elements.openCount", { count: elementCount })
@@ -1066,6 +1131,25 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
             </div>
           ) : null}
 
+          {proposalsOn ? (
+            <div
+              aria-live="polite"
+              className="scrollbar-thin flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border/60 bg-background/25 px-2 py-1 text-2xs text-muted-foreground"
+            >
+              <span className="shrink-0 font-semibold uppercase tracking-wider">
+                {t("elements.proposals.title", {
+                  count: proposalsQuery.data?.proposals.length ?? 0,
+                })}
+              </span>
+              {proposalMessage ? (
+                <span className="whitespace-nowrap">{t(proposalMessage)}</span>
+              ) : null}
+              <span className="shrink-0 whitespace-nowrap border-l border-border/60 pl-2 opacity-80">
+                {t("elements.proposals.note")}
+              </span>
+            </div>
+          ) : null}
+
           {selectMode ? (
             <div
               aria-live="polite"
@@ -1156,6 +1240,39 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
                         ))}
                       </div>
                     ) : null}
+                    {proposalsOn && imageFrame && proposalBoxes.length > 0 ? (
+                      <div
+                        className="absolute animate-fade-in"
+                        style={{
+                          left: imageFrame.left,
+                          top: imageFrame.top,
+                          width: imageFrame.width,
+                          height: imageFrame.height,
+                        }}
+                      >
+                        {proposalBoxes.map(({ proposal, box }) => (
+                          <button
+                            key={proposal.key}
+                            type="button"
+                            onClick={() => applyProposal(proposal)}
+                            aria-label={t("elements.proposals.use", {
+                              kind: t(`elements.kind.${proposal.kind}`),
+                            })}
+                            className="focus-ring absolute rounded-xs border-2 border-dashed border-primary/70 bg-primary/10 transition-colors hover:bg-primary/20"
+                            style={{
+                              left: box.left,
+                              top: box.top,
+                              width: box.width,
+                              height: box.height,
+                            }}
+                          >
+                            <span className="pointer-events-none absolute left-1 top-1 rounded-pill bg-background/90 px-1.5 py-0.5 text-[0.625rem] font-medium leading-4 text-primary shadow-xs">
+                              {t(`elements.kind.${proposal.kind}`)}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                     {selectMode && dragStart && dragCurrent ? (
                       <div
                         aria-hidden="true"
@@ -1209,6 +1326,8 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
         onOpenChange={handleElementsOpenChange}
         pendingSelection={pendingSelection}
         onPendingConsumed={consumePendingSelection}
+        pendingProposal={pendingProposal}
+        onProposalConsumed={consumePendingProposal}
         onRequestSelection={beginRegionSelect}
         onInserted={onContentInserted}
       />

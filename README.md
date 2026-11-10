@@ -57,15 +57,19 @@ data on your device, and treats every AI result as a reviewable proposal.
   candidates, and a measured bounding-box overlay can be shown on the source
   image. OCR is never advertised as available unless the engine and language
   data are actually detected.
-- **Region extraction (manual)** — drag a rectangle on the source page or type its
-  source-pixel coordinates, then crop a figure, table or equation region. Crops are
-  stored as immutable project assets, can be captioned, verified and inserted into
+- **Region extraction (manual + suggestions)** — drag a rectangle on the source page
+  or type its source-pixel coordinates, then crop a figure, table or equation
+  region. Crops are stored as immutable project assets, can be captioned, verified
+  and inserted into
   the document as figures with an optional source note. Saved crops can also be
   read with the local OCR engine; the text, confidence and engine/language metadata
   are stored as an unverified proposal that can be reviewed, corrected, typed
   manually or inserted. The per-page region library supports reinsertion and
   deletion to local trash. If the page was changed after extraction, the region is
   marked stale; the saved crop is never silently treated as matching a newer page.
+  A "Suggest regions" overlay derives reviewable figure, table and equation
+  suggestions from the latest local OCR layout. Suggestions are never saved on
+  their own: choosing one only prefills the normal extraction dialog.
 - **Document editor** — Tiptap rich text with headings, paragraphs, lists,
   blockquotes, code blocks, alignment, inline formatting, undo/redo, word and
   character counts, and debounced autosave.
@@ -76,14 +80,16 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 ### Not available yet
 
-Structured element reconstruction (table cells, equation transcription, automatic
-figure/table/equation detection), AI providers, DOCX/TXT export, revision history,
-backups/restore UI, desktop packaging and PWA install support are planned but not
-implemented. OCR extracts text blocks, reading order and conservative layout hints;
-it does not build table structure or transcribe equations. Region extraction
-produces exact pixel crops and can read their plain text locally; it does not
-detect regions or build structured table cells or equation markup. See
-[`docs/roadmap.md`](docs/roadmap.md).
+Structured element reconstruction (table cells, equation transcription, generative
+figure detection), AI providers, DOCX/TXT export, revision history, backups/restore
+UI, desktop packaging and PWA install support are planned but not implemented. OCR
+extracts text blocks, reading order and conservative layout hints; it does not build
+table structure or transcribe equations. Region extraction produces exact pixel
+crops and can read their plain text locally; it does not build structured table
+cells or equation markup. Region suggestions are deterministic heuristics over the
+OCR text layout, not a vision model: they cover OCR table/equation blocks and the
+empty band above a figure-like caption, and they are skipped when no suitable
+layout exists. See [`docs/roadmap.md`](docs/roadmap.md).
 
 ---
 
@@ -355,10 +361,14 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   are never presented as certain structure. Table labels only mark a text grid:
   cells, merged spans and reading order inside the table are not reconstructed,
   and equations are not transcribed.
-- Region extraction does not detect figures, tables or equations. The user selects
-  the rectangle, and the stored element is an exact pixel crop rather than cells or
-  LaTeX. A crop is marked stale when the page is re-rendered after extraction, but
-  the crop file itself remains unchanged.
+- Region extraction does not use a vision model. Suggestions are deterministic
+  heuristics over the latest OCR text layout: OCR table/equation blocks and the
+  empty band above a figure-like caption. Uncaptioned figures, artwork separated
+  from its caption, and regions OCR did not read are not suggested, so manual
+  selection remains the fallback. A suggestion is never saved automatically; it
+  only prefills the extraction dialog. The stored element is an exact pixel crop
+  rather than cells or LaTeX. A crop is marked stale when the page is re-rendered
+  after extraction, but the crop file itself remains unchanged.
 - Region text extraction returns plain text from the crop through local Tesseract.
   It does not reconstruct table cells, merged spans, reading order inside tables or
   equation markup. The text is an unverified proposal and may omit or misread
@@ -393,7 +403,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 2. Main UI and workspace | Complete |
 | 3. Import and image processing | Complete |
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
-| 5. Element extraction | In progress: manual region crop, local region text extraction, library, verification and figure/text insertion done; automatic detection and structured table/equation reconstruction pending |
+| 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | Planned |
 | 7. Table, figure and equation reconstruction | Planned |
 | 8. Document editor and export | Planned |

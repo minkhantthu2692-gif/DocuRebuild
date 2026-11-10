@@ -22,6 +22,7 @@ const meta: AppMeta = {
     import_pdf: true,
     image_transform: true,
     element_extraction: true,
+    region_proposals: true,
     ocr: false,
     ai: false,
     export: false,
@@ -53,6 +54,7 @@ vi.mock("@/components/workspace/edits-dialog", () => ({ EditsDialog: () => null 
 vi.mock("@/components/workspace/elements-dialog", () => ({ ElementsDialog: () => null }));
 vi.mock("@/hooks/use-elements", () => ({
   useElements: () => ({ data: [] }),
+  useRegionProposals: () => ({ data: undefined, isLoading: false, isError: false }),
   useCreateElement: () => ({ mutateAsync: vi.fn() }),
   useUpdateElement: () => ({ mutate: vi.fn() }),
   useDeleteElement: () => ({ mutate: vi.fn() }),

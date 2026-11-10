@@ -258,6 +258,45 @@ export interface ElementSummary {
   updated_at: string;
 }
 
+/** Locally derived, reviewable region suggestion. Never persisted on its own. */
+export type RegionProposalStatus =
+  | "ready"
+  | "no_ocr_run"
+  | "ocr_not_ready"
+  | "ocr_failed"
+  | "ocr_stale"
+  | "no_geometry";
+
+export type RegionProposalReason =
+  | "table_text_grid"
+  | "equation_text"
+  | "figure_caption_gap";
+
+export interface RegionProposal {
+  /** Stable within one response, derived from kind and rectangle. */
+  key: string;
+  kind: ElementKind;
+  /** Source-pixel rectangle, already padded and clamped to the page. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Caption text taken from the OCR caption block, when available. */
+  caption: string;
+  reason: RegionProposalReason;
+  confidence: "high" | "medium";
+  block_ids: string[];
+}
+
+export interface RegionProposals {
+  status: RegionProposalStatus;
+  page_width: number | null;
+  page_height: number | null;
+  ocr_run_id: string | null;
+  engine: string | null;
+  proposals: RegionProposal[];
+}
+
 /* -------------------------------------------------------------------------- */
 /*                               Document model                               */
 /* -------------------------------------------------------------------------- */
@@ -292,6 +331,8 @@ export interface AppCapabilities {
   import_pdf: boolean;
   image_transform: boolean;
   element_extraction: boolean;
+  /** Reviewable region suggestions derived from local OCR layout. */
+  region_proposals: boolean;
   ocr: boolean;
   ai: boolean;
   export: boolean;

@@ -43,6 +43,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.layout` | Shared deterministic block classification (heading, list, caption, equation, table-like grid, running header/footer, page number) for OCR and embedded PDF text |
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
+| `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
 | `services.settings` | Persisted appearance, language and editor settings |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence, corrections, staleness |
 | `api.routes.*` | HTTP surface (`/api/...`) |
@@ -171,6 +172,7 @@ GET    /api/projects/{id}/ocr/runs/{run_id}
 PATCH  /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}
 GET    /api/projects/{id}/pages/{page_id}/elements
 POST   /api/projects/{id}/pages/{page_id}/elements
+GET    /api/projects/{id}/pages/{page_id}/region-proposals
 PATCH  /api/projects/{id}/elements/{element_id}
 POST   /api/projects/{id}/elements/{element_id}/text
 PATCH  /api/projects/{id}/elements/{element_id}/text
@@ -322,9 +324,36 @@ src/
   node, so they survive document saves. The document references the project asset
   by URL; the crop itself is not embedded or re-encoded. Extracted text is inserted
   through the normal text insertion path with a provenance note.
-- No detector or AI model is invoked. Region text uses the same local Tesseract
-  adapter as page OCR; `element_extraction` in `/api/meta` reports the manual region
-  and local text paths only. Automatic region proposals remain future work.
+- No external detector or AI model is invoked. Region text uses the same local
+  Tesseract adapter as page OCR; `element_extraction` in `/api/meta` reports the
+  manual region and local text paths.
+- `GET .../pages/{id}/region-proposals` returns deterministic suggestions derived
+  from the latest local OCR run. It is read-only, computes everything on request
+  and persists nothing.
+
+### Region suggestions
+
+- Suggestions reuse the OCR text layout instead of a vision model, so they stay
+  free, local and explainable. Three signals are recognised:
+  `table_text_grid` (merged OCR `table` blocks), `equation_text` (OCR `equation`
+  blocks) and `figure_caption_gap` (the empty band above a `caption` block whose
+  text starts with figure/diagram/chart/plate/photo/image/illustration).
+- Clustering merges vertically adjacent blocks of the same kind only when their
+  columns overlap and the gap is small relative to their height, so a table split
+  into several blocks becomes one suggestion. Rectangles are padded by 0.8 % of
+  the page, clamped to the page, deduplicated by IoU 0.85, capped at 20 and
+  dropped when an existing element already covers them.
+- The response reports a status rather than an error for expected states:
+  `ready`, `no_ocr_run`, `ocr_not_ready`, `ocr_failed`, `ocr_stale`,
+  `no_geometry`. A run is stale when its `source_asset_id` or `rotation` no longer
+  matches the page.
+- The frontend draws the suggestions as dashed buttons over the measured image
+  frame. Choosing one opens the normal extraction dialog prefilled with the kind,
+  caption and rectangle and marked as a suggestion; nothing is saved until the
+  user confirms through the existing crop path.
+- Limitations: uncaptioned figures, artwork separated from its caption and regions
+  OCR did not read are not suggested, and no cell or equation structure is
+  derived. `region_proposals` in `/api/meta` advertises the feature.
 
 ### Design system
 

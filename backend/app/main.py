@@ -10,7 +10,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.handlers import install_error_handlers
 from app.db.session import run_migrations
-from app.api.routes import elements, health, ocr, projects, settings as settings_routes
+from app.api.routes import (
+    elements,
+    health,
+    ocr,
+    projects,
+    regions,
+    settings as settings_routes,
+)
 from app.services import imports as import_service
 from app.services import ocr as ocr_service
 
@@ -66,6 +73,7 @@ def create_app() -> FastAPI:
     app.include_router(settings_routes.router, prefix="/api")
     app.include_router(ocr.router, prefix="/api")
     app.include_router(elements.router, prefix="/api")
+    app.include_router(regions.router, prefix="/api")
     return app
 
 

@@ -19,12 +19,37 @@ function replaceElement(
   );
 }
 
+// Extracted elements change which regions are still worth suggesting, so a
+// cached suggestion list must not survive a crop being added or removed.
+function invalidateProposals(
+  queryClient: ReturnType<typeof useQueryClient>,
+  projectId: string,
+  pageId: string,
+) {
+  void queryClient.invalidateQueries({
+    queryKey: ["region-proposals", projectId, pageId],
+  });
+}
+
 export function useElements(projectId: string, pageId: string | null, enabled = true) {
   return useQuery({
     queryKey: ["elements", projectId, pageId],
     queryFn: () => api.listElements(projectId, pageId as string),
     enabled: enabled && Boolean(pageId),
     staleTime: 10_000,
+  });
+}
+
+export function useRegionProposals(
+  projectId: string,
+  pageId: string | null,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["region-proposals", projectId, pageId],
+    queryFn: () => api.getRegionProposals(projectId, pageId as string),
+    enabled: enabled && Boolean(pageId),
+    staleTime: 0,
   });
 }
 
@@ -44,6 +69,7 @@ export function useCreateElement(projectId: string, pageId: string) {
         listKey(projectId, pageId),
         (current) => [element, ...(current ?? []).filter((item) => item.id !== element.id)],
       );
+      invalidateProposals(queryClient, projectId, pageId);
     },
   });
 }
@@ -101,6 +127,7 @@ export function useDeleteElement(projectId: string, pageId: string) {
         listKey(projectId, pageId),
         (current) => (current ?? []).filter((item) => item.id !== elementId),
       );
+      invalidateProposals(queryClient, projectId, pageId);
     },
   });
 }

@@ -75,6 +75,44 @@ export function layoutBoxes(blocks: OcrBlock[], frame: ImageFrame): LayoutBox[] 
 }
 
 /**
+ * Convert a source-pixel rectangle into positions relative to the rendered
+ * image. Out-of-page parts are clipped, and unusable geometry is skipped.
+ */
+export function layoutRect(
+  rect: { x: number; y: number; width: number; height: number },
+  frame: ImageFrame,
+): { left: number; top: number; width: number; height: number } | null {
+  if (
+    !Number.isFinite(frame.width) ||
+    !Number.isFinite(frame.height) ||
+    !Number.isFinite(frame.naturalWidth) ||
+    !Number.isFinite(frame.naturalHeight) ||
+    frame.width <= 0 ||
+    frame.height <= 0 ||
+    frame.naturalWidth <= 0 ||
+    frame.naturalHeight <= 0
+  ) {
+    return null;
+  }
+  if (![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)) return null;
+
+  const left = clamp(rect.x, 0, frame.naturalWidth);
+  const top = clamp(rect.y, 0, frame.naturalHeight);
+  const right = clamp(rect.x + rect.width, 0, frame.naturalWidth);
+  const bottom = clamp(rect.y + rect.height, 0, frame.naturalHeight);
+  if (right <= left || bottom <= top) return null;
+
+  const scaleX = frame.width / frame.naturalWidth;
+  const scaleY = frame.height / frame.naturalHeight;
+  return {
+    left: left * scaleX,
+    top: top * scaleY,
+    width: (right - left) * scaleX,
+    height: (bottom - top) * scaleY,
+  };
+}
+
+/**
  * Fit the natural image inside a measured element box, mirroring the
  * `object-contain` rendering used by the viewer.
  */

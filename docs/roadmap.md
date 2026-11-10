@@ -13,7 +13,7 @@ presented in the UI until it actually works.
 | 2. Main UI and workspace | **Complete** | Header navigation, dashboard, two-panel workspace, settings, i18n |
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
-| 5. Element extraction | **In progress** | Manual region crop, library, verification and figure insertion done; automatic detection and text/table structure pending |
+| 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | Planned | Depends on elements and review model |
 | 7. Table, figure and equation reconstruction | Planned | Depends on Phase 5/6 |
 | 8. Document editor and export | Partially started | Core editor exists; full model/export pending |
@@ -155,8 +155,9 @@ image processing uses Pillow with no OpenCV dependency.
 
 **Remaining before completion**
 
-- Figure (image region) detection. The classifier never guesses a figure, so
-  figures currently stay unmarked.
+- Figure (image region) detection inside the OCR layout. The classifier never
+  guesses a figure; Phase 5 approximates the band above a figure-like caption, but
+  this phase does not mark figures itself.
 - Real table structure (rows, cells, merged spans) and equation transcription.
   A table label only marks a text grid; it does not build a table.
 - OCR accuracy benchmarks (CER/WER) for English, Burmese and mixed pages using
@@ -190,11 +191,19 @@ described as universally free or universally accurate.
   for page OCR. Text, confidence, engine, language and timestamp are stored on the
   element as an unverified proposal; the user can review, correct or insert it.
   Manual transcription and correction work without OCR.
-- `element_extraction` capability flag, plus English and Burmese interface strings.
+- Reviewable region suggestions derived from the latest local OCR layout. Table
+  and equation blocks are clustered into suggestions, and a figure band is
+  suggested above figure-like captions. Suggestions are read-only, never saved
+  automatically, and prefill the normal extraction dialog. Expected states such as
+  no OCR run, stale, failed or missing geometry are reported in the response.
+- `element_extraction` and `region_proposals` capability flags, plus English and
+  Burmese interface strings.
 
 **Remaining**
 
-- Automatic figure, table and equation region proposals, including AI-assisted paths.
+- Vision-based region proposals and AI-assisted detection paths (Phase 6).
+- Uncaptioned figure detection and artwork separated from its caption; these
+  currently require manual selection.
 - Structured table cells and equation transcription, which belong to Phase 7.
 
 ## Phase 6 — AI integration and free usage first (planned)

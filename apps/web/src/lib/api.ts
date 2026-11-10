@@ -16,6 +16,7 @@ import type {
   PageSummary,
   ProjectDetail,
   ProjectSummary,
+  RegionProposals,
 } from "@docurebuild/shared-types";
 
 const API_BASE = "/api";
@@ -221,6 +222,8 @@ export const api = {
     request<{ ok: boolean }>(`/projects/${projectId}/elements/${elementId}`, {
       method: "DELETE",
     }),
+  getRegionProposals: (projectId: string, pageId: string) =>
+    request<RegionProposals>(`/projects/${projectId}/pages/${pageId}/region-proposals`),
 
   assetUrl: (projectId: string, assetId: string | null, version?: string) => {
     if (!assetId) return null;
@@ -234,6 +237,7 @@ export const DEFAULT_CAPABILITIES: AppCapabilities = {
   import_pdf: false,
   image_transform: false,
   element_extraction: false,
+  region_proposals: false,
   ocr: false,
   ai: false,
   export: false,
