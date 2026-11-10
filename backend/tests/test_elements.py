@@ -1,11 +1,49 @@
 from __future__ import annotations
 
 import io
+import subprocess
 
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from tests.conftest import upload_pages
+
+
+def _engine(available: bool = True, languages: list[str] | None = None) -> dict:
+    installed = languages if languages is not None else ["eng", "mya"]
+    return {
+        "engine": "tesseract",
+        "available": available,
+        "version": "5.3.3" if available else None,
+        "command": "tesseract",
+        "tessdata_dir": None,
+        "languages": installed if available else [],
+        "preferred_languages": [code for code in ("eng", "mya") if code in installed]
+        if available
+        else [],
+        "reason": None if available else "not_found",
+        "setup_hint": None if available else "Install Tesseract locally.",
+    }
+
+
+def _tsv(*words: tuple[str, float]) -> str:
+    header = (
+        "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\t"
+        "left\ttop\twidth\theight\tconf\ttext"
+    )
+    rows = [header]
+    for index, (text, confidence) in enumerate(words, start=1):
+        rows.append(
+            f"5\t1\t1\t1\t1\t{index}\t{index * 40}\t0\t36\t22\t{confidence}\t{text}"
+        )
+    return "\n".join(rows)
+
+
+def _fake_text_run(tsv: str):
+    def run(args, timeout):
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout=tsv, stderr="")
+
+    return run
 
 
 def _create(
@@ -188,3 +226,111 @@ def test_deleting_a_page_cleans_up_its_element_crops(
         f"/api/projects/{project['id']}/assets/{element['asset_id']}/file"
     )
     assert asset.status_code in {403, 404}
+
+
+def test_extract_element_text_stores_an_unverified_proposal(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine())
+    monkeypatch.setattr(
+        ocr,
+        "_run_command",
+        _fake_text_run(_tsv(("Figure", 94.0), ("2.4", 82.0), ("Diagram", 88.0))),
+    )
+
+    page = upload_pages(client, project["id"], ["element-text.png"])[0]
+    element = _create(client, project["id"], page["id"])
+
+    response = client.post(
+        f"/api/projects/{project['id']}/elements/{element['id']}/text",
+        json={"languages": ["eng"]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["text"] == "Figure 2.4 Diagram"
+    assert body["text_confidence"] == 88.0
+    assert body["text_engine"] == "tesseract"
+    assert body["text_engine_version"] == "5.3.3"
+    assert body["text_languages"] == ["eng"]
+    assert body["text_corrected"] is False
+    assert body["text_updated_at"]
+
+    corrected = client.patch(
+        f"/api/projects/{project['id']}/elements/{element['id']}/text",
+        json={"text": "Figure 2.4 - Diagram (reviewed)"},
+    )
+    assert corrected.status_code == 200, corrected.text
+    corrected_body = corrected.json()
+    assert corrected_body["text"] == "Figure 2.4 - Diagram (reviewed)"
+    assert corrected_body["text_corrected"] is True
+    # The OCR provenance stays attached to the corrected text.
+    assert corrected_body["text_engine"] == "tesseract"
+    assert corrected_body["text_languages"] == ["eng"]
+
+    listed = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/elements"
+    ).json()
+    assert listed[0]["text"] == "Figure 2.4 - Diagram (reviewed)"
+    assert listed[0]["text_corrected"] is True
+
+
+def test_extract_element_text_keeps_an_empty_result(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine())
+    monkeypatch.setattr(ocr, "_run_command", _fake_text_run(_tsv()))
+
+    page = upload_pages(client, project["id"], ["element-text-empty.png"])[0]
+    element = _create(client, project["id"], page["id"], kind="table")
+    response = client.post(
+        f"/api/projects/{project['id']}/elements/{element['id']}/text",
+        json={},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["text"] == ""
+    assert body["text_confidence"] is None
+    assert body["text_engine"] == "tesseract"
+    assert body["text_corrected"] is False
+
+
+def test_extract_element_text_requires_an_available_engine(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(
+        ocr, "detect_engine", lambda force=False: _engine(available=False)
+    )
+    page = upload_pages(client, project["id"], ["element-text-off.png"])[0]
+    element = _create(client, project["id"], page["id"])
+
+    response = client.post(
+        f"/api/projects/{project['id']}/elements/{element['id']}/text",
+        json={"languages": ["eng"]},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ocr_unavailable"
+
+
+def test_extract_element_text_rejects_missing_language_data(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(
+        ocr, "detect_engine", lambda force=False: _engine(languages=["eng"])
+    )
+    page = upload_pages(client, project["id"], ["element-text-lang.png"])[0]
+    element = _create(client, project["id"], page["id"])
+
+    response = client.post(
+        f"/api/projects/{project['id']}/elements/{element['id']}/text",
+        json={"languages": ["mya"]},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ocr_language_unavailable"

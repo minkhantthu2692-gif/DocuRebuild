@@ -5,7 +5,13 @@ from typing import Any
 from fastapi import APIRouter, status
 
 from app.api.deps import DbSession, ProjectDep
-from app.schemas.elements import ElementCreate, ElementOut, ElementUpdate
+from app.schemas.elements import (
+    ElementCreate,
+    ElementOut,
+    ElementTextRequest,
+    ElementTextUpdate,
+    ElementUpdate,
+)
 from app.services import elements as element_service
 from app.services import projects as project_service
 from app.services.projects import touch_project
@@ -65,6 +71,40 @@ def update_element(
         caption=payload.caption,
         verified=payload.verified,
     )
+    touch_project(session, project)
+    return element
+
+
+@router.post(
+    "/projects/{project_id}/elements/{element_id}/text",
+    response_model=ElementOut,
+)
+def extract_element_text(
+    project: ProjectDep,
+    element_id: str,
+    payload: ElementTextRequest,
+    session: DbSession,
+) -> dict[str, Any]:
+    directory = project_service.ensure_project_storage(project)
+    element = element_service.extract_element_text(
+        directory, element_id, payload.languages
+    )
+    touch_project(session, project)
+    return element
+
+
+@router.patch(
+    "/projects/{project_id}/elements/{element_id}/text",
+    response_model=ElementOut,
+)
+def update_element_text(
+    project: ProjectDep,
+    element_id: str,
+    payload: ElementTextUpdate,
+    session: DbSession,
+) -> dict[str, Any]:
+    directory = project_service.ensure_project_storage(project)
+    element = element_service.update_element_text(directory, element_id, payload.text)
     touch_project(session, project)
     return element
 

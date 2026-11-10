@@ -8,6 +8,17 @@ function listKey(projectId: string, pageId: string) {
   return ["elements", projectId, pageId] as const;
 }
 
+function replaceElement(
+  queryClient: ReturnType<typeof useQueryClient>,
+  projectId: string,
+  pageId: string,
+  element: ElementSummary,
+) {
+  queryClient.setQueryData<ElementSummary[]>(listKey(projectId, pageId), (current) =>
+    (current ?? []).map((item) => (item.id === element.id ? element : item)),
+  );
+}
+
 export function useElements(projectId: string, pageId: string | null, enabled = true) {
   return useQuery({
     queryKey: ["elements", projectId, pageId],
@@ -49,11 +60,34 @@ export function useUpdateElement(projectId: string, pageId: string) {
       verified?: boolean;
     }) => api.updateElement(projectId, elementId, patch),
     onSuccess: (element) => {
-      queryClient.setQueryData<ElementSummary[]>(
-        listKey(projectId, pageId),
-        (current) =>
-          (current ?? []).map((item) => (item.id === element.id ? element : item)),
-      );
+      replaceElement(queryClient, projectId, pageId, element);
+    },
+  });
+}
+
+export function useExtractElementText(projectId: string, pageId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      elementId,
+      languages,
+    }: {
+      elementId: string;
+      languages: string[];
+    }) => api.extractElementText(projectId, elementId, languages),
+    onSuccess: (element) => {
+      replaceElement(queryClient, projectId, pageId, element);
+    },
+  });
+}
+
+export function useUpdateElementText(projectId: string, pageId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ elementId, text }: { elementId: string; text: string }) =>
+      api.updateElementText(projectId, elementId, text),
+    onSuccess: (element) => {
+      replaceElement(queryClient, projectId, pageId, element);
     },
   });
 }

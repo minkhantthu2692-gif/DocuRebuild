@@ -186,11 +186,14 @@ described as universally free or universally accurate.
   a localized source note; the crop remains stored in the project.
 - Stale indicator when the page image or rotation changed after extraction. The
   saved crop is preserved, but it is never presented as matching the current page.
+- Local text extraction from a saved crop through the same Tesseract engine used
+  for page OCR. Text, confidence, engine, language and timestamp are stored on the
+  element as an unverified proposal; the user can review, correct or insert it.
+  Manual transcription and correction work without OCR.
 - `element_extraction` capability flag, plus English and Burmese interface strings.
 
 **Remaining**
 
-- Text extraction from a selected region (a manual crop preserves pixels, not text).
 - Automatic figure, table and equation region proposals, including AI-assisted paths.
 - Structured table cells and equation transcription, which belong to Phase 7.
 

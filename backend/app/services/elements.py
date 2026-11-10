@@ -10,11 +10,13 @@ from PIL import Image
 from app.core.errors import AppError
 from app.core.storage import resolve_within
 from app.db.project_schema import project_db, utc_iso
+from app.services import ocr as ocr_service
 from app.services import pages as page_service
 
 ELEMENT_KINDS = ("figure", "table", "equation")
 MIN_REGION_SIDE = 8
 MAX_CAPTION_LENGTH = 500
+MAX_TEXT_LENGTH = 20_000
 
 
 def _now() -> str:
@@ -39,6 +41,15 @@ def _element_payload(row, current_asset_id: str | None) -> dict[str, Any]:
         "caption": row["caption"],
         "source": row["source"],
         "verified": bool(row["verified"]),
+        "text": row["text"],
+        "text_confidence": row["text_confidence"],
+        "text_engine": row["text_engine"],
+        "text_engine_version": row["text_engine_version"],
+        "text_languages": [
+            item for item in (row["text_languages"] or "").split("+") if item
+        ],
+        "text_corrected": bool(row["text_corrected"]),
+        "text_updated_at": row["text_updated_at"],
         # The crop itself is immutable, but it was taken from an earlier
         # rendered version of the page. Surface that instead of pretending the
         # element still matches the current page.
@@ -240,6 +251,86 @@ def update_element(
                 values,
             )
             _history(conn, "element_updated", "Updated an extracted element")
+        updated = _get_element_row(conn, element_id)
+        page = _get_page(conn, updated["page_id"])
+        return _element_payload(updated, _current_asset_id(conn, page))
+
+
+def _normalise_text(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+def extract_element_text(
+    project_dir: Path, element_id: str, languages: list[str]
+) -> dict[str, Any]:
+    """Run local OCR on the immutable crop and store the result as a proposal."""
+    with project_db(project_dir) as conn:
+        row = _get_element_row(conn, element_id)
+        if not row["asset_id"]:
+            raise AppError(
+                409,
+                "element_has_no_crop",
+                "This extracted element has no crop image to read.",
+            )
+        image_path = _asset_path(conn, project_dir, row["asset_id"])
+
+    # OCR can take seconds. Never hold the SQLite transaction open while the
+    # local engine runs; re-read the row afterwards in case it was deleted.
+    result = ocr_service.extract_image_text(image_path, languages)
+
+    with project_db(project_dir) as conn:
+        # Fail cleanly if the element was deleted while the engine was running.
+        _get_element_row(conn, element_id)
+        now = _now()
+        conn.execute(
+            """
+            UPDATE elements
+            SET text = ?, text_confidence = ?, text_engine = ?,
+                text_engine_version = ?, text_languages = ?, text_corrected = 0,
+                text_updated_at = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                _normalise_text(result["text"]),
+                result["confidence"],
+                result["engine"],
+                result["engine_version"],
+                "+".join(result["languages"]),
+                now,
+                now,
+                element_id,
+            ),
+        )
+        _history(conn, "element_text_extracted", "Extracted text from an element crop")
+        updated = _get_element_row(conn, element_id)
+        page = _get_page(conn, updated["page_id"])
+        return _element_payload(updated, _current_asset_id(conn, page))
+
+
+def update_element_text(
+    project_dir: Path, element_id: str, text: str
+) -> dict[str, Any]:
+    """Store a reviewed or manually corrected text for an element."""
+    text = _normalise_text(text)
+    if len(text) > MAX_TEXT_LENGTH:
+        raise AppError(
+            422,
+            "element_text_too_long",
+            f"Extracted text may be at most {MAX_TEXT_LENGTH} characters.",
+        )
+    with project_db(project_dir) as conn:
+        row = _get_element_row(conn, element_id)
+        if text != row["text"]:
+            now = _now()
+            conn.execute(
+                """
+                UPDATE elements
+                SET text = ?, text_corrected = 1, text_updated_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (text, now, now, element_id),
+            )
+            _history(conn, "element_text_updated", "Corrected an element's extracted text")
         updated = _get_element_row(conn, element_id)
         page = _get_page(conn, updated["page_id"])
         return _element_payload(updated, _current_asset_id(conn, page))

@@ -170,6 +170,18 @@ PROJECT_MIGRATIONS: list[tuple[int, str]] = [
             ON elements(page_id, created_at DESC);
         """,
     ),
+    (
+        7,
+        """
+        ALTER TABLE elements ADD COLUMN text TEXT NOT NULL DEFAULT '';
+        ALTER TABLE elements ADD COLUMN text_confidence REAL;
+        ALTER TABLE elements ADD COLUMN text_engine TEXT;
+        ALTER TABLE elements ADD COLUMN text_engine_version TEXT;
+        ALTER TABLE elements ADD COLUMN text_languages TEXT NOT NULL DEFAULT '';
+        ALTER TABLE elements ADD COLUMN text_corrected INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE elements ADD COLUMN text_updated_at TEXT;
+        """,
+    ),
 ]
 
 

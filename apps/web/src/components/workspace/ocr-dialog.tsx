@@ -13,7 +13,7 @@ import { toast } from "sonner";
 
 import type { OcrBlock, OcrBlockKind, PageSummary } from "@docurebuild/shared-types";
 
-import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,6 +30,11 @@ import { Textarea } from "@/components/ui/input";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useOcrCapabilities, useLatestOcr, useStartOcr, useUpdateOcrBlock } from "@/hooks/use-ocr";
 import { formatDateTime, resolveLocale } from "@/lib/format";
+import {
+  buildLanguageOptions,
+  confidenceVariant,
+  languageLabel,
+} from "@/lib/ocr-display";
 import { cn } from "@/lib/utils";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
@@ -42,19 +47,6 @@ interface OcrDialogProps {
 }
 
 const TESSERACT_GUIDE = "https://tesseract-ocr.github.io/tessdoc/Installation.html";
-
-function confidenceVariant(value: number | null): NonNullable<BadgeProps["variant"]> {
-  if (value === null) return "outline";
-  if (value >= 85) return "success";
-  if (value >= 60) return "warning";
-  return "destructive";
-}
-
-function languageLabel(code: string, t: (key: string) => string): string {
-  if (code === "eng") return t("ocr.languageEnglish");
-  if (code === "mya") return t("ocr.languageBurmese");
-  return code;
-}
 
 export function OcrDialog({
   projectId,
@@ -86,26 +78,10 @@ export function OcrDialog({
   const blocks = run?.blocks ?? [];
   const busy = startOcr.isPending || run?.status === "queued" || run?.status === "running";
 
-  const languageOptions = useMemo(() => {
-    if (!capabilities) return [];
-    const installed = new Set(capabilities.languages);
-    const options: Array<{ value: string; label: string }> = [];
-    if (installed.has("eng")) {
-      options.push({ value: "eng", label: t("ocr.languageEnglish") });
-    }
-    if (installed.has("mya")) {
-      options.push({ value: "mya", label: t("ocr.languageBurmese") });
-    }
-    if (installed.has("eng") && installed.has("mya")) {
-      options.push({ value: "eng+mya", label: t("ocr.languageMixed") });
-    }
-    for (const code of capabilities.languages) {
-      if (code !== "eng" && code !== "mya") {
-        options.push({ value: code, label: code });
-      }
-    }
-    return options;
-  }, [capabilities, t]);
+  const languageOptions = useMemo(
+    () => buildLanguageOptions(capabilities?.languages, t),
+    [capabilities, t],
+  );
 
   useEffect(() => {
     if (!open) {

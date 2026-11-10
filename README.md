@@ -60,10 +60,12 @@ data on your device, and treats every AI result as a reviewable proposal.
 - **Region extraction (manual)** — drag a rectangle on the source page or type its
   source-pixel coordinates, then crop a figure, table or equation region. Crops are
   stored as immutable project assets, can be captioned, verified and inserted into
-  the document as figures with an optional source note. The per-page region library
-  supports reinsertion and deletion to local trash. If the page was changed after
-  extraction, the region is marked stale; the saved crop is never silently treated
-  as matching a newer page.
+  the document as figures with an optional source note. Saved crops can also be
+  read with the local OCR engine; the text, confidence and engine/language metadata
+  are stored as an unverified proposal that can be reviewed, corrected, typed
+  manually or inserted. The per-page region library supports reinsertion and
+  deletion to local trash. If the page was changed after extraction, the region is
+  marked stale; the saved crop is never silently treated as matching a newer page.
 - **Document editor** — Tiptap rich text with headings, paragraphs, lists,
   blockquotes, code blocks, alignment, inline formatting, undo/redo, word and
   character counts, and debounced autosave.
@@ -79,7 +81,8 @@ figure/table/equation detection), AI providers, DOCX/TXT export, revision histor
 backups/restore UI, desktop packaging and PWA install support are planned but not
 implemented. OCR extracts text blocks, reading order and conservative layout hints;
 it does not build table structure or transcribe equations. Region extraction
-produces exact pixel crops and does not detect or transcribe content either. See
+produces exact pixel crops and can read their plain text locally; it does not
+detect regions or build structured table cells or equation markup. See
 [`docs/roadmap.md`](docs/roadmap.md).
 
 ---
@@ -353,9 +356,13 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   cells, merged spans and reading order inside the table are not reconstructed,
   and equations are not transcribed.
 - Region extraction does not detect figures, tables or equations. The user selects
-  the rectangle, and the stored element is an exact pixel crop rather than text,
-  cells or LaTeX. A crop is marked stale when the page is re-rendered after
-  extraction, but the crop file itself remains unchanged.
+  the rectangle, and the stored element is an exact pixel crop rather than cells or
+  LaTeX. A crop is marked stale when the page is re-rendered after extraction, but
+  the crop file itself remains unchanged.
+- Region text extraction returns plain text from the crop through local Tesseract.
+  It does not reconstruct table cells, merged spans, reading order inside tables or
+  equation markup. The text is an unverified proposal and may omit or misread
+  characters; manual correction is always available and never overwrites the crop.
 - The bounding-box overlay only draws the latest successful run and is hidden
   when that run is stale, failed or lacks geometry. It shows where text was
   found; it is not a verified layout model.
@@ -386,7 +393,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 2. Main UI and workspace | Complete |
 | 3. Import and image processing | Complete |
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
-| 5. Element extraction | In progress: manual region crop, library, verification and figure insertion done; automatic detection and structured text/table reconstruction pending |
+| 5. Element extraction | In progress: manual region crop, local region text extraction, library, verification and figure/text insertion done; automatic detection and structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | Planned |
 | 7. Table, figure and equation reconstruction | Planned |
 | 8. Document editor and export | Planned |

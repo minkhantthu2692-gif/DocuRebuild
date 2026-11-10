@@ -66,7 +66,7 @@ Each project owns a portable folder and its own `project.db`:
 - `jobs` — background import jobs: status, progress, total/imported pages, current file, payload (file counts/names), error code/message and timestamps
 - `ocr_runs` — page extraction attempts: status, engine/version, languages, source asset, rotation, mean confidence, error, timestamps; embedded PDF text uses `engine = pdf-text` and a null confidence
 - `ocr_blocks` — reviewable text blocks with bbox, confidence, kind, line/word counts, correction and verification flags
-- `elements` — extracted regions: page, kind, immutable crop asset, source asset id, source-pixel rectangle, caption, manual/acquisition source, verification and timestamps
+- `elements` — extracted regions: page, kind, immutable crop asset, source asset id, source-pixel rectangle, caption, manual/acquisition source, verification, extracted text with confidence/engine/language provenance, correction flag and timestamps
 - `schema_migrations` — per-project migration versions
 
 Project folder layout:
@@ -172,6 +172,8 @@ PATCH  /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}
 GET    /api/projects/{id}/pages/{page_id}/elements
 POST   /api/projects/{id}/pages/{page_id}/elements
 PATCH  /api/projects/{id}/elements/{element_id}
+POST   /api/projects/{id}/elements/{element_id}/text
+PATCH  /api/projects/{id}/elements/{element_id}/text
 DELETE /api/projects/{id}/elements/{element_id}
 GET    /api/projects/{id}/assets/{asset_id}/file
 ```
@@ -307,12 +309,22 @@ src/
 - Elements remain proposals until the user marks them verified. The per-page
   library can insert, edit the caption, verify/unverify and delete them; deletion
   moves the crop to `trash/elements/<id>/` and leaves the page untouched.
+- `POST .../elements/{id}/text` runs the same local Tesseract adapter on the stored
+  crop, synchronously because crops are small. It stores the text, mean confidence,
+  engine, engine version, language list and timestamp on the element. The result is
+  an unverified proposal; the user can correct it with `PATCH .../text` or type text
+  manually. No external service is called, and an unavailable engine returns a
+  localized `ocr_unavailable` error instead of empty text.
+- Corrected text keeps its OCR provenance (`text_engine`, `text_languages`) and is
+  marked `text_corrected`, so the library does not present manual edits as raw OCR.
 - Insertion uses a custom atom `figure` Tiptap node rendered as
   `figure/img/figcaption`. The caption and localized source note are stored on the
   node, so they survive document saves. The document references the project asset
-  by URL; the crop itself is not embedded or re-encoded.
-- No detector or AI model is invoked. `element_extraction` in `/api/meta` reports
-  the manual path only; automatic region proposals remain future work.
+  by URL; the crop itself is not embedded or re-encoded. Extracted text is inserted
+  through the normal text insertion path with a provenance note.
+- No detector or AI model is invoked. Region text uses the same local Tesseract
+  adapter as page OCR; `element_extraction` in `/api/meta` reports the manual region
+  and local text paths only. Automatic region proposals remain future work.
 
 ### Design system
 

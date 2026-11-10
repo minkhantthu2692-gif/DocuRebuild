@@ -4,8 +4,11 @@ import {
   CircleAlert,
   Crop,
   ImagePlus,
+  Languages,
   Pencil,
+  Pilcrow,
   ScanSearch,
+  ScanText,
   Trash2,
   X,
 } from "lucide-react";
@@ -26,7 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
+import { Input, Textarea } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
@@ -34,10 +37,14 @@ import {
   useCreateElement,
   useDeleteElement,
   useElements,
+  useExtractElementText,
   useUpdateElement,
+  useUpdateElementText,
 } from "@/hooks/use-elements";
+import { useOcrCapabilities } from "@/hooks/use-ocr";
 import { api } from "@/lib/api";
 import { MIN_REGION_SIDE, type SourceRect } from "@/lib/element-region";
+import { buildLanguageOptions, confidenceVariant, languageLabel } from "@/lib/ocr-display";
 import { cn } from "@/lib/utils";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
@@ -136,7 +143,7 @@ export function ElementsDialog({
   const { t } = useTranslation("workspace");
   const { t: tCommon } = useTranslation("common");
   const errorMessage = useApiErrorMessage();
-  const { insertFigure } = useWorkspaceActions();
+  const { insertFigure, insertText } = useWorkspaceActions();
 
   const elementsQuery = useElements(projectId, page?.id ?? null, open);
   const elements = useMemo(
@@ -146,6 +153,10 @@ export function ElementsDialog({
   const createElement = useCreateElement(projectId, page?.id ?? "");
   const updateElement = useUpdateElement(projectId, page?.id ?? "");
   const deleteElement = useDeleteElement(projectId, page?.id ?? "");
+  const extractText = useExtractElementText(projectId, page?.id ?? "");
+  const updateText = useUpdateElementText(projectId, page?.id ?? "");
+  const capabilitiesQuery = useOcrCapabilities();
+  const capabilities = capabilitiesQuery.data;
 
   const [kind, setKind] = useState<ElementKind>("figure");
   const [caption, setCaption] = useState("");
@@ -154,7 +165,24 @@ export function ElementsDialog({
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [captionDraft, setCaptionDraft] = useState("");
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [textDraft, setTextDraft] = useState("");
+  const [languageValue, setLanguageValue] = useState("eng");
   const [saving, setSaving] = useState(false);
+
+  const languageOptions = useMemo(
+    () => buildLanguageOptions(capabilities?.languages, t),
+    [capabilities, t],
+  );
+
+  useEffect(() => {
+    if (!open || !capabilities) return;
+    setLanguageValue((current) => {
+      if (languageOptions.some((option) => option.value === current)) return current;
+      if (languageOptions.some((option) => option.value === "eng")) return "eng";
+      return languageOptions[0]?.value ?? "eng";
+    });
+  }, [open, capabilities, languageOptions]);
 
   const rect = parseRect(draft);
   const pageSrc = page
@@ -170,6 +198,8 @@ export function ElementsDialog({
       setDeleteId(null);
       setEditingId(null);
       setCaptionDraft("");
+      setEditingTextId(null);
+      setTextDraft("");
       return;
     }
     if (!pendingSelection) return;
@@ -302,6 +332,82 @@ export function ElementsDialog({
       { onError: (error) => toast.error(errorMessage(error)) },
     );
   };
+
+  const extractElementText = (elementId: string) => {
+    const languages = languageValue.split("+").filter(Boolean);
+    extractText.mutate(
+      { elementId, languages },
+      {
+        onSuccess: (element) => {
+          setEditingTextId(null);
+          setTextDraft("");
+          toast.success(
+            element.text
+              ? t("elements.text.extracted")
+              : t("elements.text.noTextDetected"),
+          );
+        },
+        onError: (error) => toast.error(errorMessage(error)),
+      },
+    );
+  };
+
+  const startTextEdit = (elementId: string, text: string) => {
+    setEditingTextId(elementId);
+    setTextDraft(text);
+  };
+
+  const saveText = (elementId: string) => {
+    updateText.mutate(
+      { elementId, text: textDraft },
+      {
+        onSuccess: () => {
+          setEditingTextId(null);
+          toast.success(t("elements.text.updated"));
+        },
+        onError: (error) => toast.error(errorMessage(error)),
+      },
+    );
+  };
+
+  const insertElementText = (elementId: string) => {
+    const element = elements.find((item) => item.id === elementId);
+    if (!element || !page || !element.text.trim()) return;
+    const status = element.verified
+      ? t("elements.verified")
+      : t("elements.unverified");
+    let note: string | null = null;
+    if (includeNote) {
+      if (!element.text_engine) {
+        note = t("elements.text.sourceNoteManual", {
+          page: page.page_number,
+          status,
+        });
+      } else if (element.text_corrected) {
+        note = t("elements.text.sourceNoteCorrected", {
+          page: page.page_number,
+          engine: element.text_engine,
+          status,
+        });
+      } else {
+        note = t("elements.text.sourceNote", {
+          page: page.page_number,
+          confidence:
+            element.text_confidence === null
+              ? "—"
+              : Math.round(element.text_confidence),
+          status,
+        });
+      }
+    }
+    insertText(element.text, note);
+    toast.success(t("elements.text.inserted"));
+    onInserted?.();
+  };
+
+  const extractingId = extractText.isPending
+    ? (extractText.variables?.elementId ?? null)
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -444,11 +550,36 @@ export function ElementsDialog({
           </section>
 
           <section className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {t("elements.listTitle")}
               </h3>
-              <Badge variant="outline">{elements.length}</Badge>
+              <div className="flex items-center gap-2">
+                <Languages
+                  className="size-icon-sm text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <Select
+                  value={languageValue}
+                  onValueChange={setLanguageValue}
+                  disabled={!capabilities?.available || languageOptions.length === 0}
+                >
+                  <SelectTrigger
+                    className="h-7 w-auto max-w-40 px-2 text-2xs"
+                    aria-label={t("elements.text.language")}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {languageOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Badge variant="outline">{elements.length}</Badge>
+              </div>
             </div>
 
             {elementsQuery.isLoading ? (
@@ -570,6 +701,138 @@ export function ElementsDialog({
                           >
                             <Pencil />
                           </Button>
+                        </div>
+                      )}
+
+                      {editingTextId === element.id ? (
+                        <div className="space-y-1.5 rounded-md border border-border/60 bg-muted/20 p-2">
+                          <Textarea
+                            value={textDraft}
+                            autoFocus
+                            maxLength={20_000}
+                            aria-label={t("elements.text.editLabel")}
+                            className="min-h-20 text-xs"
+                            onChange={(event) => setTextDraft(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Escape") {
+                                event.preventDefault();
+                                setEditingTextId(null);
+                              }
+                            }}
+                          />
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingTextId(null)}
+                            >
+                              {tCommon("actions.cancel")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="gap-1"
+                              onClick={() => saveText(element.id)}
+                              disabled={updateText.isPending}
+                            >
+                              {updateText.isPending ? (
+                                <Spinner className="size-icon-sm" />
+                              ) : (
+                                <Check />
+                              )}
+                              {tCommon("actions.save")}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-md border border-border/60 bg-muted/20 p-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              {t("elements.text.title")}
+                            </span>
+                            {element.text ? (
+                              <>
+                                {element.text_corrected ? (
+                                  <Badge variant="outline">
+                                    {t("elements.text.corrected")}
+                                  </Badge>
+                                ) : (
+                                  <Badge
+                                    variant={confidenceVariant(
+                                      element.text_confidence,
+                                    )}
+                                  >
+                                    {t("elements.text.confidence", {
+                                      value:
+                                        element.text_confidence === null
+                                          ? "—"
+                                          : Math.round(element.text_confidence),
+                                    })}
+                                  </Badge>
+                                )}
+                                {element.text_languages.length > 0 ? (
+                                  <Badge variant="outline">
+                                    {element.text_languages
+                                      .map((code) => languageLabel(code, t))
+                                      .join(" + ")}
+                                  </Badge>
+                                ) : null}
+                              </>
+                            ) : null}
+                            <span className="ml-auto flex items-center gap-0.5">
+                              <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                aria-label={t("elements.text.edit")}
+                                onClick={() =>
+                                  startTextEdit(element.id, element.text)
+                                }
+                              >
+                                <Pencil />
+                              </Button>
+                              {element.text ? (
+                                <Button
+                                  variant="ghost"
+                                  size="icon-xs"
+                                  aria-label={t("elements.text.insert")}
+                                  onClick={() => insertElementText(element.id)}
+                                >
+                                  <Pilcrow />
+                                </Button>
+                              ) : null}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="gap-1"
+                                onClick={() => extractElementText(element.id)}
+                                disabled={
+                                  !capabilities?.available ||
+                                  extractingId === element.id
+                                }
+                              >
+                                {extractingId === element.id ? (
+                                  <Spinner className="size-icon-sm" />
+                                ) : (
+                                  <ScanText />
+                                )}
+                                {element.text_engine
+                                  ? t("elements.text.reread")
+                                  : t("elements.text.read")}
+                              </Button>
+                            </span>
+                          </div>
+                          {element.text ? (
+                            <p className="scrollbar-thin mt-1.5 max-h-28 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed">
+                              {element.text}
+                            </p>
+                          ) : (
+                            <p className="mt-1.5 text-2xs italic leading-relaxed text-muted-foreground">
+                              {capabilities && !capabilities.available
+                                ? t("elements.text.unavailable")
+                                : element.text_engine
+                                  ? t("elements.text.noTextDetected")
+                                  : t("elements.text.empty")}
+                            </p>
+                          )}
                         </div>
                       )}
 

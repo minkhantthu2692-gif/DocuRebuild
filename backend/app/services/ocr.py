@@ -740,6 +740,81 @@ def _perform_ocr(
     }
 
 
+def extract_image_text(image_path: Path, languages: list[str]) -> dict[str, Any]:
+    """Run the local engine on a standalone image, such as an extracted crop.
+
+    This is the synchronous counterpart to ``_perform_ocr``: it keeps the same
+    engine detection, language validation, preprocessing and TSV parsing, but it
+    does not create a page OCR run or block geometry. The caller stores the
+    result as an unverified proposal.
+    """
+    settings = get_settings()
+    status = detect_engine()
+    tokens = _command_tokens(status.get("command") or "")
+    if not status.get("available") or not tokens:
+        raise AppError(
+            409,
+            "ocr_unavailable",
+            status.get("setup_hint") or "A local OCR engine is not available.",
+        )
+
+    requested = _normalise_languages(languages)
+    if not requested:
+        requested = _normalise_languages(settings.ocr_default_languages)
+    if not requested:
+        requested = [
+            code for code in PREFERRED_LANGUAGES if code in status["languages"]
+        ][:1]
+    if not requested:
+        raise AppError(409, "ocr_language_unavailable", "No OCR language is available.")
+    missing = [code for code in requested if code not in status["languages"]]
+    if missing:
+        raise AppError(
+            409,
+            "ocr_language_unavailable",
+            f"OCR language data is not installed: {', '.join(missing)}.",
+        )
+
+    temp_path, scale, _size = _prepare_image(image_path)
+    try:
+        result = _run_command(
+            [
+                *tokens,
+                str(temp_path),
+                "stdout",
+                "-l",
+                "+".join(requested),
+                "--psm",
+                "3",
+                "-c",
+                "tessedit_create_tsv=1",
+            ],
+            timeout=max(10, settings.ocr_timeout_seconds),
+        )
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip().splitlines()
+        message = detail[-1] if detail else "Tesseract could not process this image."
+        raise AppError(422, "ocr_failed", message[:500])
+    if not result.stdout.lstrip().startswith("level\t"):
+        raise AppError(
+            422,
+            "ocr_failed",
+            "Tesseract did not return structured text. Check the tessdata configuration.",
+        )
+
+    text, _blocks, mean_confidence = _parse_tsv(result.stdout, scale)
+    return {
+        "engine": ENGINE_NAME,
+        "engine_version": status.get("version"),
+        "languages": requested,
+        "text": text,
+        "confidence": mean_confidence,
+    }
+
+
 def _run_payload(conn, run) -> dict[str, Any]:
     blocks = conn.execute(
         "SELECT * FROM ocr_blocks WHERE run_id = ? ORDER BY block_index ASC",

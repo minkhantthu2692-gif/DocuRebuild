@@ -19,6 +19,16 @@ class ElementUpdate(BaseModel):
     verified: bool | None = None
 
 
+class ElementTextRequest(BaseModel):
+    """Languages for a locally extracted crop. Empty means the app default."""
+
+    languages: list[str] = Field(default_factory=list)
+
+
+class ElementTextUpdate(BaseModel):
+    text: str = Field(max_length=20_000)
+
+
 class ElementOut(BaseModel):
     id: str
     page_id: str
@@ -31,6 +41,13 @@ class ElementOut(BaseModel):
     caption: str
     source: str
     verified: bool
+    text: str
+    text_confidence: float | None
+    text_engine: str | None
+    text_engine_version: str | None
+    text_languages: list[str]
+    text_corrected: bool
+    text_updated_at: str | None
     stale: bool
     created_at: str
     updated_at: str

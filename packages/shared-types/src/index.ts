@@ -243,6 +243,15 @@ export interface ElementSummary {
   caption: string;
   source: "manual" | "ai" | string;
   verified: boolean;
+  /** Locally extracted text. It is a proposal until the user verifies the element. */
+  text: string;
+  text_confidence: number | null;
+  text_engine: string | null;
+  text_engine_version: string | null;
+  text_languages: string[];
+  /** The user changed the text after extraction or typed it manually. */
+  text_corrected: boolean;
+  text_updated_at: string | null;
   /** The page was re-rendered after this crop was taken. */
   stale: boolean;
   created_at: string;

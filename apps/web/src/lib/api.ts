@@ -207,6 +207,16 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+  extractElementText: (projectId: string, elementId: string, languages: string[]) =>
+    request<ElementSummary>(`/projects/${projectId}/elements/${elementId}/text`, {
+      method: "POST",
+      body: JSON.stringify({ languages }),
+    }),
+  updateElementText: (projectId: string, elementId: string, text: string) =>
+    request<ElementSummary>(`/projects/${projectId}/elements/${elementId}/text`, {
+      method: "PATCH",
+      body: JSON.stringify({ text }),
+    }),
   deleteElement: (projectId: string, elementId: string) =>
     request<{ ok: boolean }>(`/projects/${projectId}/elements/${elementId}`, {
       method: "DELETE",
