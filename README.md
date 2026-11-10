@@ -48,12 +48,15 @@ data on your device, and treats every AI result as a reviewable proposal.
   contrast, brightness, sharpness, denoise, threshold (B&W), shadow removal and
   background cleanup. Edits are stored on the page and re-rendered from the
   immutable source, with a before/after comparison and one-click reset.
-- **Local OCR (optional)** — Tesseract runs on the local machine when installed.
+- **Local OCR (optional)** - Tesseract runs on the local machine when installed.
   English and Burmese language data are supported. Results include text blocks,
   confidence values and source bounding boxes; each block can be corrected,
   marked verified, copied or inserted into the document with a source note.
-  OCR is never advertised as available unless the engine and language data are
-  actually detected.
+  Deterministic layout hints (heading, list, caption, equation, table-like grid,
+  running header/footer, page number) are attached to blocks as review
+  candidates, and a measured bounding-box overlay can be shown on the source
+  image. OCR is never advertised as available unless the engine and language
+  data are actually detected.
 - **Document editor** — Tiptap rich text with headings, paragraphs, lists,
   blockquotes, code blocks, alignment, inline formatting, undo/redo, word and
   character counts, and debounced autosave.
@@ -64,11 +67,12 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 ### Not available yet
 
-Full layout detection (tables, figures, equations, headers and footers), AI
+Full layout structure (figure regions, table cells, equation transcription), AI
 providers, DOCX/TXT export, revision history, backups/restore UI, desktop
-packaging and PWA install support are planned but not implemented. OCR currently
-extracts text blocks and reading order; it does not yet
-detect tables, figures or equations. See [`docs/roadmap.md`](docs/roadmap.md).
+packaging and PWA install support are planned but not implemented. OCR extracts
+text blocks, reading order and conservative layout hints; it does not yet build
+table structure, crop figures or transcribe equations. See
+[`docs/roadmap.md`](docs/roadmap.md).
 
 ---
 
@@ -208,6 +212,11 @@ language files you need and point `DOCUREBUILD_TESSDATA_DIR` at it. The folder
 must contain the required `*.traineddata` files; OCR returns an explicit error
 instead of an empty success when the engine cannot produce structured output.
 
+After a run finishes, the layers button in the source toolbar shows the measured
+block boxes on the page with a per-kind legend. The overlay is hidden when the
+stored result no longer matches the page (for example after a rotation) so stale
+coordinates are never drawn.
+
 ### PDF import
 
 PDF support is local and works without an AI provider or API key:
@@ -330,9 +339,13 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 - The web client currently requires the local API; browser-only OCR/PDF
   processing is not claimed.
 - OCR quality depends on the installed Tesseract version, traineddata and page
-  quality. Burmese text is especially difficult; heading/list labels are
-  heuristics and are never presented as certain structure. Tables, figures and
-  equations are not detected yet.
+  quality. Burmese text is especially difficult; layout labels are heuristics and
+  are never presented as certain structure. Table labels only mark a text grid:
+  cells, merged spans and reading order inside the table are not reconstructed,
+  figure regions are not detected, and equations are not transcribed.
+- The bounding-box overlay only draws the latest successful run and is hidden
+  when that run is stale, failed or lacks geometry. It shows where text was
+  found; it is not a verified layout model.
 - Embedded PDF text is not OCR and has no confidence score. Encoding problems,
   missing glyphs and unusual reading order are possible; text is never claimed to
   be verified until the user marks it.
@@ -359,7 +372,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 1. Local storage and project management | Complete |
 | 2. Main UI and workspace | Complete |
 | 3. Import and image processing | Complete |
-| 4. Local OCR and layout detection | In progress (text OCR; layout pending) |
+| 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
 | 5. Element extraction | Planned |
 | 6. AI integration and free usage first | Planned |
 | 7. Table, figure and equation reconstruction | Planned |

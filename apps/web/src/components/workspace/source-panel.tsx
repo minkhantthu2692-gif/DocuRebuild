@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Image as ImageIcon,
+  Layers,
   Maximize2,
   MoreHorizontal,
   RotateCcw,
@@ -18,12 +19,12 @@ import {
   ZoomOut,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
-import type { ImportJob, PageSummary } from "@docurebuild/shared-types";
+import type { ImportJob, OcrBlockKind, PageSummary } from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAppMeta } from "@/hooks/use-app";
+import { useLatestOcr } from "@/hooks/use-ocr";
 import {
   useCancelImportJob,
   useDeletePage,
@@ -63,6 +65,7 @@ import {
   IMPORT_ACCEPT_ATTRIBUTE,
   partitionImportFiles,
 } from "@/lib/import-files";
+import { containFrame, layoutBoxes, type ImageFrame } from "@/lib/layout-overlay";
 import { cn } from "@/lib/utils";
 import { OcrDialog } from "./ocr-dialog";
 import { EditsDialog } from "./edits-dialog";
@@ -86,6 +89,50 @@ const ACTIVE_IMPORT_STATUSES: ReadonlySet<ImportJob["status"]> = new Set([
   "running",
   "cancelling",
 ]);
+
+const LAYOUT_KIND_ORDER: readonly OcrBlockKind[] = [
+  "heading",
+  "paragraph",
+  "list_item",
+  "table",
+  "equation",
+  "caption",
+  "header",
+  "footer",
+  "page_number",
+];
+
+const LAYOUT_BOX_CLASS: Record<OcrBlockKind, string> = {
+  heading: "border-primary/80 bg-primary/10",
+  paragraph: "border-muted-foreground/50 bg-muted-foreground/5",
+  list_item: "border-info/70 bg-info/10",
+  table: "border-info/80 border-dashed bg-info/10",
+  equation: "border-warning/80 bg-warning/10",
+  caption: "border-success/70 bg-success/10",
+  header: "border-muted-foreground/50 bg-transparent",
+  footer: "border-muted-foreground/40 bg-transparent",
+  page_number: "border-muted-foreground/30 border-dashed bg-transparent",
+};
+
+const LAYOUT_SWATCH_CLASS: Record<OcrBlockKind, string> = {
+  heading: "bg-primary",
+  paragraph: "bg-muted-foreground/60",
+  list_item: "bg-info",
+  table: "bg-info/60",
+  equation: "bg-warning",
+  caption: "bg-success",
+  header: "bg-muted-foreground/50",
+  footer: "bg-muted-foreground/40",
+  page_number: "bg-muted-foreground/30",
+};
+
+function sameFrame(current: ImageFrame | null, next: ImageFrame | null): boolean {
+  if (current === next) return true;
+  if (!current || !next) return false;
+  return (Object.keys(current) as (keyof ImageFrame)[]).every(
+    (key) => Math.abs(current[key] - next[key]) < 0.5,
+  );
+}
 
 function hasFiles(event: { dataTransfer: DataTransfer | null }): boolean {
   return Boolean(event.dataTransfer && Array.from(event.dataTransfer.types).includes("Files"));
@@ -239,8 +286,12 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   const [deleteTarget, setDeleteTarget] = useState<PageSummary | null>(null);
   const [ocrOpen, setOcrOpen] = useState(false);
   const [editsOpen, setEditsOpen] = useState(false);
+  const [overlayOn, setOverlayOn] = useState(false);
+  const [imageFrame, setImageFrame] = useState<ImageFrame | null>(null);
   const dragDepth = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const handledJobRef = useRef<string | null>(null);
   const resumeCheckedRef = useRef(false);
 
@@ -301,6 +352,11 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   useEffect(() => {
     setScale({ kind: "fit" });
   }, [currentPage?.id]);
+
+  // The overlay loads the latest OCR run only when the user turns it on, so a
+  // page viewer without OCR does not poll the API.
+  const latestOcrQuery = useLatestOcr(projectId, currentPage?.id ?? null, overlayOn);
+  const latestOcr = latestOcrQuery.data ?? null;
 
   const maxBytes = useMemo(
     () => (meta ? meta.max_import_mb * 1024 * 1024 : null),
@@ -410,6 +466,65 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
         currentPage.updated_at,
       )
     : null;
+
+  const measureImage = useCallback(() => {
+    const image = imageRef.current;
+    if (!image) {
+      setImageFrame(null);
+      return;
+    }
+    const next = containFrame(
+      {
+        left: image.offsetLeft,
+        top: image.offsetTop,
+        width: image.clientWidth,
+        height: image.clientHeight,
+      },
+      image.naturalWidth,
+      image.naturalHeight,
+    );
+    setImageFrame((current) => (sameFrame(current, next) ? current : next));
+  }, []);
+
+  useEffect(() => {
+    if (!overlayOn) {
+      setImageFrame(null);
+      return;
+    }
+    measureImage();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => measureImage());
+    if (imageRef.current) observer.observe(imageRef.current);
+    if (viewportRef.current) observer.observe(viewportRef.current);
+    return () => observer.disconnect();
+  }, [measureImage, overlayOn, imageSrc]);
+
+  const overlayBoxes = useMemo(() => {
+    if (!overlayOn || !imageFrame || !latestOcr) return [];
+    if (latestOcr.status !== "succeeded" || latestOcr.stale) return [];
+    return layoutBoxes(latestOcr.blocks, imageFrame);
+  }, [overlayOn, imageFrame, latestOcr]);
+
+  const overlayLegend = useMemo(() => {
+    const counts = new Map<OcrBlockKind, number>();
+    overlayBoxes.forEach((box) => counts.set(box.kind, (counts.get(box.kind) ?? 0) + 1));
+    return LAYOUT_KIND_ORDER.filter((kind) => counts.has(kind)).map((kind) => ({
+      kind,
+      count: counts.get(kind) ?? 0,
+    }));
+  }, [overlayBoxes]);
+
+  let overlayMessage: string | null = null;
+  if (overlayOn) {
+    if (latestOcrQuery.isLoading) overlayMessage = "viewer.overlay.loading";
+    else if (latestOcrQuery.isError) overlayMessage = "viewer.overlay.error";
+    else if (!latestOcr) overlayMessage = "viewer.overlay.empty";
+    else if (latestOcr.status === "failed") overlayMessage = "viewer.overlay.failed";
+    else if (latestOcr.status === "queued" || latestOcr.status === "running") {
+      overlayMessage = "viewer.overlay.running";
+    } else if (latestOcr.stale) overlayMessage = "viewer.overlay.stale";
+    else if (overlayBoxes.length === 0) overlayMessage = "viewer.overlay.empty";
+  }
 
   return (
     <section
@@ -694,6 +809,13 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
             />
 
             <ToolButton
+              label={t(overlayOn ? "viewer.overlay.hide" : "viewer.overlay.show")}
+              icon={Layers}
+              active={overlayOn}
+              onClick={() => setOverlayOn((value) => !value)}
+            />
+
+            <ToolButton
               label={t("edits.open")}
               icon={SlidersHorizontal}
               onClick={() => setEditsOpen(true)}
@@ -740,6 +862,37 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
             </div>
           </div>
 
+          {overlayOn ? (
+            <div
+              aria-live="polite"
+              className="scrollbar-thin flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border/60 bg-background/25 px-2 py-1 text-2xs text-muted-foreground"
+            >
+              <span className="shrink-0 font-semibold uppercase tracking-wider">
+                {t("viewer.overlay.legend")}
+              </span>
+              {overlayMessage ? (
+                <span className="whitespace-nowrap">{t(overlayMessage)}</span>
+              ) : (
+                overlayLegend.map(({ kind, count }) => (
+                  <span
+                    key={kind}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-border/60 bg-background/70 px-1.5 py-0.5"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn("size-2 rounded-pill", LAYOUT_SWATCH_CLASS[kind])}
+                    />
+                    <span className="whitespace-nowrap">{t(`ocr.kind.${kind}`)}</span>
+                    <span className="font-mono opacity-70">{count}</span>
+                  </span>
+                ))
+              )}
+              <span className="shrink-0 whitespace-nowrap border-l border-border/60 pl-2 opacity-80">
+                {t("viewer.overlay.note")}
+              </span>
+            </div>
+          ) : null}
+
           <div className="flex min-h-0 flex-1 flex-col-reverse sm:flex-row">
             <PageThumbnails
               pages={pages}
@@ -751,23 +904,58 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
               groupLabel={t("thumbnails")}
             />
 
-            <div className="scrollbar-thin relative flex min-w-0 flex-1 overflow-auto bg-muted/30">
-              <div className="flex h-full min-h-full w-full p-4">
+            <div
+              ref={viewportRef}
+              className="scrollbar-thin relative flex min-w-0 flex-1 overflow-auto bg-muted/30"
+            >
+              <div className="relative flex h-full min-h-full w-full p-4">
                 {imageSrc ? (
-                  <img
-                    key={`${currentPage.id}-${currentPage.updated_at}`}
-                    src={imageSrc}
-                    alt={currentPage.original_filename ?? labelFor(currentPage)}
-                    draggable={false}
-                    style={imageStyle}
-                    className={cn(
-                      "m-auto block rounded-xs bg-card shadow-sm",
-                      scale.kind === "fit"
-                        ? "max-h-full max-w-full object-contain"
-                        : "max-w-none",
-                      (rotatePage.isPending || reorderPages.isPending) && "opacity-70",
-                    )}
-                  />
+                  <>
+                    <img
+                      key={`${currentPage.id}-${currentPage.updated_at}`}
+                      ref={imageRef}
+                      src={imageSrc}
+                      alt={currentPage.original_filename ?? labelFor(currentPage)}
+                      draggable={false}
+                      onLoad={measureImage}
+                      style={imageStyle}
+                      className={cn(
+                        "m-auto block rounded-xs bg-card shadow-sm",
+                        scale.kind === "fit"
+                          ? "max-h-full max-w-full object-contain"
+                          : "max-w-none",
+                        (rotatePage.isPending || reorderPages.isPending) && "opacity-70",
+                      )}
+                    />
+                    {overlayOn && imageFrame && overlayBoxes.length > 0 ? (
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute animate-fade-in"
+                        style={{
+                          left: imageFrame.left,
+                          top: imageFrame.top,
+                          width: imageFrame.width,
+                          height: imageFrame.height,
+                        }}
+                      >
+                        {overlayBoxes.map((box) => (
+                          <div
+                            key={box.id}
+                            className={cn(
+                              "absolute rounded-xs border",
+                              LAYOUT_BOX_CLASS[box.kind],
+                            )}
+                            style={{
+                              left: box.left,
+                              top: box.top,
+                              width: box.width,
+                              height: box.height,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
                 ) : (
                   <div className="m-auto flex flex-col items-center gap-2 text-xs text-muted-foreground">
                     <ImageIcon className="size-icon-lg" />

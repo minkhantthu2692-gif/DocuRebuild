@@ -161,7 +161,16 @@ export interface ProjectManifest {
 /* -------------------------------------------------------------------------- */
 
 export type OcrRunStatus = "queued" | "running" | "succeeded" | "failed";
-export type OcrBlockKind = "paragraph" | "heading" | "list_item";
+export type OcrBlockKind =
+  | "paragraph"
+  | "heading"
+  | "list_item"
+  | "caption"
+  | "equation"
+  | "table"
+  | "page_number"
+  | "header"
+  | "footer";
 
 export interface OcrBlock {
   id: string;

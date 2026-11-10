@@ -482,7 +482,7 @@ def _execute_ocr_run(
         )
 
 
-def _prepare_image(path: Path) -> tuple[Path, float]:
+def _prepare_image(path: Path) -> tuple[Path, float, tuple[int, int]]:
     settings = get_settings()
     try:
         with Image.open(path) as source:
@@ -491,6 +491,7 @@ def _prepare_image(path: Path) -> tuple[Path, float]:
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
         raise AppError(422, "ocr_image_unreadable", "The page image could not be read.") from exc
 
+    original_size = (image.width, image.height)
     scale = 1.0
     max_edge = max(1, settings.ocr_max_image_edge)
     if max(image.size) > max_edge:
@@ -509,7 +510,7 @@ def _prepare_image(path: Path) -> tuple[Path, float]:
         raise AppError(500, "ocr_image_unreadable", "The page image could not be prepared.") from exc
     finally:
         image.close()
-    return temp_path, scale
+    return temp_path, scale, original_size
 
 
 def _scale(value: float, scale: float) -> int:
@@ -517,12 +518,20 @@ def _scale(value: float, scale: float) -> int:
 
 
 def _classify_block(
-    text: str, max_line_height: float, median_line_height: float, word_count: int
+    text: str,
+    max_line_height: float,
+    median_line_height: float,
+    word_count: int,
+    **layout: Any,
 ) -> str:
-    return classify_text_block(text, max_line_height, median_line_height, word_count)
+    return classify_text_block(
+        text, max_line_height, median_line_height, word_count, **layout
+    )
 
 
-def _parse_tsv(tsv: str, scale: float) -> tuple[str, list[dict[str, Any]], float | None]:
+def _parse_tsv(
+    tsv: str, scale: float, page_size: tuple[int, int] | None = None
+) -> tuple[str, list[dict[str, Any]], float | None]:
     words: list[dict[str, Any]] = []
     for raw_line in tsv.splitlines():
         if not raw_line.strip() or raw_line.startswith("level\t"):
@@ -581,6 +590,7 @@ def _parse_tsv(tsv: str, scale: float) -> tuple[str, list[dict[str, Any]], float
 
         line_texts: list[str] = []
         line_heights_for_block: list[float] = []
+        line_spans: list[list[tuple[float, float]]] = []
         left = top = None
         right = bottom = None
         for line_number in sorted(lines):
@@ -589,6 +599,12 @@ def _parse_tsv(tsv: str, scale: float) -> tuple[str, list[dict[str, Any]], float
             if not line_text:
                 continue
             line_texts.append(line_text)
+            line_spans.append(
+                sorted(
+                    (float(word["left"]), float(word["left"] + word["width"]))
+                    for word in line_words
+                )
+            )
             line_left = min(word["left"] for word in line_words)
             line_top = min(word["top"] for word in line_words)
             line_right = max(word["left"] + word["width"] for word in line_words)
@@ -622,6 +638,7 @@ def _parse_tsv(tsv: str, scale: float) -> tuple[str, list[dict[str, Any]], float
                 "line_count": len(line_texts),
                 "word_count": sum(len(line.split()) for line in line_texts),
                 "max_line_height": max(line_heights_for_block),
+                "line_spans": line_spans,
             }
         )
 
@@ -636,7 +653,14 @@ def _parse_tsv(tsv: str, scale: float) -> tuple[str, list[dict[str, Any]], float
             {
                 "block_index": index,
                 "kind": _classify_block(
-                    item["text"], item["max_line_height"], median_height, item["word_count"]
+                    item["text"],
+                    item["max_line_height"],
+                    median_height,
+                    item["word_count"],
+                    y=item["y"],
+                    height=item["height"],
+                    page_height=page_size[1] if page_size else None,
+                    line_spans=item["line_spans"],
                 ),
                 "text": item["text"],
                 "confidence": item["confidence"],
@@ -676,7 +700,7 @@ def _perform_ocr(
         page = _get_page(conn, page_id)
         _, image_path = _source_asset(conn, project_dir, page)
 
-    temp_path, scale = _prepare_image(image_path)
+    temp_path, scale, page_size = _prepare_image(image_path)
     try:
         result = _run_command(
             [
@@ -707,7 +731,7 @@ def _perform_ocr(
             "Tesseract did not return structured text. Check the tessdata configuration.",
         )
 
-    text, blocks, mean_confidence = _parse_tsv(result.stdout, scale)
+    text, blocks, mean_confidence = _parse_tsv(result.stdout, scale, page_size)
     return {
         "engine_version": status.get("version"),
         "text": text,

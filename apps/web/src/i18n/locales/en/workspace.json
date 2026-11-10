@@ -62,7 +62,19 @@
     "moveRight": "Move page right",
     "pageOf": "Page {{page}} of {{total}}",
     "pdfBadge": "PDF · {{page}}",
-    "emptyValue": "No page selected"
+    "emptyValue": "No page selected",
+    "overlay": {
+      "show": "Show text layout",
+      "hide": "Hide text layout",
+      "legend": "Layout hints",
+      "note": "Suggestions only; text is unchanged.",
+      "loading": "Loading the extracted layout…",
+      "empty": "No text blocks with layout information for this page yet.",
+      "stale": "This page changed after extraction. Run text extraction again to refresh the layout.",
+      "failed": "The last text extraction failed, so there is no layout to show.",
+      "running": "Extracting text… the layout appears when the run finishes.",
+      "error": "The text layout could not be loaded."
+    }
   },
   "deletePageDialog": {
     "title": "Delete this page?",
@@ -155,7 +167,13 @@
     "kind": {
       "heading": "Heading candidate",
       "paragraph": "Paragraph",
-      "list_item": "List item candidate"
+      "list_item": "List item candidate",
+      "caption": "Caption candidate",
+      "equation": "Equation candidate",
+      "table": "Table candidate",
+      "page_number": "Page number",
+      "header": "Running header",
+      "footer": "Running footer"
     },
     "verified": "Verified",
     "unverified": "Unverified",

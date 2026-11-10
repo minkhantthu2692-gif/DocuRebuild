@@ -40,7 +40,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.imports` | Import job lifecycle: bounded worker, persisted progress, cooperative cancellation, interrupted-job recovery, localized failure codes |
 | `services.image_edits` | Canonical edit validation, geometry pipeline (crop/perspective/deskew), filter pipeline (grayscale, contrast, brightness, sharpness, denoise, threshold, shadow/background cleanup) and skew estimation |
 | `services.pdf` | PDF open/validation, page rendering, embedded text extraction, capability detection |
-| `services.layout` | Shared conservative heading/list/paragraph classification for OCR and embedded PDF text |
+| `services.layout` | Shared deterministic block classification (heading, list, caption, equation, table-like grid, running header/footer, page number) for OCR and embedded PDF text |
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps |
 | `services.settings` | Persisted appearance, language and editor settings |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence, corrections, staleness |
@@ -246,6 +246,18 @@ src/
 - Results are split into reviewable blocks with bounding boxes and confidence.
   Low-confidence blocks are flagged; every block can be edited and marked as
   verified, and corrections are persisted in `ocr_blocks`.
+- Layout classification is deterministic and conservative. Page numbers and
+  running headers/footers require page-margin geometry, captions and equations
+  need a label or a math-symbol pattern, and a table label requires at least two
+  lines with aligned wide inter-word gaps. Ambiguous blocks stay `paragraph`.
+  Labels are review candidates: they never change the text, geometry or
+  confidence, and nothing is marked verified on the user's behalf.
+- The source viewer draws a measured bounding-box overlay for the latest
+  successful, non-stale run. Source coordinates are scaled to the rendered image
+  (fit, zoom, actual size and centring), clamped to the image edges, and blocks
+  with incomplete geometry are skipped. Loading, empty, running, stale and failed
+  runs show an explanatory state instead of boxes. The overlay is visual only and
+  never edits the document.
 - Existing results stay reviewable and insertable even when the engine is later
   unavailable or a language pack is missing; the dialog shows the setup banner
   and the stored run together instead of hiding the user's prior work.
@@ -331,3 +343,8 @@ src/
   extraction UI. The trade-off is that confidence is `NULL` and only one latest
   extraction is shown in the dialog; earlier runs remain stored but are not yet
   listed.
+- **Layout detection stays heuristic and deterministic** — no learned layout
+  model is bundled, so labels can be wrong but never fabricated, require no model
+  download, and are cheap to explain and test. The trade-off is that figure
+  regions and table structures are not detected yet; those need a later
+  engine adapter rather than more regexes.

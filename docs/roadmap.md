@@ -140,17 +140,27 @@ image processing uses Pillow with no OpenCV dependency.
 - PDF pages with an embedded text layer are stored as reviewable `pdf-text` runs
   in the same dialog as OCR, clearly labelled with no confidence score and
   invalidated on rotation; image-only PDF pages fall back to local OCR.
+- Deterministic layout hints shared by OCR and embedded PDF text: heading, list
+  item, caption, equation candidate, table-like grid, running header/footer and
+  page number. Labels are review candidates only — they never change extracted
+  text, confidence or geometry, and ambiguous blocks stay paragraphs.
+- Source-viewer layout overlay: measured bounding boxes for the latest
+  successful, non-stale run, a per-kind legend with counts, and explicit
+  loading, empty, running, stale and failure states. No box is drawn from a stale
+  or incomplete result.
 - Backend tests for persistence, correction, verification, stale detection,
-  missing language data and unavailable engines; frontend i18n parity tests.
+  missing language data and unavailable engines, deterministic classification and
+  TSV layout wiring; frontend tests for coordinate scaling/clamping and i18n
+  parity.
 
 **Remaining before completion**
 
-- Table, figure, caption, equation, header/footer and page-number detection.
-  Current heading and list-item labels are conservative heuristics, not layout
-  guarantees.
+- Figure (image region) detection. The classifier never guesses a figure, so
+  figures currently stay unmarked.
+- Real table structure (rows, cells, merged spans) and equation transcription.
+  A table label only marks a text grid; it does not build a table.
 - OCR accuracy benchmarks (CER/WER) for English, Burmese and mixed pages using
   fixtures from real documents.
-- A bounding-box overlay on the source viewer and block-to-image highlighting.
 - Optional richer engines (for example PaddleOCR) behind the same adapter, only
   if they can preserve the same review and verification guarantees.
 

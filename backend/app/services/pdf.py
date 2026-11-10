@@ -91,6 +91,7 @@ def extract_text(
     try:
         page = document.load_page(index)
         data = page.get_text("dict", sort=True)
+        page_height = float(page.rect.height) * scale
     except Exception:
         return "", []
 
@@ -143,6 +144,9 @@ def extract_text(
                     item["max_line_height"],
                     median_height,
                     item["word_count"],
+                    y=item["y"],
+                    height=item["height"],
+                    page_height=page_height,
                 ),
                 "text": item["text"],
                 "confidence": None,

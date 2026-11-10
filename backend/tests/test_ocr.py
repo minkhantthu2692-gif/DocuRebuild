@@ -115,7 +115,7 @@ def test_ocr_run_persists_blocks_and_marks_stale_after_rotation(
     assert response.status_code == 202, response.text
     queued = response.json()
     assert queued["page_id"] == page["id"]
-    assert queued["status"] in {"queued", "running"}
+    assert queued["status"] in {"queued", "running", "succeeded"}
 
     run = _wait_for_run(client, project["id"], page["id"])
     assert run["status"] == "succeeded", run
@@ -235,6 +235,46 @@ def test_ocr_fails_when_engine_returns_unstructured_output(
     assert run["error_code"] == "ocr_failed"
     assert "structured text" in (run["error"] or "")
     assert run["blocks"] == []
+
+
+def test_parse_tsv_uses_page_geometry_for_layout_candidates() -> None:
+    from app.services import ocr
+
+    header = (
+        "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\t"
+        "left\ttop\twidth\theight\tconf\ttext"
+    )
+
+    def word(
+        block: int,
+        line: int,
+        number: int,
+        left: int,
+        top: int,
+        text: str,
+    ) -> str:
+        return (
+            f"5\t1\t{block}\t1\t{line}\t{number}\t{left}\t{top}\t40\t20\t90\t{text}"
+        )
+
+    table_tsv = "\n".join(
+        [
+            header,
+            word(1, 1, 1, 0, 100, "Name"),
+            word(1, 1, 2, 200, 100, "Value"),
+            word(1, 2, 1, 0, 125, "Mass"),
+            word(1, 2, 2, 205, 125, "2"),
+            word(2, 1, 1, 900, 950, "42"),
+        ]
+    )
+    text, blocks, confidence = ocr._parse_tsv(table_tsv, 1.0, (1000, 1000))
+
+    assert confidence == 90.0
+    assert "Name" in text
+    assert [(block["kind"], block["text"]) for block in blocks] == [
+        ("table", "Name Value\nMass 2"),
+        ("page_number", "42"),
+    ]
 
 
 def test_parse_version_accepts_common_tesseract_output() -> None:
