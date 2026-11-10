@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import time
 
 from fastapi.testclient import TestClient
@@ -245,3 +246,103 @@ def test_parse_version_accepts_common_tesseract_output() -> None:
     )
     assert ocr._parse_version("tesseract 5.3.3") == "5.3.3"
     assert ocr._parse_version("not a tesseract banner") is None
+
+
+def test_engine_candidates_prefer_configured_command_and_dedupe(
+    monkeypatch, tmp_path
+) -> None:
+    from app.services import ocr
+
+    installed = str(tmp_path / "Tesseract-OCR" / "tesseract.exe")
+
+    class _Settings:
+        tesseract_cmd = installed
+
+    monkeypatch.setattr(ocr, "get_settings", lambda: _Settings())
+    monkeypatch.setattr(
+        ocr,
+        "_auto_detect_commands",
+        lambda: [installed, "/usr/bin/tesseract"],
+    )
+
+    candidates = ocr._engine_candidates()
+    assert candidates[0] == ("configured", [installed])
+    assert candidates[1:] == [("detected", ["/usr/bin/tesseract"])]
+
+
+def test_detect_engine_falls_back_to_auto_detected_command(
+    client: TestClient, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    detected = "C:/Program Files/Tesseract-OCR/tesseract.exe"
+    monkeypatch.setattr(
+        ocr,
+        "_engine_candidates",
+        lambda: [("configured", ["tesseract"]), ("detected", [detected])],
+    )
+
+    calls: list[str] = []
+
+    def fake_run(args, timeout):
+        calls.append(args[0])
+        if args[0] == "tesseract":
+            raise FileNotFoundError(args[0])
+        if "--version" in args:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                "tesseract v5.4.0.20240606\n leptonica-1.84.1",
+                "",
+            )
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            "List of available languages in tessdata (2):\neng\nosd\n",
+            "",
+        )
+
+    monkeypatch.setattr(ocr, "_run_command", fake_run)
+    status = ocr.detect_engine(force=True)
+
+    assert status["available"] is True
+    assert status["version"] == "5.4.0.20240606"
+    assert status["languages"] == ["eng", "osd"]
+    assert ocr._command_tokens(status["command"]) == [detected]
+    assert calls[0] == "tesseract"
+    assert detected in calls
+
+
+def test_detect_engine_reports_not_found_when_no_candidate_runs(
+    client: TestClient, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(
+        ocr,
+        "_engine_candidates",
+        lambda: [("configured", ["tesseract"]), ("detected", ["/opt/tesseract"])],
+    )
+
+    def fake_run(args, timeout):
+        raise FileNotFoundError(args[0])
+
+    monkeypatch.setattr(ocr, "_run_command", fake_run)
+    status = ocr.detect_engine(force=True)
+
+    assert status["available"] is False
+    assert status["reason"] == "not_found"
+    assert status["setup_hint"]
+
+
+def test_detect_engine_reports_not_configured_without_candidates(
+    client: TestClient, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "_engine_candidates", lambda: [])
+    status = ocr.detect_engine(force=True)
+
+    assert status["available"] is False
+    assert status["reason"] == "not_configured"
+    assert status["command"] == "tesseract"

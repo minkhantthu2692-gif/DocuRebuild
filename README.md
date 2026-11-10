@@ -175,7 +175,10 @@ OCR is free and local, but it needs a working Tesseract installation:
    Linux packages are also available).
 2. Make sure the `eng` and/or `mya` traineddata files are present in the
    Tesseract `tessdata` folder.
-3. If `tesseract` is not on `PATH`, set the executable path:
+3. DocuRebuild finds the executable automatically: it tries
+   `DOCUREBUILD_TESSERACT_CMD`, then `tesseract` on `PATH`, then the standard
+   install locations (for example `C:\Program Files\Tesseract-OCR` on Windows).
+   Only set the path explicitly if Tesseract lives somewhere unusual:
 
 ```bash
 # Windows example
@@ -183,9 +186,10 @@ DOCUREBUILD_TESSERACT_CMD="C:/Program Files/Tesseract-OCR/tesseract.exe"
 DOCUREBUILD_TESSDATA_DIR="C:/Program Files/Tesseract-OCR/tessdata"
 ```
 
-The Settings page and the OCR dialog inspect the engine at runtime. If it cannot
-be found, they show setup guidance instead of a fake OCR result. OCR jobs run in
-a bounded local worker and never contact a remote service.
+The Settings page and the OCR dialog inspect the engine at runtime and report the
+resolved executable path. If it cannot be found, they show setup guidance instead
+of a fake OCR result. OCR jobs run in a bounded local worker and never contact a
+remote service.
 
 If the Tesseract install directory is read-only (for example `Program Files` on
 Windows), keep a user-writable copy of the `tessdata` folder containing the

@@ -260,6 +260,13 @@ src/
   rendering uses `DOCUREBUILD_PDF_RENDER_DPI` and `DOCUREBUILD_PDF_MAX_PAGES`.
   These are reported through capabilities rather than exposed as arbitrary UI
   controls.
+- The engine command is resolved in a fixed order: the explicit
+  `DOCUREBUILD_TESSERACT_CMD` value, then `tesseract` on `PATH`, then standard
+  install locations (`C:\Program Files\Tesseract-OCR` on Windows and common
+  Unix prefixes). The resolved path is used for both detection and OCR, and is
+  returned in capabilities so a fallback is never silent. The Windows installer
+  does not add Tesseract to `PATH`, so this fallback is what makes a normal
+  installation usable without extra configuration.
 - Tesseract is invoked with `-c tessedit_create_tsv=1` rather than the optional
   `tsv` config file, so a minimal custom `tessdata` directory works as long as it
   contains the required traineddata files. If the engine returns plain text

@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -51,6 +52,74 @@ def _command_tokens(raw: str) -> list[str]:
         if token:
             cleaned.append(token)
     return cleaned
+
+
+def _display_command(tokens: list[str]) -> str:
+    """Render argv back into a display string that can be re-split safely."""
+    if os.name == "nt":
+        return subprocess.list2cmdline(tokens)
+    return " ".join(shlex.quote(token) for token in tokens)
+
+
+def _auto_detect_commands() -> list[str]:
+    """Locate Tesseract when the configured command is not usable.
+
+    Tesseract's Windows installer does not add the program folder to ``PATH``,
+    which is the most common reason a working installation is reported as
+    unavailable. These are read-only checks of well-known install locations.
+    """
+    commands: list[str] = []
+
+    which = shutil.which("tesseract")
+    if which:
+        commands.append(which)
+
+    candidates: list[Path] = []
+    if os.name == "nt":
+        for env_name in ("ProgramFiles", "ProgramFiles(x86)"):
+            root = os.environ.get(env_name)
+            if root:
+                candidates.append(Path(root) / "Tesseract-OCR" / "tesseract.exe")
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        if local_appdata:
+            candidates.append(
+                Path(local_appdata) / "Programs" / "Tesseract-OCR" / "tesseract.exe"
+            )
+            candidates.append(Path(local_appdata) / "Tesseract-OCR" / "tesseract.exe")
+    else:
+        for raw_path in (
+            "/usr/bin/tesseract",
+            "/usr/local/bin/tesseract",
+            "/opt/homebrew/bin/tesseract",
+            "/opt/local/bin/tesseract",
+        ):
+            candidates.append(Path(raw_path))
+
+    for candidate in candidates:
+        if candidate.is_file():
+            command = str(candidate)
+            if command not in commands:
+                commands.append(command)
+    return commands
+
+
+def _engine_candidates() -> list[tuple[str, list[str]]]:
+    """Ordered engine commands: explicit config, PATH, then known install paths."""
+    settings = get_settings()
+    candidates: list[tuple[str, list[str]]] = []
+    seen: set[tuple[str, ...]] = set()
+
+    def add(source: str, tokens: list[str]) -> None:
+        key = tuple(tokens)
+        if not tokens or key in seen:
+            return
+        seen.add(key)
+        candidates.append((source, tokens))
+
+    add("configured", _command_tokens(settings.tesseract_cmd))
+    for command in _auto_detect_commands():
+        add("detected", [command])
+    return candidates
 
 
 def _run_command(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
@@ -124,12 +193,12 @@ def detect_engine(force: bool = False) -> dict[str, Any]:
                 return dict(_engine_cache[1])
 
     settings = get_settings()
-    tokens = _command_tokens(settings.tesseract_cmd)
+    candidates = _engine_candidates()
     base: dict[str, Any] = {
         "engine": ENGINE_NAME,
         "available": False,
         "version": None,
-        "command": settings.tesseract_cmd,
+        "command": settings.tesseract_cmd or None,
         "tessdata_dir": str(settings.tessdata_dir) if settings.tessdata_dir else None,
         "languages": [],
         "preferred_languages": [],
@@ -137,34 +206,41 @@ def detect_engine(force: bool = False) -> dict[str, Any]:
         "setup_hint": None,
     }
 
-    if not tokens:
-        base.update(reason="not_configured", setup_hint=_setup_hint("not_configured"))
+    resolved_tokens: list[str] | None = None
+    resolved_version: str | None = None
+    failure_reason = "not_found"
+
+    for _source, tokens in candidates:
+        try:
+            version_result = _run_command([*tokens, "--version"], timeout=10)
+        except PermissionError:
+            failure_reason = "not_executable"
+            continue
+        except subprocess.TimeoutExpired:
+            failure_reason = "error"
+            continue
+        except (FileNotFoundError, OSError):
+            continue
+
+        version_text = f"{version_result.stdout}\n{version_result.stderr}".strip()
+        if version_result.returncode != 0:
+            failure_reason = "not_executable"
+            continue
+
+        resolved_tokens = tokens
+        resolved_version = _parse_version(version_text)
+        break
+
+    if resolved_tokens is None:
+        reason = failure_reason if candidates else "not_configured"
+        base.update(reason=reason, setup_hint=_setup_hint(reason))
         return _store_engine_status(base)
+
+    base["command"] = _display_command(resolved_tokens)
+    version = resolved_version
 
     try:
-        version_result = _run_command([*tokens, "--version"], timeout=10)
-    except FileNotFoundError:
-        base.update(reason="not_found", setup_hint=_setup_hint("not_found"))
-        return _store_engine_status(base)
-    except PermissionError:
-        base.update(reason="not_executable", setup_hint=_setup_hint("not_executable"))
-        return _store_engine_status(base)
-    except subprocess.TimeoutExpired:
-        base.update(reason="error", setup_hint=_setup_hint("error"))
-        return _store_engine_status(base)
-    except OSError:
-        base.update(reason="not_found", setup_hint=_setup_hint("not_found"))
-        return _store_engine_status(base)
-
-    version_text = f"{version_result.stdout}\n{version_result.stderr}".strip()
-    if version_result.returncode != 0:
-        base.update(reason="not_executable", setup_hint=_setup_hint("not_executable"))
-        return _store_engine_status(base)
-
-    version = _parse_version(version_text)
-
-    try:
-        languages_result = _run_command([*tokens, "--list-langs"], timeout=10)
+        languages_result = _run_command([*resolved_tokens, "--list-langs"], timeout=10)
     except (FileNotFoundError, PermissionError, subprocess.TimeoutExpired, OSError):
         languages_result = None
 
@@ -588,9 +664,13 @@ def _perform_ocr(
 ) -> dict[str, Any]:
     settings = get_settings()
     status = detect_engine()
-    tokens = _command_tokens(settings.tesseract_cmd)
-    if not tokens:
-        raise AppError(409, "ocr_unavailable", "A local OCR engine is not configured.")
+    tokens = _command_tokens(status.get("command") or "")
+    if not status.get("available") or not tokens:
+        raise AppError(
+            409,
+            "ocr_unavailable",
+            status.get("setup_hint") or "A local OCR engine is not available.",
+        )
 
     with project_db(project_dir) as conn:
         page = _get_page(conn, page_id)
