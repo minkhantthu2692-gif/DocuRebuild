@@ -308,6 +308,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   const imageRef = useRef<HTMLImageElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const activeFrameRef = useRef<ImageFrame | null>(null);
   const handledJobRef = useRef<string | null>(null);
   const resumeCheckedRef = useRef(false);
 
@@ -376,6 +377,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     setDragStart(null);
     setDragCurrent(null);
     setPendingSelection(null);
+    activeFrameRef.current = null;
   }, [currentPage?.id]);
 
   const elementsQuery = useElements(projectId, currentPage?.id ?? null);
@@ -410,11 +412,13 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     setSelectMode(false);
     setDragStart(null);
     setDragCurrent(null);
+    activeFrameRef.current = null;
   }, []);
 
   const abortDrag = () => {
     setDragStart(null);
     setDragCurrent(null);
+    activeFrameRef.current = null;
   };
 
   const consumePendingSelection = useCallback(() => {
@@ -427,6 +431,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
       setSelectMode(false);
       setDragStart(null);
       setDragCurrent(null);
+      activeFrameRef.current = null;
     }
   };
 
@@ -436,41 +441,56 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     setSelectMode(true);
     setDragStart(null);
     setDragCurrent(null);
+    activeFrameRef.current = null;
   };
 
   const handleSelectStart = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!selectMode || !imageFrame) return;
+    if (!selectMode) return;
     const point = pointInContent(event);
     if (!point) return;
+    // Measure at pointer time: on a freshly opened page the frame may not have
+    // reached React state yet, and a stale frame must never start a selection.
+    const frame = measureImage();
+    if (!frame) return;
     if (
-      point.x < imageFrame.left ||
-      point.x > imageFrame.left + imageFrame.width ||
-      point.y < imageFrame.top ||
-      point.y > imageFrame.top + imageFrame.height
+      point.x < frame.left ||
+      point.x > frame.left + frame.width ||
+      point.y < frame.top ||
+      point.y > frame.top + frame.height
     ) {
       return;
     }
     event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const start = clampToFrame(point, imageFrame);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is best-effort. Some environments reject it for
+      // pointers the browser does not consider active; the drag still works
+      // while the pointer stays inside the viewer.
+    }
+    activeFrameRef.current = frame;
+    const start = clampToFrame(point, frame);
     setDragStart(start);
     setDragCurrent(start);
   };
 
   const handleSelectMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!dragStart || !imageFrame) return;
+    const frame = activeFrameRef.current;
+    if (!dragStart || !frame) return;
     const point = pointInContent(event);
     if (!point) return;
-    setDragCurrent(clampToFrame(point, imageFrame));
+    setDragCurrent(clampToFrame(point, frame));
   };
 
   const handleSelectEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!dragStart || !imageFrame) return;
+    const frame = activeFrameRef.current;
+    if (!dragStart || !frame) return;
     const point = pointInContent(event);
-    const end = point ? clampToFrame(point, imageFrame) : (dragCurrent ?? dragStart);
-    const region = selectionToSourceRect(dragStart, end, imageFrame);
+    const end = point ? clampToFrame(point, frame) : (dragCurrent ?? dragStart);
+    const region = selectionToSourceRect(dragStart, end, frame);
     setDragStart(null);
     setDragCurrent(null);
+    activeFrameRef.current = null;
     if (!region) {
       toast.error(t("elements.errors.invalidRegion"));
       return;
@@ -592,16 +612,21 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
       )
     : null;
 
-  const measureImage = useCallback(() => {
+  const measureImage = useCallback((): ImageFrame | null => {
     const image = imageRef.current;
-    if (!image) {
+    const container = contentRef.current;
+    if (!image || !container) {
       setImageFrame(null);
-      return;
+      return null;
     }
+    // Measure against the marquee container using viewport coordinates so the
+    // frame stays correct while the viewer is scrolled.
+    const imageRect = image.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
     const next = containFrame(
       {
-        left: image.offsetLeft,
-        top: image.offsetTop,
+        left: imageRect.left - containerRect.left,
+        top: imageRect.top - containerRect.top,
         width: image.clientWidth,
         height: image.clientHeight,
       },
@@ -609,6 +634,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
       image.naturalHeight,
     );
     setImageFrame((current) => (sameFrame(current, next) ? current : next));
+    return next;
   }, []);
 
   useEffect(() => {
