@@ -9,10 +9,11 @@ data on your device, and treats every AI result as a reviewable proposal.
 > **Project status — early development (Phase 4 of 12).**
 > The workspace, local project storage, image and PDF import, non-destructive
 > image adjustments, the rich-text editor and local Tesseract OCR are implemented.
-> PDF pages are rendered locally and embedded text layers are stored as reviewable
-> proposals; image-only PDF pages can be processed with OCR. OCR and PDF import
-> are only advertised when their local dependencies actually work. AI providers,
-> element reconstruction, export, history and import progress reporting are
+> Imports run as background jobs with page-level progress, cancellation and
+> localized failures. PDF pages are rendered locally and embedded text layers are
+> stored as reviewable proposals; image-only PDF pages can be processed with OCR.
+> OCR and PDF import are only advertised when their local dependencies actually
+> work. AI providers, element reconstruction, export and history are
 > **not implemented yet** and are clearly marked as unavailable in the UI. Nothing
 > in this repository fakes those features.
 
@@ -33,6 +34,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   150 DPI into a display copy with a thumbnail. Embedded text is stored as a
   reviewable extraction run, so image-only pages can be OCR'd separately.
   Password-protected PDFs are rejected with a clear message.
+- **Background import jobs** — every batch is processed by a bounded local worker.
+  The workspace shows page-level progress, the current filename and a cancel
+  action. Cancelling keeps files that already finished, rolls back the file in
+  progress and reports failures with localized messages. Jobs interrupted by a
+  restart are reported instead of appearing stuck.
 - **Source viewer** — page navigation, thumbnail rail, zoom, fit, actual size,
   rotation with non-destructive display copies, page reordering and page deletion.
   PDF pages are re-rendered from the original PDF when rotated, so repeated
@@ -59,9 +65,9 @@ data on your device, and treats every AI result as a reviewable proposal.
 ### Not available yet
 
 Full layout detection (tables, figures, equations, headers and footers), AI
-providers, DOCX/TXT export, revision history, import progress reporting,
-backups/restore UI, desktop packaging and PWA install support are planned but not
-implemented. OCR currently extracts text blocks and reading order; it does not yet
+providers, DOCX/TXT export, revision history, backups/restore UI, desktop
+packaging and PWA install support are planned but not implemented. OCR currently
+extracts text blocks and reading order; it does not yet
 detect tables, figures or equations. See [`docs/roadmap.md`](docs/roadmap.md).
 
 ---
@@ -209,6 +215,21 @@ Embedded PDF text is exact source data, but it can still contain encoding errors
 missing glyphs or an incorrect reading order. The dialog marks it as a proposal
 and offers no confidence score rather than pretending it was OCR-verified.
 
+### Import progress and cancellation
+
+Image and PDF batches are validated synchronously, then handed to a bounded local
+worker (`DOCUREBUILD_IMPORT_MAX_WORKERS`, default 2). Progress is committed per
+file and per PDF page, so the workspace can show how many pages are done, which
+file is running and a cancel action without losing work on a long PDF.
+
+Cancelling is cooperative and checked between files and pages. Files that already
+finished stay imported; the file currently being processed is rolled back
+completely, and its immutable source copy is removed. The same cleanup runs when
+an import fails, so a failed PDF never leaves orphaned pages. Jobs interrupted by
+an application restart are marked `import_interrupted` instead of polling forever.
+The older synchronous `POST /pages/import` endpoint remains available for simple
+clients and keeps all-or-nothing behaviour.
+
 ### Run in development
 
 ```bash
@@ -322,7 +343,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 0. Foundation and architecture | Complete |
 | 1. Local storage and project management | Complete |
 | 2. Main UI and workspace | Complete |
-| 3. Import and image processing | In progress (images, PDF and non-destructive image adjustments; import progress/cancellation pending) |
+| 3. Import and image processing | Complete |
 | 4. Local OCR and layout detection | In progress (text OCR; layout pending) |
 | 5. Element extraction | Planned |
 | 6. AI integration and free usage first | Planned |

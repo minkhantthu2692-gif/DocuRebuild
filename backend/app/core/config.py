@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     ocr_timeout_seconds: int = 180
     ocr_max_image_edge: int = 4000
     ocr_max_workers: int = 2
+    # Local import worker. Imports are heavy (PDF rendering); keep the pool small
+    # so low-end machines are not overloaded.
+    import_max_workers: int = 2
 
     @property
     def database_path(self) -> Path:

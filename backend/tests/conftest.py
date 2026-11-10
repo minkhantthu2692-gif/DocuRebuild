@@ -14,6 +14,7 @@ def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
 
     from app.core.config import get_settings
     from app.db.session import dispose_engine
+    from app.services.imports import shutdown_import_executor
     from app.services.ocr import clear_engine_cache, shutdown_ocr_executor
 
     get_settings.cache_clear()
@@ -25,6 +26,7 @@ def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     with TestClient(create_app()) as test_client:
         yield test_client
 
+    shutdown_import_executor()
     shutdown_ocr_executor()
     clear_engine_cache()
     dispose_engine()

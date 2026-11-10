@@ -65,6 +65,31 @@ export interface ProjectDetail extends ProjectSummary {
 
 export type SourceKind = "image" | "pdf";
 export type PageStatus = "imported" | "processing" | "ready" | "failed";
+export type ImportJobStatus =
+  | "queued"
+  | "running"
+  | "cancelling"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+
+export interface ImportJob {
+  id: string;
+  kind: string;
+  status: ImportJobStatus;
+  /** Fraction from 0 to 1 based on completed pages. */
+  progress: number;
+  total_pages: number;
+  imported_pages: number;
+  current_file: string | null;
+  file_count: number;
+  filenames: string[];
+  error: string | null;
+  error_code: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
 
 export interface PageSummary {
   id: string;

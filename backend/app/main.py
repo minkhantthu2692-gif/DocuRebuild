@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.core.handlers import install_error_handlers
 from app.db.session import run_migrations
 from app.api.routes import health, ocr, projects, settings as settings_routes
+from app.services import imports as import_service
 from app.services import ocr as ocr_service
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ def create_app() -> FastAPI:
         run_migrations()
         logger.info("DocuRebuild local API ready (data dir: %s)", app_settings.data_dir)
         yield
+        import_service.shutdown_import_executor()
         ocr_service.shutdown_ocr_executor()
 
     app = FastAPI(

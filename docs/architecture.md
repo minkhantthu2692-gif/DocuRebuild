@@ -36,7 +36,8 @@ to the same local API; the API is not intended to be exposed publicly.
 | `db.project_schema` | Per-project SQLite schema and migrations |
 | `db.session` | SQLAlchemy engine/session and Alembic migration runner |
 | `services.projects` | Project CRUD, manifest, directory layout, trash, history |
-| `services.pages` | Import dispatch, image validation, EXIF orientation, display copies, thumbnails, PDF page records, rotation, ordering, stored-edit rendering, reference-counted deletion |
+| `services.pages` | Import validation, per-file/per-page import execution with progress and cancellation, image processing, display copies, thumbnails, PDF page records, rotation, ordering, stored-edit rendering, reference-counted deletion |
+| `services.imports` | Import job lifecycle: bounded worker, persisted progress, cooperative cancellation, interrupted-job recovery, localized failure codes |
 | `services.image_edits` | Canonical edit validation, geometry pipeline (crop/perspective/deskew), filter pipeline (grayscale, contrast, brightness, sharpness, denoise, threshold, shadow/background cleanup) and skew estimation |
 | `services.pdf` | PDF open/validation, page rendering, embedded text extraction, capability detection |
 | `services.layout` | Shared conservative heading/list/paragraph classification for OCR and embedded PDF text |
@@ -61,7 +62,7 @@ Each project owns a portable folder and its own `project.db`:
   `pdf_page_number` for PDF pages, status, and an `edits` JSON document holding the
   ordered geometry steps plus filter settings
 - `history_events` — append-only local event log
-- `jobs` — reserved for general background processing
+- `jobs` — background import jobs: status, progress, total/imported pages, current file, payload (file counts/names), error code/message and timestamps
 - `ocr_runs` — page extraction attempts: status, engine/version, languages, source asset, rotation, mean confidence, error, timestamps; embedded PDF text uses `engine = pdf-text` and a null confidence
 - `ocr_blocks` — reviewable text blocks with bbox, confidence, kind, line/word counts, correction and verification flags
 - `schema_migrations` — per-project migration versions
@@ -117,6 +118,22 @@ PDFs:
 - Deletion is reference-counted: the shared PDF asset file is moved to project
   trash only when the last page that references it is deleted.
 
+Batch imports:
+
+- Uploads are streamed to the local temp folder and validated before a job starts,
+  so unsupported, oversized, empty, unreadable or encrypted files are rejected
+  synchronously without creating project files.
+- A job row is persisted before work begins. The executor commits each file (and
+  each PDF page) in its own transaction, updating `imported_pages`, `progress` and
+  `current_file` as it goes.
+- Cancellation is cooperative and checked between files and pages. A cancelled or
+  failed file is rolled back with its pages, assets and files; files that already
+  completed are kept for jobs. The synchronous `/pages/import` wrapper keeps
+  all-or-nothing semantics for simple clients.
+- In-memory cancellation events identify live workers. A persisted job with an
+  active status but no live event is treated as interrupted and marked failed with
+  `import_interrupted` instead of staying "running" after a restart.
+
 ### API surface (current)
 
 ```text
@@ -135,6 +152,10 @@ GET    /api/projects/{id}/document
 PUT    /api/projects/{id}/document
 GET    /api/projects/{id}/pages
 POST   /api/projects/{id}/pages/import
+POST   /api/projects/{id}/imports
+GET    /api/projects/{id}/imports
+GET    /api/projects/{id}/imports/{job_id}
+POST   /api/projects/{id}/imports/{job_id}/cancel
 POST   /api/projects/{id}/pages/{page_id}/rotate
 PATCH  /api/projects/{id}/pages/{page_id}/edits
 POST   /api/projects/{id}/pages/{page_id}/edits/reset
@@ -181,6 +202,11 @@ src/
   dirty state remains visible. `Ctrl/Cmd+S` saves immediately.
 - A best-effort flush runs when leaving the workspace; it is not a substitute for
   revision history.
+- Imports start a job and poll it every 500 ms while active. The progress panel
+  shows completed/total pages, the current filename and a cancel action. The page
+  list is refreshed when the job settles, so a cancelled file cannot leave
+  thumbnails pointing at rolled-back assets. An active job found on load is
+  reattached rather than duplicated.
 
 ### Image adjustment workflow
 

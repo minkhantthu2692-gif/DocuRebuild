@@ -11,7 +11,7 @@ presented in the UI until it actually works.
 | 0. Foundation and architecture | **Complete** | Monorepo, tokens, contracts, API scaffold, migrations, tests |
 | 1. Local storage and project management | **Complete** | App/project DBs, folders, manifest, CRUD, trash |
 | 2. Main UI and workspace | **Complete** | Header navigation, dashboard, two-panel workspace, settings, i18n |
-| 3. Import and image processing | **In progress** | Image + PDF import, rotation and non-destructive image adjustments done; import progress/cancellation pending |
+| 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | Planned | Depends on Phase 4 |
 | 6. AI integration and free usage first | Planned | Depends on elements and review model |
@@ -73,7 +73,7 @@ for theme/language switching and mobile panel switching.
 
 ---
 
-## Phase 3 — Import and image processing (in progress)
+## Phase 3 — Import and image processing (complete)
 
 **Delivered**
 
@@ -94,6 +94,12 @@ for theme/language switching and mobile panel switching.
   reporting, and reference-counted deletion of a PDF shared by many pages.
 - PDF rotation re-renders from the original PDF and marks any embedded text run
   stale instead of reusing mismatched text.
+- Background import jobs for image and PDF files: persisted job status, page-level
+  progress, current filename, cancellation and localized failure codes.
+- Imports commit per file and per PDF page, so progress survives long batches.
+  Cancelling rolls back the file in progress while keeping files that already
+  finished; interrupted jobs are detected after a restart instead of staying
+  "running" forever.
 - Non-destructive image adjustments stored as JSON on the page: drag-to-select
   crop, four-corner perspective correction, automatic skew estimation and deskew,
   grayscale, contrast, brightness, sharpness, denoise, threshold (B&W), shadow
@@ -102,11 +108,9 @@ for theme/language switching and mobile panel switching.
 - Before/after preview against the rotated unprocessed page, per-step removal and
   one-click reset, so the processed version is fully reversible.
 
-**Remaining before completion**
-
-- Large-file and batch progress reporting.
-- Cancellable PDF import for very large documents (rendering is page-batched but
-  currently runs to completion once started).
+**Acceptance** — non-destructive imports and edits, visible and localized import
+progress/cancellation/failures, and tests covering images, PDFs, cancellation,
+failures and Burmese filenames all pass.
 
 **Dependencies** — PyMuPDF for PDF rendering (installed and verified); advanced
 image processing uses Pillow with no OpenCV dependency.
@@ -218,9 +222,9 @@ headers/footers, page numbers, find/replace, DOCX/TXT export and OMML validation
 - **Offline processing is bounded by hardware.** Browser-only PWA builds cannot
   run arbitrary Python/PyTorch stacks; capabilities must be reported honestly.
 - **Large documents need streaming.** Imports stream uploads and PDFs are rendered
-  one page at a time, but a batch still completes synchronously from the client's
-  point of view. Future work should add progress and cancellation for very large
-  batches.
+  one page at a time as background jobs with progress and cancellation. Cancellation
+  is cooperative: it is checked between files and PDF pages, so one very large page
+  render or image decode still has to finish before the job stops.
 - **SQLite on network shares is unsafe.** Connected devices must use the local
   API, not direct database access.
 - **Dependency audit.** ESLint/TypeScript-ESLint currently pull a vulnerable
@@ -229,7 +233,7 @@ headers/footers, page numbers, find/replace, DOCX/TXT export and OMML validation
 - **No revision history yet.** Autosave reduces loss but does not replace
   backups. Do not use this build as the only copy of important work.
 
-## Definition of done for the next milestone
+## Phase 3 definition of done (met)
 
 1. Advanced image processing operations are non-destructive and reversible.
 2. Import progress, cancellation and failures are visible and localized.

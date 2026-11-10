@@ -8,6 +8,16 @@
   "importing_other": "Importing {{count}} files…",
   "importSuccess_one": "Imported {{count}} page.",
   "importSuccess_other": "Imported {{count}} pages.",
+  "importProgress": {
+    "queued": "Waiting to import…",
+    "running": "Importing…",
+    "cancelling": "Cancelling import…",
+    "pages": "{{imported}} of {{total}} pages",
+    "file": "Current file: {{name}}",
+    "cancel": "Cancel import",
+    "cancelled_one": "Import cancelled. {{count}} finished page was kept.",
+    "cancelled_other": "Import cancelled. {{count}} finished pages were kept."
+  },
   "dropTitle": "Drop images here",
   "dropTitlePdf": "Drop images or PDFs here",
   "dropHint": "or click to browse",

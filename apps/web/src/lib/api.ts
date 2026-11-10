@@ -6,6 +6,7 @@ import type {
   DocumentRecord,
   EditorSettings,
   HealthStatus,
+  ImportJob,
   JSONContent,
   LanguageCode,
   OcrCapabilities,
@@ -108,16 +109,24 @@ export const api = {
     }),
 
   listPages: (projectId: string) => request<PageSummary[]>(`/projects/${projectId}/pages`),
-  importPages: (projectId: string, files: File[]) => {
+  startImport: (projectId: string, files: File[]) => {
     const form = new FormData();
     for (const file of files) {
       form.append("files", file);
     }
-    return request<PageSummary[]>(`/projects/${projectId}/pages/import`, {
+    return request<ImportJob>(`/projects/${projectId}/imports`, {
       method: "POST",
       body: form,
     });
   },
+  getImportJob: (projectId: string, jobId: string) =>
+    request<ImportJob>(`/projects/${projectId}/imports/${jobId}`),
+  listImportJobs: (projectId: string, limit = 10) =>
+    request<ImportJob[]>(`/projects/${projectId}/imports?limit=${limit}`),
+  cancelImportJob: (projectId: string, jobId: string) =>
+    request<ImportJob>(`/projects/${projectId}/imports/${jobId}/cancel`, {
+      method: "POST",
+    }),
   rotatePage: (projectId: string, pageId: string, degrees: number) =>
     request<PageSummary>(`/projects/${projectId}/pages/${pageId}/rotate`, {
       method: "POST",

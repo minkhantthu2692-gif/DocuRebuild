@@ -13,6 +13,7 @@ import {
   Trash2,
   Undo2,
   Upload,
+  X,
   ZoomIn,
   ZoomOut,
   type LucideIcon,
@@ -20,8 +21,9 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
-import type { PageSummary } from "@docurebuild/shared-types";
+import type { ImportJob, PageSummary } from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,11 +48,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAppMeta } from "@/hooks/use-app";
 import {
+  useCancelImportJob,
   useDeletePage,
-  useImportPages,
+  useImportJob,
+  useImportJobs,
   usePages,
   useReorderPages,
   useRotatePage,
+  useStartImport,
 } from "@/hooks/use-projects";
 import { api } from "@/lib/api";
 import {
@@ -75,6 +80,12 @@ type ViewScale =
 
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4;
+
+const ACTIVE_IMPORT_STATUSES: ReadonlySet<ImportJob["status"]> = new Set([
+  "queued",
+  "running",
+  "cancelling",
+]);
 
 function hasFiles(event: { dataTransfer: DataTransfer | null }): boolean {
   return Boolean(event.dataTransfer && Array.from(event.dataTransfer.types).includes("Files"));
@@ -200,16 +211,27 @@ function PageThumbnails({
 export function SourcePanel({ projectId, className, onContentInserted }: SourcePanelProps) {
   const { t } = useTranslation("workspace");
   const { t: tCommon } = useTranslation("common");
+  const { t: tError, i18n } = useTranslation("errors");
+  const queryClient = useQueryClient();
   const pagesQuery = usePages(projectId);
   const metaQuery = useAppMeta();
   const pages = useMemo(() => pagesQuery.data ?? [], [pagesQuery.data]);
   const meta = metaQuery.data;
 
-  const importPages = useImportPages(projectId);
+  const startImport = useStartImport(projectId);
+  const cancelImport = useCancelImportJob(projectId);
+  const importJobsQuery = useImportJobs(projectId);
   const rotatePage = useRotatePage(projectId);
   const deletePage = useDeletePage(projectId);
   const reorderPages = useReorderPages(projectId);
   const errorMessage = useApiErrorMessage();
+
+  const [importJobId, setImportJobId] = useState<string | null>(null);
+  const importJobQuery = useImportJob(projectId, importJobId);
+  const importJob = importJobQuery.data ?? null;
+  const importActive =
+    startImport.isPending ||
+    Boolean(importJob && ACTIVE_IMPORT_STATUSES.has(importJob.status));
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [scale, setScale] = useState<ViewScale>({ kind: "fit" });
@@ -219,6 +241,49 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   const [editsOpen, setEditsOpen] = useState(false);
   const dragDepth = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const handledJobRef = useRef<string | null>(null);
+  const resumeCheckedRef = useRef(false);
+
+  // Reattach to an import that was already running when the workspace loaded.
+  useEffect(() => {
+    if (resumeCheckedRef.current) return;
+    if (importJobId) {
+      resumeCheckedRef.current = true;
+      return;
+    }
+    if (!importJobsQuery.data) return;
+    resumeCheckedRef.current = true;
+    const active = importJobsQuery.data.find((job) => ACTIVE_IMPORT_STATUSES.has(job.status));
+    if (active) {
+      setImportJobId(active.id);
+    }
+  }, [importJobId, importJobsQuery.data]);
+
+  // Report the final outcome once, then stop polling. Pages are refreshed only
+  // after the job settles so a cancelled import never leaves thumbnails that
+  // point at files the backend has already rolled back.
+  useEffect(() => {
+    if (!importJob || ACTIVE_IMPORT_STATUSES.has(importJob.status)) return;
+    if (handledJobRef.current === importJob.id) return;
+    handledJobRef.current = importJob.id;
+
+    void queryClient.invalidateQueries({ queryKey: ["pages", projectId] });
+    void queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+    void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    void queryClient.invalidateQueries({ queryKey: ["import-jobs", projectId] });
+
+    if (importJob.status === "succeeded") {
+      toast.success(t("importSuccess", { count: importJob.imported_pages }));
+    } else if (importJob.status === "cancelled") {
+      toast.info(t("importProgress.cancelled", { count: importJob.imported_pages }));
+    } else {
+      const code = importJob.error_code;
+      toast.error(
+        code && i18n.exists(code, { ns: "errors" }) ? tError(code) : tError("generic"),
+      );
+    }
+    setImportJobId(null);
+  }, [importJob, projectId, queryClient, t, tError, i18n]);
 
   const selectedIndex = pages.findIndex((page) => page.id === selectedId);
   const currentPage = selectedIndex >= 0 ? pages[selectedIndex] : (pages[0] ?? null);
@@ -245,7 +310,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
 
   const handleFiles = (files: FileList | File[]) => {
     const list = Array.from(files);
-    if (list.length === 0 || importPages.isPending) return;
+    if (list.length === 0 || importActive) return;
 
     const { accepted, rejected } = partitionImportFiles(list, maxBytes, allowPdf);
     rejected.slice(0, 3).forEach(({ file, reason }) => {
@@ -269,11 +334,16 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
       return;
     }
 
-    importPages.mutate(accepted, {
-      onSuccess: (imported) => {
-        if (imported[0]) setSelectedId(imported[0].id);
-        toast.success(t("importSuccess", { count: imported.length }));
-      },
+    handledJobRef.current = null;
+    startImport.mutate(accepted, {
+      onSuccess: (job) => setImportJobId(job.id),
+      onError: (error) => toast.error(errorMessage(error)),
+    });
+  };
+
+  const requestCancelImport = () => {
+    if (!importJob || importJob.status === "cancelling") return;
+    cancelImport.mutate(importJob.id, {
       onError: (error) => toast.error(errorMessage(error)),
     });
   };
@@ -318,6 +388,10 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
 
   const zoomPercent =
     scale.kind === "fit" ? null : scale.kind === "actual" ? 100 : Math.round(scale.value * 100);
+
+  const importPercent = importJob
+    ? Math.round(Math.min(1, Math.max(0, importJob.progress)) * 100)
+    : 0;
 
   const imageStyle =
     currentPage && scale.kind !== "fit"
@@ -379,11 +453,11 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
             {pages.length}
           </Badge>
         ) : null}
-        {importPages.isPending ? (
+        {startImport.isPending ? (
           <span className="ml-1 flex items-center gap-1.5 text-2xs text-muted-foreground">
             <Spinner className="size-3.5" />
             <span className="hidden sm:inline">
-              {t("importing", { count: importPages.variables?.length ?? 0 })}
+              {t("importing", { count: startImport.variables?.length ?? 0 })}
             </span>
           </span>
         ) : null}
@@ -393,7 +467,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
             variant="ghost"
             size="sm"
             className="gap-1.5 px-2"
-            disabled={importPages.isPending}
+            disabled={importActive}
             onClick={() => inputRef.current?.click()}
           >
             <Upload />
@@ -447,6 +521,62 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
         </div>
       </header>
 
+      {importJob && ACTIVE_IMPORT_STATUSES.has(importJob.status) ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex shrink-0 items-start gap-3 border-b border-border/60 bg-background/40 px-3 py-2"
+        >
+          <Spinner className="mt-0.5 size-4 text-primary" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="truncate text-xs font-medium">
+                {importJob.status === "queued"
+                  ? t("importProgress.queued")
+                  : importJob.status === "cancelling"
+                    ? t("importProgress.cancelling")
+                    : t("importProgress.running")}
+              </span>
+              <span className="shrink-0 font-mono text-2xs text-muted-foreground">
+                {t("importProgress.pages", {
+                  imported: importJob.imported_pages,
+                  total: importJob.total_pages,
+                })}
+              </span>
+            </div>
+            <div
+              className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-label={t("importProgress.running")}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={importPercent}
+            >
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-base"
+                style={{ width: `${importPercent}%` }}
+              />
+            </div>
+            {importJob.current_file ? (
+              <p className="mt-1 truncate text-2xs text-muted-foreground">
+                {t("importProgress.file", { name: importJob.current_file })}
+              </p>
+            ) : null}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={importJob.status === "cancelling" || cancelImport.isPending}
+            onClick={requestCancelImport}
+          >
+            <X />
+            <span className="hidden sm:inline">{t("importProgress.cancel")}</span>
+            <span className="sr-only sm:hidden">{t("importProgress.cancel")}</span>
+          </Button>
+        </div>
+      ) : null}
+
       <input
         ref={inputRef}
         type="file"
@@ -487,11 +617,11 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            disabled={importPages.isPending}
+            disabled={importActive}
             className="focus-ring group flex w-full max-w-sm flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border/90 bg-background/40 px-6 py-12 text-center transition-colors hover:border-primary/50 hover:bg-primary/5 disabled:pointer-events-none disabled:opacity-60"
           >
             <span className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform duration-fast group-hover:scale-105">
-              {importPages.isPending ? <Spinner className="size-icon-lg" /> : <Upload className="size-icon-lg" />}
+              {importActive ? <Spinner className="size-icon-lg" /> : <Upload className="size-icon-lg" />}
             </span>
             <span className="space-y-1">
               <span className="block text-sm font-semibold tracking-tight">

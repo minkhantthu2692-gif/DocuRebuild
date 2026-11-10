@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
 from fastapi.testclient import TestClient
 
+from app.core.errors import AppError
+from app.services import pdf as pdf_service
 from tests.conftest import make_png, upload_pages
+from tests.test_pdf import make_pdf
 
 
 def test_import_creates_pages_thumbnails_and_immutable_sources(
@@ -28,6 +34,35 @@ def test_import_creates_pages_thumbnails_and_immutable_sources(
 
     detail = client.get(f"/api/projects/{project['id']}").json()
     assert detail["page_count"] == 2
+
+
+def test_sync_import_rolls_back_everything_when_a_later_file_fails(
+    client: TestClient, project: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The synchronous wrapper keeps all-or-nothing semantics."""
+    original = pdf_service.render_page
+
+    def flaky_render(document, index, dpi):
+        if index == 1:
+            raise AppError(422, "pdf_page_render_failed", "PDF page 2 could not be rendered.")
+        return original(document, index, dpi)
+
+    monkeypatch.setattr(pdf_service, "render_page", flaky_render)
+
+    response = client.post(
+        f"/api/projects/{project['id']}/pages/import",
+        files=[
+            ("files", ("first.png", make_png(), "image/png")),
+            ("files", ("broken.pdf", make_pdf(["First", "Second"]), "application/pdf")),
+        ],
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "pdf_page_render_failed"
+    assert client.get(f"/api/projects/{project['id']}/pages").json() == []
+
+    directory = Path(project["directory"])
+    assert list((directory / "source").iterdir()) == []
+    assert list((directory / "thumbnails").iterdir()) == []
 
 
 def test_unsupported_file_is_rejected(client: TestClient, project: dict) -> None:

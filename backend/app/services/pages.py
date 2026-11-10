@@ -4,7 +4,10 @@ import hashlib
 import json
 import logging
 import shutil
+import threading
 import uuid
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +25,24 @@ logger = logging.getLogger(__name__)
 THUMBNAIL_EDGE = 480
 PDF_EXTENSION = ".pdf"
 PDF_TEXT_ENGINE = "pdf-text"
+
+
+class ImportCancelled(Exception):
+    """Raised when a cooperative import cancellation is observed.
+
+    The exception deliberately carries no partial result. Callers inspect the
+    job row or the pages that were already committed to report progress.
+    """
+
+
+@dataclass(frozen=True)
+class ImportProgress:
+    imported_pages: int
+    total_pages: int
+    current_file: str | None
+
+
+ProgressCallback = Callable[[ImportProgress], None]
 
 # Formats the browser can display directly.
 BROWSER_SAFE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -166,6 +187,7 @@ def _import_image(
     height: int,
     page_number: int,
     created_files: list[Path],
+    created_assets: list[str] | None = None,
 ) -> dict[str, Any]:
     page_id = str(uuid.uuid4())
     original_id = str(uuid.uuid4())
@@ -198,6 +220,8 @@ def _import_image(
             width=display_width,
             height=display_height,
         )
+        if created_assets is not None:
+            created_assets.append(display_id)
 
     thumbnail_relative = f"thumbnails/{page_id}.webp"
     thumbnail_path = project_dir / thumbnail_relative
@@ -227,6 +251,8 @@ def _import_image(
         width=thumb_width,
         height=thumb_height,
     )
+    if created_assets is not None:
+        created_assets.extend([original_id, thumbnail_id])
 
     now = _now()
     conn.execute(
@@ -307,8 +333,7 @@ def _insert_embedded_text_run(
         )
 
 
-def _import_pdf(
-    conn,
+def _import_pdf_file(
     project_dir: Path,
     *,
     filename: str,
@@ -316,7 +341,16 @@ def _import_pdf(
     page_count: int,
     next_number: int,
     created_files: list[Path],
+    created_assets: list[str],
+    cancel: threading.Event | None = None,
+    on_page: Callable[[dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
+    """Import one PDF, committing each rendered page separately.
+
+    Committing per page keeps progress observable and limits how much work a
+    cancellation has to roll back. The immutable PDF is stored once and shared
+    by every page it produces.
+    """
     settings = get_settings()
     pdf_asset_id = str(uuid.uuid4())
     relative_source = f"source/{pdf_asset_id}.pdf"
@@ -324,24 +358,29 @@ def _import_pdf(
     source_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(temp_path), str(source_path))
     created_files.append(source_path)
+    created_assets.append(pdf_asset_id)
 
-    _insert_asset(
-        conn,
-        asset_id=pdf_asset_id,
-        kind="original",
-        relative_path=relative_source,
-        mime_type="application/pdf",
-        byte_size=source_path.stat().st_size,
-        checksum=_sha256(source_path),
-        width=None,
-        height=None,
-    )
+    with project_db(project_dir) as conn:
+        _insert_asset(
+            conn,
+            asset_id=pdf_asset_id,
+            kind="original",
+            relative_path=relative_source,
+            mime_type="application/pdf",
+            byte_size=source_path.stat().st_size,
+            checksum=_sha256(source_path),
+            width=None,
+            height=None,
+        )
 
     document = pdf_service.open_document(source_path)
     rows: list[dict[str, Any]] = []
     try:
         scale = settings.pdf_render_dpi / 72.0
         for index in range(page_count):
+            if cancel is not None and cancel.is_set():
+                raise ImportCancelled()
+
             page_id = str(uuid.uuid4())
             display_id = str(uuid.uuid4())
             thumbnail_id = str(uuid.uuid4())
@@ -360,81 +399,106 @@ def _import_pdf(
             created_files.append(thumbnail_path)
             image.close()
 
-            _insert_asset(
-                conn,
-                asset_id=display_id,
-                kind="processed",
-                relative_path=relative_display,
-                mime_type="image/png",
-                byte_size=display_path.stat().st_size,
-                checksum=None,
-                width=width,
-                height=height,
-            )
-            _insert_asset(
-                conn,
-                asset_id=thumbnail_id,
-                kind="thumbnail",
-                relative_path=thumbnail_relative,
-                mime_type="image/webp",
-                byte_size=thumb_size,
-                checksum=None,
-                width=thumb_width,
-                height=thumb_height,
-            )
-
-            now = _now()
-            conn.execute(
-                """
-                INSERT INTO pages (id, page_number, source_kind, status, width, height,
-                                   original_asset_id, display_asset_id, thumbnail_asset_id,
-                                   original_filename, rotation, pdf_page_number,
-                                   created_at, updated_at)
-                VALUES (?, ?, 'pdf', 'ready', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-                """,
-                (
-                    page_id,
-                    next_number + index,
-                    width,
-                    height,
-                    pdf_asset_id,
-                    display_id,
-                    thumbnail_id,
-                    filename,
-                    index + 1,
-                    now,
-                    now,
-                ),
-            )
-
-            text, blocks = pdf_service.extract_text(document, index, scale)
-            _insert_embedded_text_run(conn, page_id, display_id, text, blocks)
-            rows.append(
-                _page_payload(
-                    conn.execute(
-                        "SELECT * FROM pages WHERE id = ?", (page_id,)
-                    ).fetchone()
+            with project_db(project_dir) as conn:
+                _insert_asset(
+                    conn,
+                    asset_id=display_id,
+                    kind="processed",
+                    relative_path=relative_display,
+                    mime_type="image/png",
+                    byte_size=display_path.stat().st_size,
+                    checksum=None,
+                    width=width,
+                    height=height,
                 )
-            )
+                _insert_asset(
+                    conn,
+                    asset_id=thumbnail_id,
+                    kind="thumbnail",
+                    relative_path=thumbnail_relative,
+                    mime_type="image/webp",
+                    byte_size=thumb_size,
+                    checksum=None,
+                    width=thumb_width,
+                    height=thumb_height,
+                )
+
+                now = _now()
+                conn.execute(
+                    """
+                    INSERT INTO pages (id, page_number, source_kind, status, width, height,
+                                       original_asset_id, display_asset_id, thumbnail_asset_id,
+                                       original_filename, rotation, pdf_page_number,
+                                       created_at, updated_at)
+                    VALUES (?, ?, 'pdf', 'ready', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+                    """,
+                    (
+                        page_id,
+                        next_number + index,
+                        width,
+                        height,
+                        pdf_asset_id,
+                        display_id,
+                        thumbnail_id,
+                        filename,
+                        index + 1,
+                        now,
+                        now,
+                    ),
+                )
+
+                text, blocks = pdf_service.extract_text(document, index, scale)
+                _insert_embedded_text_run(conn, page_id, display_id, text, blocks)
+                row = _page_payload(
+                    conn.execute("SELECT * FROM pages WHERE id = ?", (page_id,)).fetchone()
+                )
+
+            created_assets.extend([display_id, thumbnail_id])
+            rows.append(row)
+            if on_page is not None:
+                on_page(row)
     finally:
         document.close()
     return rows
 
 
-def import_files(project_dir: Path, uploads: list[tuple[str, Path]]) -> list[dict[str, Any]]:
-    """Import validated temporary image or PDF files as immutable source pages.
+def _import_image_file(
+    project_dir: Path,
+    *,
+    filename: str,
+    temp_path: Path,
+    extension: str,
+    width: int,
+    height: int,
+    page_number: int,
+    created_files: list[Path],
+    created_assets: list[str],
+) -> dict[str, Any]:
+    with project_db(project_dir) as conn:
+        return _import_image(
+            conn,
+            project_dir,
+            filename=filename,
+            temp_path=temp_path,
+            extension=extension,
+            width=width,
+            height=height,
+            page_number=page_number,
+            created_files=created_files,
+            created_assets=created_assets,
+        )
 
-    Original uploads are stored once under ``source/`` and never modified again.
-    PDF pages are rendered into display copies; their embedded text layer (when
-    present) is stored as a reviewable extraction run.
+
+def inspect_uploads(uploads: list[tuple[str, Path]]) -> list[dict[str, Any]]:
+    """Validate uploads without mutating the project.
+
+    Every file is checked before the import starts so a bad file cannot leave a
+    half-imported batch. PDF page counts feed progress reporting.
     """
     if not uploads:
         raise AppError(400, "no_files", "No files were provided.")
 
     settings = get_settings()
-
-    # Validate every file before mutating the project so a bad file cannot
-    # leave a half-imported batch.
     inspected: list[dict[str, Any]] = []
     for filename, temp_path in uploads:
         extension = validate_import_name(filename)
@@ -463,61 +527,183 @@ def import_files(project_dir: Path, uploads: list[tuple[str, Path]]) -> list[dic
                 }
             )
             image.close()
+    return inspected
+
+
+def _next_page_number(project_dir: Path) -> int:
+    with project_db(project_dir) as conn:
+        return int(
+            conn.execute(
+                "SELECT COALESCE(MAX(page_number), 0) + 1 AS next FROM pages"
+            ).fetchone()["next"]
+        )
+
+
+def discard_temporary_uploads(uploads: list[tuple[str, Path]]) -> None:
+    for _filename, temp_path in uploads:
+        try:
+            Path(temp_path).unlink(missing_ok=True)
+        except OSError:  # pragma: no cover - best effort cleanup.
+            logger.warning("Could not remove temporary upload %s", temp_path)
+
+
+def _cleanup_import(
+    project_dir: Path,
+    page_ids: list[str],
+    asset_ids: list[str],
+    files: list[Path],
+) -> None:
+    """Remove pages, assets and files created by a failed or cancelled import."""
+    if page_ids or asset_ids:
+        try:
+            with project_db(project_dir) as conn:
+                for page_id in page_ids:
+                    conn.execute("DELETE FROM ocr_blocks WHERE page_id = ?", (page_id,))
+                    conn.execute("DELETE FROM ocr_runs WHERE page_id = ?", (page_id,))
+                    conn.execute("DELETE FROM pages WHERE id = ?", (page_id,))
+                for asset_id in asset_ids:
+                    conn.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
+                _renumber(conn)
+        except Exception:  # pragma: no cover - project may have been removed.
+            logger.exception("Could not roll back an interrupted import")
+
+    for path in files:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:  # pragma: no cover - best effort cleanup.
+            logger.warning("Could not remove imported file %s", path)
+
+
+def _add_import_history(project_dir: Path, count: int, *, cancelled: bool = False) -> None:
+    if cancelled:
+        event_type = "pages_import_cancelled"
+        summary = f"Imported {count} page(s) before the import was cancelled"
+    else:
+        event_type = "pages_imported"
+        summary = f"Imported {count} page(s)"
+    with project_db(project_dir) as conn:
+        conn.execute(
+            "INSERT INTO history_events (id, event_type, summary, payload, created_at)"
+            " VALUES (?, ?, ?, '{}', ?)",
+            (str(uuid.uuid4()), event_type, summary, _now()),
+        )
+
+
+def import_uploads(
+    project_dir: Path,
+    uploads: list[tuple[str, Path]],
+    *,
+    inspected: list[dict[str, Any]] | None = None,
+    cancel: threading.Event | None = None,
+    on_progress: ProgressCallback | None = None,
+    keep_completed_on_failure: bool = False,
+) -> list[dict[str, Any]]:
+    """Import validated temporary image or PDF files as immutable source pages.
+
+    Originals are stored once under ``source/`` and never modified again. Work is
+    committed per file (and per PDF page) so progress survives a long batch and a
+    cancellation only has to undo the file currently being processed.
+
+    ``keep_completed_on_failure`` keeps pages from files that finished before an
+    error or cancellation. The synchronous compatibility wrapper leaves it off
+    to preserve all-or-nothing behaviour for simple clients.
+    """
+    if not uploads:
+        raise AppError(400, "no_files", "No files were provided.")
+
+    items = inspected if inspected is not None else inspect_uploads(uploads)
+    total_pages = sum(int(item.get("page_count", 1)) for item in items)
+    next_number = _next_page_number(project_dir)
 
     imported: list[dict[str, Any]] = []
-    created_files: list[Path] = []
-    try:
-        with project_db(project_dir) as conn:
-            next_number = (
-                conn.execute(
-                    "SELECT COALESCE(MAX(page_number), 0) + 1 AS next FROM pages"
-                ).fetchone()["next"]
-            )
-            for item in inspected:
-                if item["extension"] == PDF_EXTENSION:
-                    rows = _import_pdf(
-                        conn,
-                        project_dir,
-                        filename=item["filename"],
-                        temp_path=item["temp_path"],
-                        page_count=item["page_count"],
-                        next_number=next_number,
-                        created_files=created_files,
-                    )
-                else:
-                    rows = [
-                        _import_image(
-                            conn,
-                            project_dir,
-                            filename=item["filename"],
-                            temp_path=item["temp_path"],
-                            extension=item["extension"],
-                            width=item["width"],
-                            height=item["height"],
-                            page_number=next_number,
-                            created_files=created_files,
-                        )
-                    ]
-                imported.extend(rows)
-                next_number += len(rows)
+    completed_pages: list[str] = []
+    completed_assets: list[str] = []
+    completed_files: list[Path] = []
+    file_pages: list[str] = []
+    file_assets: list[str] = []
+    file_files: list[Path] = []
 
-            conn.execute(
-                "INSERT INTO history_events (id, event_type, summary, payload, created_at)"
-                " VALUES (?, 'pages_imported', ?, ?, ?)",
-                (
-                    str(uuid.uuid4()),
-                    f"Imported {len(imported)} page(s)",
-                    "{}",
-                    _now(),
-                ),
-            )
-    except Exception:
-        for path in created_files:
-            path.unlink(missing_ok=True)
-        for _filename, temp_path in uploads:
-            temp_path.unlink(missing_ok=True)
+    def report(filename: str | None) -> None:
+        if on_progress is not None:
+            on_progress(ImportProgress(len(imported), total_pages, filename))
+
+    try:
+        for item in items:
+            if cancel is not None and cancel.is_set():
+                raise ImportCancelled()
+
+            file_pages, file_assets, file_files = [], [], []
+            filename = item["filename"]
+            report(filename)
+
+            if item["extension"] == PDF_EXTENSION:
+
+                def handle_page(row: dict[str, Any]) -> None:
+                    imported.append(row)
+                    file_pages.append(row["id"])
+                    report(filename)
+
+                rows = _import_pdf_file(
+                    project_dir,
+                    filename=filename,
+                    temp_path=item["temp_path"],
+                    page_count=int(item["page_count"]),
+                    next_number=next_number,
+                    created_files=file_files,
+                    created_assets=file_assets,
+                    cancel=cancel,
+                    on_page=handle_page,
+                )
+            else:
+                row = _import_image_file(
+                    project_dir,
+                    filename=filename,
+                    temp_path=item["temp_path"],
+                    extension=item["extension"],
+                    width=int(item["width"]),
+                    height=int(item["height"]),
+                    page_number=next_number,
+                    created_files=file_files,
+                    created_assets=file_assets,
+                )
+                imported.append(row)
+                file_pages.append(row["id"])
+                rows = [row]
+                report(filename)
+
+            next_number += len(rows)
+            completed_pages.extend(file_pages)
+            completed_assets.extend(file_assets)
+            completed_files.extend(file_files)
+            file_pages, file_assets, file_files = [], [], []
+
+        _add_import_history(project_dir, len(imported))
+        return imported
+    except ImportCancelled as exc:
+        kept_pages = len(completed_pages) if keep_completed_on_failure else 0
+        _cleanup_import(project_dir, file_pages, file_assets, file_files)
+        if not keep_completed_on_failure:
+            _cleanup_import(project_dir, completed_pages, completed_assets, completed_files)
+        elif completed_pages:
+            _add_import_history(project_dir, len(completed_pages), cancelled=True)
+        file_pages, file_assets, file_files = [], [], []
+        discard_temporary_uploads(uploads)
+        exc.imported_pages = kept_pages  # type: ignore[attr-defined]
         raise
-    return imported
+    except Exception as exc:
+        kept_pages = len(completed_pages) if keep_completed_on_failure else 0
+        _cleanup_import(project_dir, file_pages, file_assets, file_files)
+        if not keep_completed_on_failure:
+            _cleanup_import(project_dir, completed_pages, completed_assets, completed_files)
+        file_pages, file_assets, file_files = [], [], []
+        discard_temporary_uploads(uploads)
+        exc.imported_pages = kept_pages  # type: ignore[attr-defined]
+        raise
+
+
+def import_files(project_dir: Path, uploads: list[tuple[str, Path]]) -> list[dict[str, Any]]:
+    """Synchronous, all-or-nothing import used by simple API clients and tests."""
+    return import_uploads(project_dir, uploads, keep_completed_on_failure=False)
 
 
 def list_pages(project_dir: Path) -> list[dict[str, Any]]:

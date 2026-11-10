@@ -1,7 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { PageSummary, PageEdits } from "@docurebuild/shared-types";
+import type { ImportJob, PageSummary, PageEdits } from "@docurebuild/shared-types";
 
 import { api, type ProjectCreatePayload } from "@/lib/api";
+
+const ACTIVE_IMPORT_STATUSES: ReadonlySet<ImportJob["status"]> = new Set([
+  "queued",
+  "running",
+  "cancelling",
+]);
+
+function isImportActive(job: ImportJob | null | undefined): boolean {
+  return Boolean(job && ACTIVE_IMPORT_STATUSES.has(job.status));
+}
 
 export function useProjects() {
   return useQuery({
@@ -66,18 +76,6 @@ export function usePages(projectId: string | undefined) {
     queryKey: ["pages", projectId],
     queryFn: () => api.listPages(projectId as string),
     enabled: Boolean(projectId),
-  });
-}
-
-export function useImportPages(projectId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (files: File[]) => api.importPages(projectId, files),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["pages", projectId] });
-      void queryClient.invalidateQueries({ queryKey: ["project", projectId] });
-      void queryClient.invalidateQueries({ queryKey: ["projects"] });
-    },
   });
 }
 
@@ -147,5 +145,41 @@ export function useResetPageEdits(projectId: string) {
 export function useEstimatePageSkew(projectId: string) {
   return useMutation({
     mutationFn: (pageId: string) => api.estimatePageSkew(projectId, pageId),
+  });
+}
+
+export function useStartImport(projectId: string) {
+  return useMutation({
+    mutationFn: (files: File[]) => api.startImport(projectId, files),
+  });
+}
+
+export function useImportJob(projectId: string, jobId: string | null) {
+  return useQuery({
+    queryKey: ["import-job", projectId, jobId],
+    queryFn: () => api.getImportJob(projectId, jobId as string),
+    enabled: Boolean(jobId),
+    refetchOnWindowFocus: false,
+    refetchInterval: (query) =>
+      isImportActive(query.state.data) ? 500 : false,
+  });
+}
+
+export function useImportJobs(projectId: string) {
+  return useQuery({
+    queryKey: ["import-jobs", projectId],
+    queryFn: () => api.listImportJobs(projectId, 5),
+    refetchOnWindowFocus: false,
+    staleTime: 5_000,
+  });
+}
+
+export function useCancelImportJob(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: string) => api.cancelImportJob(projectId, jobId),
+    onSuccess: (job) => {
+      queryClient.setQueryData(["import-job", projectId, job.id], job);
+    },
   });
 }

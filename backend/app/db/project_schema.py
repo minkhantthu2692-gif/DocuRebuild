@@ -135,6 +135,18 @@ PROJECT_MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE pages ADD COLUMN edits TEXT NOT NULL DEFAULT '{}';
         """,
     ),
+    (
+        5,
+        """
+        ALTER TABLE jobs ADD COLUMN completed_at TEXT;
+        ALTER TABLE jobs ADD COLUMN total_pages INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE jobs ADD COLUMN imported_pages INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE jobs ADD COLUMN current_file TEXT;
+        ALTER TABLE jobs ADD COLUMN error_code TEXT;
+        CREATE INDEX IF NOT EXISTS idx_jobs_kind_status
+            ON jobs(kind, status, created_at DESC);
+        """,
+    ),
 ]
 
 

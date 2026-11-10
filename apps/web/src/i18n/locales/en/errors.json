@@ -33,6 +33,11 @@
   "ocr_timeout": "OCR timed out. Try a smaller page or increase the OCR timeout.",
   "ocr_failed": "OCR could not read this page. Check the local engine and try again.",
   "ocr_worker_unavailable": "The local OCR worker is not available.",
+  "import_job_not_found": "This import job could not be found.",
+  "import_not_running": "This import has already finished and cannot be cancelled.",
+  "import_failed": "The import could not be completed. Check the selected files and try again.",
+  "import_interrupted": "The import was interrupted before it finished. Pages that were already saved have been kept.",
+  "import_worker_unavailable": "The local import worker is not available. Restart the app and try again.",
   "not_found": "The requested item could not be found.",
   "internal_error": "The local backend encountered an unexpected error."
 }
