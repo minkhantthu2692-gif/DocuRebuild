@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import shutil
 import uuid
@@ -13,6 +14,7 @@ from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.storage import resolve_within
 from app.db.project_schema import project_db, utc_iso
+from app.services import image_edits as edits_service
 from app.services import pdf as pdf_service
 
 logger = logging.getLogger(__name__)
@@ -45,6 +47,13 @@ Image.MAX_IMAGE_PIXELS = 180_000_000
 
 def _now() -> str:
     return utc_iso()
+
+
+def _page_payload(row) -> dict[str, Any]:
+    """Serialise a page row, decoding the stored edit document."""
+    payload = dict(row)
+    payload["edits"] = edits_service.decode_edits(payload.get("edits"))
+    return payload
 
 
 def normalise_extension(filename: str) -> str:
@@ -240,7 +249,9 @@ def _import_image(
             now,
         ),
     )
-    return dict(conn.execute("SELECT * FROM pages WHERE id = ?", (page_id,)).fetchone())
+    return _page_payload(
+        conn.execute("SELECT * FROM pages WHERE id = ?", (page_id,)).fetchone()
+    )
 
 
 def _insert_embedded_text_run(
@@ -399,7 +410,7 @@ def _import_pdf(
             text, blocks = pdf_service.extract_text(document, index, scale)
             _insert_embedded_text_run(conn, page_id, display_id, text, blocks)
             rows.append(
-                dict(
+                _page_payload(
                     conn.execute(
                         "SELECT * FROM pages WHERE id = ?", (page_id,)
                     ).fetchone()
@@ -512,7 +523,7 @@ def import_files(project_dir: Path, uploads: list[tuple[str, Path]]) -> list[dic
 def list_pages(project_dir: Path) -> list[dict[str, Any]]:
     with project_db(project_dir) as conn:
         rows = conn.execute("SELECT * FROM pages ORDER BY page_number ASC").fetchall()
-    return [dict(row) for row in rows]
+    return [_page_payload(row) for row in rows]
 
 
 def _get_page(conn, page_id: str):
@@ -553,91 +564,96 @@ def _update_thumbnail(path: Path, image: Image.Image) -> tuple[int, int, int]:
     return _write_thumbnail(image, path)
 
 
-def rotate_page(project_dir: Path, page_id: str, degrees: int) -> dict[str, Any]:
-    settings = get_settings()
-    with project_db(project_dir) as conn:
-        page = _get_page(conn, page_id)
-        original_id = page["original_asset_id"]
-        if not original_id:
-            raise AppError(409, "page_missing_source", "This page has no source image.")
-        original_path = _asset_path(conn, project_dir, original_id)
-        total = (int(page["rotation"]) + degrees) % 360
+def _load_page_source(conn, project_dir: Path, page) -> Image.Image:
+    """Return the immutable page source with no processing applied."""
+    original_id = page["original_asset_id"]
+    if not original_id:
+        raise AppError(409, "page_missing_source", "This page has no source image.")
+    original_path = _asset_path(conn, project_dir, original_id)
+
+    if page["source_kind"] == "pdf":
+        settings = get_settings()
+        # Always re-render from the immutable PDF page so repeated edits never
+        # accumulate resampling artifacts.
+        document = pdf_service.open_document(original_path)
+        try:
+            index = max(0, int(page["pdf_page_number"] or 1) - 1)
+            return pdf_service.render_page(document, index, settings.pdf_render_dpi)
+        finally:
+            document.close()
+    return _load_image(original_path)
+
+
+def _render_page(source: Image.Image, rotation: int, edits: dict[str, Any]) -> Image.Image:
+    rendered = (
+        source.rotate(rotation, expand=True, resample=Image.Resampling.BICUBIC)
+        if rotation
+        else source
+    )
+    if edits_service.has_edits(edits):
+        rendered = edits_service.apply_edits(rendered, edits)
+    return rendered
+
+
+def _needs_display(page, rotation: int, edits: dict[str, Any]) -> bool:
+    # PDF pages always need a browser-safe render. Image pages only need a
+    # display copy once a transform makes the original unsuitable to show.
+    if page["source_kind"] == "pdf":
+        return True
+    return rotation != 0 or edits_service.has_edits(edits)
+
+
+def _save_display(
+    conn, project_dir: Path, page_id: str, rendered: Image.Image, suffix: str
+) -> str:
+    display_id = str(uuid.uuid4())
+    relative_display = f"processed/{page_id}-{suffix}-{uuid.uuid4().hex[:8]}.png"
+    display_path = project_dir / relative_display
+    display_path.parent.mkdir(parents=True, exist_ok=True)
+    _flatten_for_web(rendered).save(display_path, format="PNG", optimize=False)
+    _insert_asset(
+        conn,
+        asset_id=display_id,
+        kind="processed",
+        relative_path=relative_display,
+        mime_type="image/png",
+        byte_size=display_path.stat().st_size,
+        checksum=None,
+        width=rendered.width,
+        height=rendered.height,
+    )
+    return display_id
+
+
+def _rerender_page(
+    conn,
+    project_dir: Path,
+    page,
+    *,
+    rotation: int,
+    edits: dict[str, Any],
+    suffix: str,
+) -> dict[str, Any]:
+    """Rebuild the display copy and thumbnail from the immutable source."""
+    page_id = page["id"]
+    source = _load_page_source(conn, project_dir, page)
+    rendered = source
+    try:
+        rendered = _render_page(source, rotation, edits)
+        _remove_display_asset(conn, project_dir, page)
+
+        if _needs_display(page, rotation, edits):
+            display_id = _save_display(conn, project_dir, page_id, rendered, suffix)
+            width, height = rendered.width, rendered.height
+        else:
+            display_id = None
+            width, height = source.width, source.height
 
         thumbnail_path = project_dir / "thumbnails" / f"{page_id}.webp"
+        thumb_width, thumb_height, thumb_size = _update_thumbnail(thumbnail_path, rendered)
         thumb_asset = conn.execute(
             "SELECT * FROM assets WHERE id = ?", (page["thumbnail_asset_id"],)
         ).fetchone()
-
-        if page["source_kind"] == "pdf":
-            # Re-render from the immutable PDF page so repeated rotations never
-            # accumulate resampling artifacts. A display copy always exists.
-            document = pdf_service.open_document(original_path)
-            try:
-                index = max(0, int(page["pdf_page_number"] or 1) - 1)
-                base = pdf_service.render_page(document, index, settings.pdf_render_dpi)
-            finally:
-                document.close()
-
-            rendered = (
-                base.rotate(total, expand=True, resample=Image.Resampling.BICUBIC)
-                if total
-                else base
-            )
-            _remove_display_asset(conn, project_dir, page)
-            display_id = str(uuid.uuid4())
-            relative_display = f"processed/{page_id}-page-{total}.png"
-            display_path = project_dir / relative_display
-            display_path.parent.mkdir(parents=True, exist_ok=True)
-            _flatten_for_web(rendered).save(display_path, format="PNG", optimize=False)
-            _insert_asset(
-                conn,
-                asset_id=display_id,
-                kind="processed",
-                relative_path=relative_display,
-                mime_type="image/png",
-                byte_size=display_path.stat().st_size,
-                checksum=None,
-                width=rendered.width,
-                height=rendered.height,
-            )
-            width, height = rendered.width, rendered.height
-            thumb_width, thumb_height, thumb_size = _update_thumbnail(thumbnail_path, rendered)
-            if rendered is not base:
-                rendered.close()
-            base.close()
-        else:
-            image = _load_image(original_path)
-            _remove_display_asset(conn, project_dir, page)
-
-            if total == 0:
-                display_id = None
-                width, height = image.width, image.height
-                rendered = image
-            else:
-                rendered = image.rotate(total, expand=True, resample=Image.Resampling.BICUBIC)
-                display_id = str(uuid.uuid4())
-                relative_display = f"processed/{page_id}-rotate-{total}.png"
-                display_path = project_dir / relative_display
-                display_path.parent.mkdir(parents=True, exist_ok=True)
-                _flatten_for_web(rendered).save(display_path, format="PNG", optimize=False)
-                _insert_asset(
-                    conn,
-                    asset_id=display_id,
-                    kind="processed",
-                    relative_path=relative_display,
-                    mime_type="image/png",
-                    byte_size=display_path.stat().st_size,
-                    checksum=None,
-                    width=rendered.width,
-                    height=rendered.height,
-                )
-                width, height = rendered.width, rendered.height
-
-            thumb_width, thumb_height, thumb_size = _update_thumbnail(thumbnail_path, rendered)
-            image.close()
-            if rendered is not image:
-                rendered.close()
-
         if thumb_asset is not None:
             conn.execute(
                 "UPDATE assets SET width = ?, height = ?, byte_size = ? WHERE id = ?",
@@ -646,11 +662,123 @@ def rotate_page(project_dir: Path, page_id: str, degrees: int) -> dict[str, Any]
 
         conn.execute(
             "UPDATE pages SET rotation = ?, width = ?, height = ?, display_asset_id = ?,"
-            " updated_at = ? WHERE id = ?",
-            (total, width, height, display_id, _now(), page_id),
+            " edits = ?, updated_at = ? WHERE id = ?",
+            (
+                rotation,
+                width,
+                height,
+                display_id,
+                json.dumps(edits, separators=(",", ":"), sort_keys=True),
+                _now(),
+                page_id,
+            ),
         )
-        row = conn.execute("SELECT * FROM pages WHERE id = ?", (page_id,)).fetchone()
-        return dict(row)
+        return _page_payload(
+            conn.execute("SELECT * FROM pages WHERE id = ?", (page_id,)).fetchone()
+        )
+    finally:
+        if rendered is not source:
+            rendered.close()
+        source.close()
+
+
+def rotate_page(project_dir: Path, page_id: str, degrees: int) -> dict[str, Any]:
+    with project_db(project_dir) as conn:
+        page = _get_page(conn, page_id)
+        edits = edits_service.decode_edits(page["edits"])
+        total = (int(page["rotation"]) + degrees) % 360
+        return _rerender_page(
+            conn,
+            project_dir,
+            page,
+            rotation=total,
+            edits=edits,
+            suffix=f"rotate-{total}",
+        )
+
+
+def update_page_edits(
+    project_dir: Path, page_id: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    edits = edits_service.normalise_edits(payload)
+    with project_db(project_dir) as conn:
+        page = _get_page(conn, page_id)
+        row = _rerender_page(
+            conn,
+            project_dir,
+            page,
+            rotation=int(page["rotation"]),
+            edits=edits,
+            suffix="edit",
+        )
+        conn.execute(
+            "INSERT INTO history_events (id, event_type, summary, payload, created_at)"
+            " VALUES (?, 'page_processed', ?, '{}', ?)",
+            (str(uuid.uuid4()), "Updated page processing", _now()),
+        )
+        return row
+
+
+def reset_page_edits(project_dir: Path, page_id: str) -> dict[str, Any]:
+    empty = edits_service.normalise_edits({})
+    with project_db(project_dir) as conn:
+        page = _get_page(conn, page_id)
+        row = _rerender_page(
+            conn,
+            project_dir,
+            page,
+            rotation=int(page["rotation"]),
+            edits=empty,
+            suffix="reset",
+        )
+        conn.execute(
+            "INSERT INTO history_events (id, event_type, summary, payload, created_at)"
+            " VALUES (?, 'page_edits_reset', ?, '{}', ?)",
+            (str(uuid.uuid4()), "Reset page processing", _now()),
+        )
+        return row
+
+
+def base_page_preview(project_dir: Path, page_id: str) -> Path:
+    """Render the rotated page without processing, for before/after comparison."""
+    settings = get_settings()
+    with project_db(project_dir) as conn:
+        page = _get_page(conn, page_id)
+        source = _load_page_source(conn, project_dir, page)
+        rotation = int(page["rotation"])
+    try:
+        rotated = (
+            source.rotate(rotation, expand=True, resample=Image.Resampling.BICUBIC)
+            if rotation
+            else source
+        )
+        target = settings.tmp_dir / f"preview-{page_id}-{rotation}.png"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _flatten_for_web(rotated).save(target, format="PNG", optimize=False)
+        if rotated is not source:
+            rotated.close()
+        return target
+    finally:
+        source.close()
+
+
+def estimate_page_skew(project_dir: Path, page_id: str) -> float:
+    """Suggest a straightening angle for the current crop/perspective."""
+    with project_db(project_dir) as conn:
+        page = _get_page(conn, page_id)
+        edits = edits_service.decode_edits(page["edits"])
+        rotation = int(page["rotation"])
+        source = _load_page_source(conn, project_dir, page)
+    images: list[Image.Image] = [source]
+    try:
+        current = _render_page(source, rotation, edits_service.geometry_without_deskew(edits))
+        if current is not source:
+            images.append(current)
+        return edits_service.estimate_skew_angle(current)
+    finally:
+        for image in images:
+            image.close()
+
 
 
 def delete_page(project_dir: Path, page_id: str) -> None:
@@ -724,7 +852,7 @@ def reorder_pages(project_dir: Path, page_ids: list[str]) -> list[dict[str, Any]
                 (index, _now(), page_id),
             )
         rows = conn.execute("SELECT * FROM pages ORDER BY page_number ASC").fetchall()
-    return [dict(row) for row in rows]
+    return [_page_payload(row) for row in rows]
 
 
 def get_asset_file(project_dir: Path, asset_id: str) -> tuple[Path, str]:

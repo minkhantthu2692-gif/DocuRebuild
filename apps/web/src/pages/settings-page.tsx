@@ -57,7 +57,7 @@ const ROADMAP: Array<{
 }> = [
   { key: "foundation", status: "done" },
   { key: "import", status: "done" },
-  { key: "pdf", status: "planned" },
+  { key: "pdf", status: "done" },
   { key: "processing", status: "inProgress" },
   { key: "ocr", status: "inProgress" },
   { key: "ai", status: "planned" },

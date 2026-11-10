@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { PageSummary } from "@docurebuild/shared-types";
+import type { PageSummary, PageEdits } from "@docurebuild/shared-types";
 
 import { api, type ProjectCreatePayload } from "@/lib/api";
 
@@ -114,5 +114,38 @@ export function useReorderPages(projectId: string) {
     onSuccess: (pages) => {
       queryClient.setQueryData(["pages", projectId], pages);
     },
+  });
+}
+
+export function useUpdatePageEdits(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ pageId, edits }: { pageId: string; edits: PageEdits }) =>
+      api.updatePageEdits(projectId, pageId, edits),
+    onSuccess: (page) => {
+      queryClient.setQueryData<PageSummary[]>(["pages", projectId], (current) =>
+        current?.map((item) => (item.id === page.id ? page : item)),
+      );
+      void queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+    },
+  });
+}
+
+export function useResetPageEdits(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (pageId: string) => api.resetPageEdits(projectId, pageId),
+    onSuccess: (page) => {
+      queryClient.setQueryData<PageSummary[]>(["pages", projectId], (current) =>
+        current?.map((item) => (item.id === page.id ? page : item)),
+      );
+      void queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+    },
+  });
+}
+
+export function useEstimatePageSkew(projectId: string) {
+  return useMutation({
+    mutationFn: (pageId: string) => api.estimatePageSkew(projectId, pageId),
   });
 }

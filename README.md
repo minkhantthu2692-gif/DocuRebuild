@@ -7,14 +7,14 @@ and editable documents. It keeps original source files immutable, keeps project
 data on your device, and treats every AI result as a reviewable proposal.
 
 > **Project status — early development (Phase 4 of 12).**
-> The workspace, local project storage, image and PDF import, the rich-text
-> editor and local Tesseract OCR are implemented. PDF pages are rendered locally
-> and embedded text layers are stored as reviewable proposals; image-only PDF
-> pages can be processed with OCR. OCR and PDF import are only advertised when
-> their local dependencies actually work. AI providers, element reconstruction,
-> export, history and advanced image processing are **not implemented yet** and
-> are clearly marked as unavailable in the UI. Nothing in this repository fakes
-> those features.
+> The workspace, local project storage, image and PDF import, non-destructive
+> image adjustments, the rich-text editor and local Tesseract OCR are implemented.
+> PDF pages are rendered locally and embedded text layers are stored as reviewable
+> proposals; image-only PDF pages can be processed with OCR. OCR and PDF import
+> are only advertised when their local dependencies actually work. AI providers,
+> element reconstruction, export, history and import progress reporting are
+> **not implemented yet** and are clearly marked as unavailable in the UI. Nothing
+> in this repository fakes those features.
 
 ---
 
@@ -37,6 +37,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   rotation with non-destructive display copies, page reordering and page deletion.
   PDF pages are re-rendered from the original PDF when rotated, so repeated
   rotations do not accumulate resampling artifacts.
+- **Non-destructive image adjustments** — drag-to-select crop, four-corner
+  perspective correction, straighten with automatic skew estimation, grayscale,
+  contrast, brightness, sharpness, denoise, threshold (B&W), shadow removal and
+  background cleanup. Edits are stored on the page and re-rendered from the
+  immutable source, with a before/after comparison and one-click reset.
 - **Local OCR (optional)** — Tesseract runs on the local machine when installed.
   English and Burmese language data are supported. Results include text blocks,
   confidence values and source bounding boxes; each block can be corrected,
@@ -53,10 +58,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 ### Not available yet
 
-Advanced image processing (crop, deskew, perspective correction, contrast,
-sharpening, denoising, thresholding, shadow removal, background cleanup and
-processed-version comparison), full layout detection (tables, figures, equations,
-headers and footers), AI providers, DOCX/TXT export, revision history,
+Full layout detection (tables, figures, equations, headers and footers), AI
+providers, DOCX/TXT export, revision history, import progress reporting,
 backups/restore UI, desktop packaging and PWA install support are planned but not
 implemented. OCR currently extracts text blocks and reading order; it does not yet
 detect tables, figures or equations. See [`docs/roadmap.md`](docs/roadmap.md).
@@ -319,7 +322,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 0. Foundation and architecture | Complete |
 | 1. Local storage and project management | Complete |
 | 2. Main UI and workspace | Complete |
-| 3. Import and image processing | In progress (images and PDF; advanced image processing pending) |
+| 3. Import and image processing | In progress (images, PDF and non-destructive image adjustments; import progress/cancellation pending) |
 | 4. Local OCR and layout detection | In progress (text OCR; layout pending) |
 | 5. Element extraction | Planned |
 | 6. AI integration and free usage first | Planned |

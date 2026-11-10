@@ -167,6 +167,51 @@
     "sourceNote": "Source: page {{page}} · OCR · {{confidence}}% confidence · {{status}}",
     "noSelection": "Select at least one text block to insert."
   },
+  "edits": {
+    "open": "Adjust image",
+    "title": "Edit page {{page}}",
+    "description": "Apply non-destructive adjustments. The original image is never modified.",
+    "applied": "Adjustments applied.",
+    "reset": "Reset adjustments",
+    "compareBase": "Compare with original",
+    "compareEdited": "Back to adjusted view",
+    "tooManySteps": "Maximum of 8 geometry steps reached.",
+    "geometry": {
+      "title": "Geometry",
+      "crop": "Crop",
+      "perspective": "Perspective",
+      "deskew": "Straighten",
+      "applied": "Applied steps",
+      "cropRect": "Crop: {{x}}%, {{y}}% {{w}}% × {{h}}%",
+      "deskewAngle": "Straighten: {{angle}}°",
+      "remove": "Remove step {{index}}"
+    },
+    "filters": {
+      "title": "Filters",
+      "grayscale": "Grayscale",
+      "contrast": "Contrast",
+      "brightness": "Brightness",
+      "sharpness": "Sharpness",
+      "denoise": "Denoise",
+      "off": "Off",
+      "shadowRemoval": "Shadow removal",
+      "backgroundCleanup": "Background cleanup",
+      "threshold": "Threshold (B&W)",
+      "thresholdLevel": "Threshold level"
+    },
+    "deskew": {
+      "alreadyStraight": "The page appears straight already.",
+      "applied": "Straightened by {{angle}}°."
+    },
+    "crop": {
+      "hint": "Drag on the image to select the crop area."
+    },
+    "perspective": {
+      "hint": "Drag the four corner handles to frame the document. Press Enter to apply.",
+      "corner": "Corner {{index}}",
+      "tooSmall": "The selected area is too small. Move the corners further apart."
+    }
+  },
   "tools": {
     "title": "Reconstruction tools",
     "ocr": "Extract text (OCR)",

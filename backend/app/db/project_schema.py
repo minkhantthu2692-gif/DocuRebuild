@@ -129,6 +129,12 @@ PROJECT_MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE pages ADD COLUMN pdf_page_number INTEGER;
         """,
     ),
+    (
+        4,
+        """
+        ALTER TABLE pages ADD COLUMN edits TEXT NOT NULL DEFAULT '{}';
+        """,
+    ),
 ]
 
 

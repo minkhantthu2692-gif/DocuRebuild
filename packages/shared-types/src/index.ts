@@ -80,8 +80,47 @@ export interface PageSummary {
   rotation: number;
   /** 1-based page number inside the original PDF, or null for image pages. */
   pdf_page_number: number | null;
+  /** Stored non-destructive edit operations (crop, perspective, deskew, filters). */
+  edits: PageEdits;
   created_at: string;
   updated_at: string;
+}
+
+export interface PageEdits {
+  geometry: PageGeometryStep[];
+  filters: PageFilters;
+}
+
+export type PageGeometryType = "crop" | "perspective" | "deskew";
+
+export interface PageGeometryStep {
+  type: PageGeometryType;
+  rect?: PageCropRect;
+  corners?: PagePerspectiveCorners;
+  angle?: number;
+}
+
+export interface PageCropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface PagePerspectiveCorners {
+  [index: number]: [number, number];
+}
+
+export interface PageFilters {
+  grayscale: boolean;
+  contrast: number;
+  brightness: number;
+  sharpness: number;
+  denoise: number;
+  shadow_removal: boolean;
+  background_cleanup: boolean;
+  threshold: boolean;
+  threshold_level: number;
 }
 
 export interface ProjectManifest {

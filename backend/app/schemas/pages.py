@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -16,6 +18,7 @@ class PageOut(BaseModel):
     original_filename: str | None
     rotation: int
     pdf_page_number: int | None = None
+    edits: dict[str, Any] = Field(default_factory=dict)
     created_at: str
     updated_at: str
 
@@ -33,3 +36,11 @@ class RotateRequest(BaseModel):
 
 class ReorderRequest(BaseModel):
     page_ids: list[str] = Field(default_factory=list)
+
+
+class EditsRequest(BaseModel):
+    edits: dict[str, Any] = Field(default_factory=dict)
+
+
+class DeskewEstimate(BaseModel):
+    angle: float

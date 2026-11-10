@@ -9,6 +9,7 @@ import type {
   JSONContent,
   LanguageCode,
   OcrCapabilities,
+  PageEdits,
   OcrRun,
   PageSummary,
   ProjectDetail,
@@ -129,6 +130,20 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ page_ids: pageIds }),
     }),
+
+  updatePageEdits: (projectId: string, pageId: string, edits: PageEdits) =>
+    request<PageSummary>(`/projects/${projectId}/pages/${pageId}/edits`, {
+      method: "PATCH",
+      body: JSON.stringify({ edits }),
+    }),
+  resetPageEdits: (projectId: string, pageId: string) =>
+    request<PageSummary>(`/projects/${projectId}/pages/${pageId}/edits/reset`, {
+      method: "POST",
+    }),
+  pageBasePreview: (projectId: string, pageId: string) =>
+    `${API_BASE}/projects/${projectId}/pages/${pageId}/edits/base`,
+  estimatePageSkew: (projectId: string, pageId: string) =>
+    request<{ angle: number }>(`/projects/${projectId}/pages/${pageId}/deskew-estimate`),
 
   getOcrCapabilities: (refresh = false) =>
     request<OcrCapabilities>(`/ocr/capabilities${refresh ? "?refresh=true" : ""}`),

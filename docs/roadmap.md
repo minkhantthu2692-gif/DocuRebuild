@@ -11,7 +11,7 @@ presented in the UI until it actually works.
 | 0. Foundation and architecture | **Complete** | Monorepo, tokens, contracts, API scaffold, migrations, tests |
 | 1. Local storage and project management | **Complete** | App/project DBs, folders, manifest, CRUD, trash |
 | 2. Main UI and workspace | **Complete** | Header navigation, dashboard, two-panel workspace, settings, i18n |
-| 3. Import and image processing | **In progress** | Image + PDF import/rotation/reorder done; advanced image processing pending |
+| 3. Import and image processing | **In progress** | Image + PDF import, rotation and non-destructive image adjustments done; import progress/cancellation pending |
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | Planned | Depends on Phase 4 |
 | 6. AI integration and free usage first | Planned | Depends on elements and review model |
@@ -94,18 +94,22 @@ for theme/language switching and mobile panel switching.
   reporting, and reference-counted deletion of a PDF shared by many pages.
 - PDF rotation re-renders from the original PDF and marks any embedded text run
   stale instead of reusing mismatched text.
+- Non-destructive image adjustments stored as JSON on the page: drag-to-select
+  crop, four-corner perspective correction, automatic skew estimation and deskew,
+  grayscale, contrast, brightness, sharpness, denoise, threshold (B&W), shadow
+  removal and background cleanup. Every change is re-rendered from the immutable
+  source; the original asset is never modified.
+- Before/after preview against the rotated unprocessed page, per-step removal and
+  one-click reset, so the processed version is fully reversible.
 
 **Remaining before completion**
 
-- Crop, deskew, perspective correction, contrast, sharpening, denoising,
-  thresholding, shadow removal and background cleanup.
-- Processed-version comparison/restore UI.
 - Large-file and batch progress reporting.
 - Cancellable PDF import for very large documents (rendering is page-batched but
   currently runs to completion once started).
 
-**Dependencies** — PyMuPDF for PDF rendering (installed and verified); OpenCV for
-advanced image processing.
+**Dependencies** — PyMuPDF for PDF rendering (installed and verified); advanced
+image processing uses Pillow with no OpenCV dependency.
 
 ---
 

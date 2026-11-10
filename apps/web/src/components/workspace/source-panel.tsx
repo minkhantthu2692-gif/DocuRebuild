@@ -9,6 +9,7 @@ import {
   RotateCcw,
   RotateCw,
   ScanText,
+  SlidersHorizontal,
   Trash2,
   Undo2,
   Upload,
@@ -59,6 +60,7 @@ import {
 } from "@/lib/import-files";
 import { cn } from "@/lib/utils";
 import { OcrDialog } from "./ocr-dialog";
+import { EditsDialog } from "./edits-dialog";
 
 interface SourcePanelProps {
   projectId: string;
@@ -214,6 +216,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   const [dragging, setDragging] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PageSummary | null>(null);
   const [ocrOpen, setOcrOpen] = useState(false);
+  const [editsOpen, setEditsOpen] = useState(false);
   const dragDepth = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -560,6 +563,13 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
               onClick={() => setOcrOpen(true)}
             />
 
+            <ToolButton
+              label={t("edits.open")}
+              icon={SlidersHorizontal}
+              onClick={() => setEditsOpen(true)}
+              disabled={!currentPage}
+            />
+
             <div className="ml-auto flex items-center gap-0.5">
               <ToolButton
                 label={t("viewer.zoomOut")}
@@ -664,6 +674,13 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
         open={ocrOpen}
         onOpenChange={setOcrOpen}
         onInserted={onContentInserted}
+      />
+
+      <EditsDialog
+        projectId={projectId}
+        page={currentPage}
+        open={editsOpen}
+        onOpenChange={setEditsOpen}
       />
 
       <Dialog

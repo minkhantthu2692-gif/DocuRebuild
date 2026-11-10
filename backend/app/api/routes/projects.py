@@ -12,7 +12,13 @@ from starlette.concurrency import run_in_threadpool
 from app.api.deps import DbSession, ProjectDep
 from app.core.config import get_settings
 from app.core.errors import AppError
-from app.schemas.pages import PageOut, ReorderRequest, RotateRequest
+from app.schemas.pages import (
+    DeskewEstimate,
+    EditsRequest,
+    PageOut,
+    ReorderRequest,
+    RotateRequest,
+)
 from app.schemas.projects import (
     DocumentOut,
     DocumentPayload,
@@ -171,6 +177,43 @@ def delete_page(project: ProjectDep, page_id: str, session: DbSession) -> dict[s
     page_service.delete_page(directory, page_id)
     touch_project(session, project)
     return {"ok": True}
+
+
+@router.patch("/{project_id}/pages/{page_id}/edits", response_model=PageOut)
+def update_page_edits(
+    project: ProjectDep, page_id: str, payload: EditsRequest, session: DbSession
+) -> dict[str, Any]:
+    directory = project_service.ensure_project_storage(project)
+    page = page_service.update_page_edits(directory, page_id, payload.edits)
+    touch_project(session, project)
+    return page
+
+
+@router.post("/{project_id}/pages/{page_id}/edits/reset", response_model=PageOut)
+def reset_page_edits(
+    project: ProjectDep, page_id: str, session: DbSession
+) -> dict[str, Any]:
+    directory = project_service.ensure_project_storage(project)
+    page = page_service.reset_page_edits(directory, page_id)
+    touch_project(session, project)
+    return page
+
+
+@router.get("/{project_id}/pages/{page_id}/edits/base")
+def page_base_preview(project: ProjectDep, page_id: str) -> FileResponse:
+    directory = project_service.ensure_project_storage(project)
+    path = page_service.base_page_preview(directory, page_id)
+    return FileResponse(
+        path,
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=0, must-revalidate"},
+    )
+
+
+@router.get("/{project_id}/pages/{page_id}/deskew-estimate", response_model=DeskewEstimate)
+def estimate_page_skew(project: ProjectDep, page_id: str) -> DeskewEstimate:
+    directory = project_service.ensure_project_storage(project)
+    return DeskewEstimate(angle=page_service.estimate_page_skew(directory, page_id))
 
 
 @router.put("/{project_id}/pages/order", response_model=list[PageOut])

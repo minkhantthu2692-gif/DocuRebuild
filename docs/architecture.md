@@ -36,7 +36,8 @@ to the same local API; the API is not intended to be exposed publicly.
 | `db.project_schema` | Per-project SQLite schema and migrations |
 | `db.session` | SQLAlchemy engine/session and Alembic migration runner |
 | `services.projects` | Project CRUD, manifest, directory layout, trash, history |
-| `services.pages` | Import dispatch, image validation, EXIF orientation, display copies, thumbnails, PDF page records, rotation, ordering, reference-counted deletion |
+| `services.pages` | Import dispatch, image validation, EXIF orientation, display copies, thumbnails, PDF page records, rotation, ordering, stored-edit rendering, reference-counted deletion |
+| `services.image_edits` | Canonical edit validation, geometry pipeline (crop/perspective/deskew), filter pipeline (grayscale, contrast, brightness, sharpness, denoise, threshold, shadow/background cleanup) and skew estimation |
 | `services.pdf` | PDF open/validation, page rendering, embedded text extraction, capability detection |
 | `services.layout` | Shared conservative heading/list/paragraph classification for OCR and embedded PDF text |
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps |
@@ -57,7 +58,8 @@ Each project owns a portable folder and its own `project.db`:
 - `documents` — Tiptap JSON content and plain text
 - `assets` — relative path, MIME type, size, checksum, dimensions
 - `pages` — page order, source/display/thumbnail asset references, rotation,
-  `pdf_page_number` for PDF pages, status
+  `pdf_page_number` for PDF pages, status, and an `edits` JSON document holding the
+  ordered geometry steps plus filter settings
 - `history_events` — append-only local event log
 - `jobs` — reserved for general background processing
 - `ocr_runs` — page extraction attempts: status, engine/version, languages, source asset, rotation, mean confidence, error, timestamps; embedded PDF text uses `engine = pdf-text` and a null confidence
@@ -134,6 +136,10 @@ PUT    /api/projects/{id}/document
 GET    /api/projects/{id}/pages
 POST   /api/projects/{id}/pages/import
 POST   /api/projects/{id}/pages/{page_id}/rotate
+PATCH  /api/projects/{id}/pages/{page_id}/edits
+POST   /api/projects/{id}/pages/{page_id}/edits/reset
+GET    /api/projects/{id}/pages/{page_id}/edits/base
+GET    /api/projects/{id}/pages/{page_id}/deskew-estimate
 DELETE /api/projects/{id}/pages/{page_id}
 PUT    /api/projects/{id}/pages/order
 GET    /api/projects/{id}/pages/{page_id}/ocr
@@ -175,6 +181,23 @@ src/
   dirty state remains visible. `Ctrl/Cmd+S` saves immediately.
 - A best-effort flush runs when leaving the workspace; it is not a substitute for
   revision history.
+
+### Image adjustment workflow
+
+- The edits dialog sends the complete ordered edit document to
+  `PATCH /api/projects/{id}/pages/{page_id}/edits`; the backend validates and
+  normalizes it before storing it on the page row.
+- Rendering always starts from the immutable source: rotation is applied first,
+  then geometry steps in order (crop, perspective, deskew), then filters. The
+  result becomes the page display copy; the source asset is never rewritten.
+- `GET .../edits/base` renders the rotated page without processing for
+  comparison. `POST .../edits/reset` clears stored edits. Removing a step
+  re-renders from the source, so geometry changes stay reversible.
+- Deskew estimation scans a Pillow-rendered copy for the dominant skew angle and
+  returns the correction angle; the dialog applies it as a normal geometry step,
+  not as an irreversible transform.
+- Each save or reset appends a local history event and updates the page timestamp,
+  which the client uses to invalidate cached display images.
 
 ### Text extraction workflow
 
