@@ -305,8 +305,8 @@ src/
   page is rotated or re-rendered later, the element is marked stale instead of
   silently assumed to match the new page.
 - Elements remain proposals until the user marks them verified. The per-page
-  library can insert, verify/unverify and delete them; deletion moves the crop to
-  `trash/elements/<id>/` and leaves the page untouched.
+  library can insert, edit the caption, verify/unverify and delete them; deletion
+  moves the crop to `trash/elements/<id>/` and leaves the page untouched.
 - Insertion uses a custom atom `figure` Tiptap node rendered as
   `figure/img/figcaption`. The caption and localized source note are stored on the
   node, so they survive document saves. The document references the project asset

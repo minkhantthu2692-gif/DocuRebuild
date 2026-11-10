@@ -1,8 +1,10 @@
 import {
+  Check,
   CheckCheck,
   CircleAlert,
   Crop,
   ImagePlus,
+  Pencil,
   ScanSearch,
   Trash2,
   X,
@@ -150,6 +152,8 @@ export function ElementsDialog({
   const [draft, setDraft] = useState<CoordinateDraft>(EMPTY_DRAFT);
   const [includeNote, setIncludeNote] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [captionDraft, setCaptionDraft] = useState("");
   const [saving, setSaving] = useState(false);
 
   const rect = parseRect(draft);
@@ -164,6 +168,8 @@ export function ElementsDialog({
       setDraft(EMPTY_DRAFT);
       setIncludeNote(true);
       setDeleteId(null);
+      setEditingId(null);
+      setCaptionDraft("");
       return;
     }
     if (!pendingSelection) return;
@@ -259,10 +265,35 @@ export function ElementsDialog({
     deleteElement.mutate(elementId, {
       onSuccess: () => {
         setDeleteId(null);
+        if (editingId === elementId) setEditingId(null);
         toast.success(t("elements.deleted"));
       },
       onError: (error) => toast.error(errorMessage(error)),
     });
+  };
+
+  const startCaptionEdit = (elementId: string, caption: string) => {
+    setEditingId(elementId);
+    setCaptionDraft(caption);
+  };
+
+  const saveCaption = (elementId: string) => {
+    const current = elements.find((item) => item.id === elementId)?.caption ?? "";
+    const caption = captionDraft.trim();
+    if (caption === current) {
+      setEditingId(null);
+      return;
+    }
+    updateElement.mutate(
+      { elementId, caption },
+      {
+        onSuccess: () => {
+          setEditingId(null);
+          toast.success(t("elements.captionUpdated"));
+        },
+        onError: (error) => toast.error(errorMessage(error)),
+      },
+    );
   };
 
   const toggleVerified = (elementId: string, verified: boolean) => {
@@ -485,13 +516,62 @@ export function ElementsDialog({
                         </span>
                       </div>
 
-                      <p className="truncate text-xs">
-                        {element.caption || (
-                          <span className="italic text-muted-foreground">
-                            {t("elements.noCaption")}
-                          </span>
-                        )}
-                      </p>
+                      {editingId === element.id ? (
+                        <div className="flex items-center gap-1">
+                          <Input
+                            value={captionDraft}
+                            maxLength={500}
+                            autoFocus
+                            aria-label={t("elements.caption")}
+                            className="h-7 px-2 text-xs"
+                            onChange={(event) => setCaptionDraft(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                saveCaption(element.id);
+                              } else if (event.key === "Escape") {
+                                event.preventDefault();
+                                setEditingId(null);
+                              }
+                            }}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label={tCommon("actions.save")}
+                            onClick={() => saveCaption(element.id)}
+                            disabled={updateElement.isPending}
+                          >
+                            <Check />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label={tCommon("actions.cancel")}
+                            onClick={() => setEditingId(null)}
+                          >
+                            <X />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <p className="min-w-0 flex-1 truncate text-xs">
+                            {element.caption || (
+                              <span className="italic text-muted-foreground">
+                                {t("elements.noCaption")}
+                              </span>
+                            )}
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label={t("elements.editCaption")}
+                            onClick={() => startCaptionEdit(element.id, element.caption)}
+                          >
+                            <Pencil />
+                          </Button>
+                        </div>
+                      )}
 
                       <div className="flex flex-wrap items-center gap-1">
                         <Button

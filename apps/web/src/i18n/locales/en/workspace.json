@@ -233,6 +233,8 @@
     "stale": "Page changed",
     "regionSize": "{{width}} × {{height}} px",
     "noCaption": "No caption",
+    "editCaption": "Edit caption",
+    "captionUpdated": "Caption updated.",
     "confirmDelete": "Delete?",
     "listTitle": "Saved regions",
     "sourceNote": "Source: page {{page}} · manual region · {{status}}",
