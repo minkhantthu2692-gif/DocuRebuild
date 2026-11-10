@@ -117,6 +117,7 @@ packages/
 docs/
   architecture.md       Modules, storage layout, data model, API surface
   roadmap.md            Phase status, limitations and next steps
+start-docurebuild.bat   Windows one-click launcher for the local app
 AGENTS.md               Permanent instructions for AI coding agents
 Prompt.md               Product specification and phased roadmap source
 ```
@@ -166,6 +167,16 @@ The backend creates its data directory automatically:
 - Linux: `~/.local/share/DocuRebuild`
 
 Override it with `DOCUREBUILD_DATA_DIR`.
+
+### One-click launch (Windows)
+
+Double-click `start-docurebuild.bat`. It starts the local API and web client,
+opens the app at <http://localhost:5173>, and keeps both servers in minimized
+windows. Close those windows to stop them.
+
+The first launch installs any missing dependencies and therefore needs an
+internet connection; later launches work offline. On macOS and Linux, activate
+the backend virtual environment and run `npm run dev` instead.
 
 ### Optional local OCR
 
