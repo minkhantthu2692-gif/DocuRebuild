@@ -147,6 +147,29 @@ PROJECT_MIGRATIONS: list[tuple[int, str]] = [
             ON jobs(kind, status, created_at DESC);
         """,
     ),
+    (
+        6,
+        """
+        CREATE TABLE IF NOT EXISTS elements (
+            id TEXT PRIMARY KEY,
+            page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL DEFAULT 'figure',
+            asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL,
+            source_asset_id TEXT,
+            x INTEGER NOT NULL,
+            y INTEGER NOT NULL,
+            width INTEGER NOT NULL,
+            height INTEGER NOT NULL,
+            caption TEXT NOT NULL DEFAULT '',
+            source TEXT NOT NULL DEFAULT 'manual',
+            verified INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_elements_page
+            ON elements(page_id, created_at DESC);
+        """,
+    ),
 ]
 
 

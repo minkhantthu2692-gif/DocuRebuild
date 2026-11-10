@@ -21,6 +21,7 @@ const meta: AppMeta = {
     import_images: true,
     import_pdf: true,
     image_transform: true,
+    element_extraction: true,
     ocr: false,
     ai: false,
     export: false,
@@ -49,6 +50,13 @@ vi.mock("@/hooks/use-projects", () => ({
 
 vi.mock("@/components/workspace/ocr-dialog", () => ({ OcrDialog: () => null }));
 vi.mock("@/components/workspace/edits-dialog", () => ({ EditsDialog: () => null }));
+vi.mock("@/components/workspace/elements-dialog", () => ({ ElementsDialog: () => null }));
+vi.mock("@/hooks/use-elements", () => ({
+  useElements: () => ({ data: [] }),
+  useCreateElement: () => ({ mutateAsync: vi.fn() }),
+  useUpdateElement: () => ({ mutate: vi.fn() }),
+  useDeleteElement: () => ({ mutate: vi.fn() }),
+}));
 
 function makeJob(overrides: Partial<ImportJob> = {}): ImportJob {
   return {

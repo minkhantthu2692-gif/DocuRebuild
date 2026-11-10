@@ -7,6 +7,7 @@ class AppCapabilities(BaseModel):
     import_images: bool
     import_pdf: bool
     image_transform: bool
+    element_extraction: bool
     ocr: bool
     ai: bool
     export: bool

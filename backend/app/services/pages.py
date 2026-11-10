@@ -1002,6 +1002,27 @@ def delete_page(project_dir: Path, page_id: str) -> None:
                 trash_dir.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(path), str(trash_dir / path.name))
             conn.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
+
+        # Extracted crops depend on this page. Move their files to the same
+        # trash folder; the element rows themselves cascade with the page.
+        element_assets = conn.execute(
+            """
+            SELECT assets.* FROM elements
+            JOIN assets ON assets.id = elements.asset_id
+            WHERE elements.page_id = ?
+            """,
+            (page_id,),
+        ).fetchall()
+        for row in element_assets:
+            try:
+                path = resolve_within(project_dir, row["relative_path"])
+            except ValueError:
+                path = None
+            if path is not None and path.exists():
+                trash_dir.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(path), str(trash_dir / path.name))
+            conn.execute("DELETE FROM assets WHERE id = ?", (row["id"],))
+
         conn.execute("DELETE FROM pages WHERE id = ?", (page_id,))
         _renumber(conn)
         conn.execute(

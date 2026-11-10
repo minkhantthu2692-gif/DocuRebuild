@@ -42,6 +42,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.pdf` | PDF open/validation, page rendering, embedded text extraction, capability detection |
 | `services.layout` | Shared deterministic block classification (heading, list, caption, equation, table-like grid, running header/footer, page number) for OCR and embedded PDF text |
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps |
+| `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.settings` | Persisted appearance, language and editor settings |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence, corrections, staleness |
 | `api.routes.*` | HTTP surface (`/api/...`) |
@@ -65,6 +66,7 @@ Each project owns a portable folder and its own `project.db`:
 - `jobs` — background import jobs: status, progress, total/imported pages, current file, payload (file counts/names), error code/message and timestamps
 - `ocr_runs` — page extraction attempts: status, engine/version, languages, source asset, rotation, mean confidence, error, timestamps; embedded PDF text uses `engine = pdf-text` and a null confidence
 - `ocr_blocks` — reviewable text blocks with bbox, confidence, kind, line/word counts, correction and verification flags
+- `elements` — extracted regions: page, kind, immutable crop asset, source asset id, source-pixel rectangle, caption, manual/acquisition source, verification and timestamps
 - `schema_migrations` — per-project migration versions
 
 Project folder layout:
@@ -167,6 +169,10 @@ GET    /api/projects/{id}/pages/{page_id}/ocr
 POST   /api/projects/{id}/pages/{page_id}/ocr
 GET    /api/projects/{id}/ocr/runs/{run_id}
 PATCH  /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}
+GET    /api/projects/{id}/pages/{page_id}/elements
+POST   /api/projects/{id}/pages/{page_id}/elements
+PATCH  /api/projects/{id}/elements/{element_id}
+DELETE /api/projects/{id}/elements/{element_id}
 GET    /api/projects/{id}/assets/{asset_id}/file
 ```
 
@@ -181,7 +187,7 @@ src/
   pages/                  Dashboard, Workspace, Settings, 404
   components/layout/      header, shell, status bar, brand
   components/projects/    project dialogs and cards
-  components/workspace/   SourcePanel, EditorPanel, OcrDialog, workspace actions
+  components/workspace/   SourcePanel, EditorPanel, OcrDialog, ElementsDialog, workspace actions
   components/ui/          reusable Radix-based primitives
   hooks/                  React Query data hooks and breakpoints
   lib/                    API client, formatting, appearance, layout, validation
@@ -285,6 +291,29 @@ src/
   instead of structured TSV, the run fails explicitly instead of reporting an
   empty success.
 
+### Region extraction workflow
+
+- A toolbar toggle turns the source viewer into a marquee. Pointer positions are
+  mapped from the rendered image through the measured `ImageFrame` to source
+  pixels, clamped to the page and rejected below 8 × 8 pixels. The extraction
+  dialog also exposes numeric X/Y/width/height fields, so the same workflow works
+  without a mouse.
+- `POST .../elements` validates the rectangle against the actual page asset, crops
+  it with Pillow and writes `processed/elements/<element-id>.png`. The crop is an
+  immutable asset; the page original and display copies are never modified.
+- `elements.source_asset_id` records which page asset produced the crop. If the
+  page is rotated or re-rendered later, the element is marked stale instead of
+  silently assumed to match the new page.
+- Elements remain proposals until the user marks them verified. The per-page
+  library can insert, verify/unverify and delete them; deletion moves the crop to
+  `trash/elements/<id>/` and leaves the page untouched.
+- Insertion uses a custom atom `figure` Tiptap node rendered as
+  `figure/img/figcaption`. The caption and localized source note are stored on the
+  node, so they survive document saves. The document references the project asset
+  by URL; the crop itself is not embedded or re-encoded.
+- No detector or AI model is invoked. `element_extraction` in `/api/meta` reports
+  the manual path only; automatic region proposals remain future work.
+
 ### Design system
 
 - All visual values come from CSS custom properties in
@@ -348,3 +377,7 @@ src/
   download, and are cheap to explain and test. The trade-off is that figure
   regions and table structures are not detected yet; those need a later
   engine adapter rather than more regexes.
+- **Element extraction is manual first** — a crop is an exact pixel copy of the
+  page, not inferred structure. This preserves accuracy and needs no model, at the
+  cost of no automatic figure/table/equation detection. A table crop stays an
+  image until Phase 7 adds editable cells.

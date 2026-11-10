@@ -5,6 +5,7 @@ import type {
   AppearanceSettings,
   DocumentRecord,
   EditorSettings,
+  ElementSummary,
   HealthStatus,
   ImportJob,
   JSONContent,
@@ -179,6 +180,38 @@ export const api = {
       },
     ),
 
+  listElements: (projectId: string, pageId: string) =>
+    request<ElementSummary[]>(`/projects/${projectId}/pages/${pageId}/elements`),
+  createElement: (
+    projectId: string,
+    pageId: string,
+    payload: {
+      kind: ElementSummary["kind"];
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      caption: string;
+    },
+  ) =>
+    request<ElementSummary>(`/projects/${projectId}/pages/${pageId}/elements`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateElement: (
+    projectId: string,
+    elementId: string,
+    patch: { caption?: string; verified?: boolean },
+  ) =>
+    request<ElementSummary>(`/projects/${projectId}/elements/${elementId}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+  deleteElement: (projectId: string, elementId: string) =>
+    request<{ ok: boolean }>(`/projects/${projectId}/elements/${elementId}`, {
+      method: "DELETE",
+    }),
+
   assetUrl: (projectId: string, assetId: string | null, version?: string) => {
     if (!assetId) return null;
     const suffix = version ? `?v=${encodeURIComponent(version)}` : "";
@@ -190,6 +223,7 @@ export const DEFAULT_CAPABILITIES: AppCapabilities = {
   import_images: false,
   import_pdf: false,
   image_transform: false,
+  element_extraction: false,
   ocr: false,
   ai: false,
   export: false,

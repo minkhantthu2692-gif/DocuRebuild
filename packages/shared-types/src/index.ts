@@ -225,6 +225,31 @@ export interface OcrCapabilities {
 }
 
 /* -------------------------------------------------------------------------- */
+/*                                 Elements                                   */
+/* -------------------------------------------------------------------------- */
+
+export type ElementKind = "figure" | "table" | "equation";
+
+export interface ElementSummary {
+  id: string;
+  page_id: string;
+  kind: ElementKind;
+  asset_id: string | null;
+  /** Source-pixel rectangle on the page image at extraction time. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  caption: string;
+  source: "manual" | "ai" | string;
+  verified: boolean;
+  /** The page was re-rendered after this crop was taken. */
+  stale: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/* -------------------------------------------------------------------------- */
 /*                               Document model                               */
 /* -------------------------------------------------------------------------- */
 
@@ -257,6 +282,7 @@ export interface AppCapabilities {
   import_images: boolean;
   import_pdf: boolean;
   image_transform: boolean;
+  element_extraction: boolean;
   ocr: boolean;
   ai: boolean;
   export: boolean;

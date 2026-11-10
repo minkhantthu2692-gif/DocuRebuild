@@ -47,6 +47,7 @@ import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAppSettings, useUpdateSettings } from "@/hooks/use-app";
 import { useDocument, useSaveDocument } from "@/hooks/use-document";
 import { api } from "@/lib/api";
+import { FigureNode, figureInsertionContent } from "@/lib/editor-figure";
 import { resolveLocale } from "@/lib/format";
 import { ocrInsertionContent } from "@/lib/ocr-insertion";
 import { countCharacters, countWords } from "@/lib/text";
@@ -136,6 +137,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
         link: false,
       }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
+      FigureNode,
       Placeholder.configure({ placeholder: () => placeholderRef.current }),
     ],
     content: EMPTY_DOCUMENT,
@@ -188,7 +190,11 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     editor
       .chain()
       .focus("end")
-      .insertContent(ocrInsertionContent(insertion.text, insertion.note))
+      .insertContent(
+        insertion.type === "text"
+          ? ocrInsertionContent(insertion.text, insertion.note)
+          : figureInsertionContent(insertion),
+      )
       .run();
     consumeInsertion(insertion.id);
   }, [editor, initialized, insertion, consumeInsertion]);

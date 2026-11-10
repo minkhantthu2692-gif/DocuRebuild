@@ -1,14 +1,31 @@
 import { createContext, useContext } from "react";
 
-export interface WorkspaceInsertion {
+export interface WorkspaceTextInsertion {
   id: number;
+  type: "text";
   text: string;
   note: string | null;
 }
 
+export interface WorkspaceFigureInsertion {
+  id: number;
+  type: "figure";
+  src: string;
+  alt: string;
+  caption: string;
+  note: string | null;
+  width: number | null;
+  height: number | null;
+}
+
+export type WorkspaceInsertion = WorkspaceTextInsertion | WorkspaceFigureInsertion;
+
+export type FigureInsertionInput = Omit<WorkspaceFigureInsertion, "id" | "type">;
+
 export interface WorkspaceActions {
   insertion: WorkspaceInsertion | null;
   insertText: (text: string, note?: string | null) => void;
+  insertFigure: (figure: FigureInsertionInput) => void;
   consumeInsertion: (id: number) => void;
 }
 

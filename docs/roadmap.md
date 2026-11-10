@@ -13,7 +13,7 @@ presented in the UI until it actually works.
 | 2. Main UI and workspace | **Complete** | Header navigation, dashboard, two-panel workspace, settings, i18n |
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
-| 5. Element extraction | Planned | Depends on Phase 4 |
+| 5. Element extraction | **In progress** | Manual region crop, library, verification and figure insertion done; automatic detection and text/table structure pending |
 | 6. AI integration and free usage first | Planned | Depends on elements and review model |
 | 7. Table, figure and equation reconstruction | Planned | Depends on Phase 5/6 |
 | 8. Document editor and export | Partially started | Core editor exists; full model/export pending |
@@ -171,12 +171,28 @@ described as universally free or universally accurate.
 
 ---
 
-## Phase 5 — Element extraction (planned)
+## Phase 5 — Element extraction (in progress)
 
-- Select, crop and insert text, tables, figures and equations.
-- Preserve source coordinates and page references.
-- Manual and AI-assisted extraction paths.
-- Confidence and verification indicators; original remains available.
+**Delivered**
+
+- Manual region selection on the source page: drag a rectangle, or type source
+  coordinates directly, then crop the current page image into an immutable PNG in
+  `processed/elements/`.
+- Persistent `elements` table with page, kind (figure, table, equation), asset,
+  source rectangle, caption, manual source, verification and timestamps.
+- Per-page region library with insert, verify/unverify and delete. Deletion moves
+  the crop to the project's local trash folder.
+- Insertion into the Tiptap document as a block figure with an optional caption and
+  a localized source note; the crop remains stored in the project.
+- Stale indicator when the page image or rotation changed after extraction. The
+  saved crop is preserved, but it is never presented as matching the current page.
+- `element_extraction` capability flag, plus English and Burmese interface strings.
+
+**Remaining**
+
+- Text extraction from a selected region (a manual crop preserves pixels, not text).
+- Automatic figure, table and equation region proposals, including AI-assisted paths.
+- Structured table cells and equation transcription, which belong to Phase 7.
 
 ## Phase 6 — AI integration and free usage first (planned)
 

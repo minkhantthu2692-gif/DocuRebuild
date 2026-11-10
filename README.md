@@ -6,16 +6,16 @@ DocuRebuild turns scans, photographs and PDF documents into accurate, structured
 and editable documents. It keeps original source files immutable, keeps project
 data on your device, and treats every AI result as a reviewable proposal.
 
-> **Project status — early development (Phase 4 of 12).**
+> **Project status — early development (Phase 5 of 12).**
 > The workspace, local project storage, image and PDF import, non-destructive
-> image adjustments, the rich-text editor and local Tesseract OCR are implemented.
-> Imports run as background jobs with page-level progress, cancellation and
-> localized failures. PDF pages are rendered locally and embedded text layers are
-> stored as reviewable proposals; image-only PDF pages can be processed with OCR.
-> OCR and PDF import are only advertised when their local dependencies actually
-> work. AI providers, element reconstruction, export and history are
-> **not implemented yet** and are clearly marked as unavailable in the UI. Nothing
-> in this repository fakes those features.
+> image adjustments, the rich-text editor, local Tesseract OCR and manual region
+> extraction are implemented. Imports run as background jobs with page-level
+> progress, cancellation and localized failures. PDF pages are rendered locally and
+> embedded text layers are stored as reviewable proposals; image-only PDF pages can
+> be processed with OCR. OCR and PDF import are only advertised when their local
+> dependencies actually work. AI providers, structured table/figure/equation
+> reconstruction, export and history are **not implemented yet** and are clearly
+> marked as unavailable in the UI. Nothing in this repository fakes those features.
 
 ---
 
@@ -57,6 +57,13 @@ data on your device, and treats every AI result as a reviewable proposal.
   candidates, and a measured bounding-box overlay can be shown on the source
   image. OCR is never advertised as available unless the engine and language
   data are actually detected.
+- **Region extraction (manual)** — drag a rectangle on the source page or type its
+  source-pixel coordinates, then crop a figure, table or equation region. Crops are
+  stored as immutable project assets, can be captioned, verified and inserted into
+  the document as figures with an optional source note. The per-page region library
+  supports reinsertion and deletion to local trash. If the page was changed after
+  extraction, the region is marked stale; the saved crop is never silently treated
+  as matching a newer page.
 - **Document editor** — Tiptap rich text with headings, paragraphs, lists,
   blockquotes, code blocks, alignment, inline formatting, undo/redo, word and
   character counts, and debounced autosave.
@@ -67,11 +74,12 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 ### Not available yet
 
-Full layout structure (figure regions, table cells, equation transcription), AI
-providers, DOCX/TXT export, revision history, backups/restore UI, desktop
-packaging and PWA install support are planned but not implemented. OCR extracts
-text blocks, reading order and conservative layout hints; it does not yet build
-table structure, crop figures or transcribe equations. See
+Structured element reconstruction (table cells, equation transcription, automatic
+figure/table/equation detection), AI providers, DOCX/TXT export, revision history,
+backups/restore UI, desktop packaging and PWA install support are planned but not
+implemented. OCR extracts text blocks, reading order and conservative layout hints;
+it does not build table structure or transcribe equations. Region extraction
+produces exact pixel crops and does not detect or transcribe content either. See
 [`docs/roadmap.md`](docs/roadmap.md).
 
 ---
@@ -329,8 +337,9 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 
 ## Known limitations
 
-- The editor covers core rich text, not the full target model (tables, figures,
-  equations, footnotes, page layout and find/replace are pending).
+- The editor covers core rich text, not the full target model (editable tables,
+  equation nodes, footnotes, page layout and find/replace are pending). Figures are
+  supported as block image nodes from the region library.
 - Autosave is debounced and best-effort when leaving the page; there is no
   revision history yet, so destructive edits are not recoverable.
 - `npm audit` reports moderate findings in the ESLint/TypeScript-ESLint toolchain
@@ -342,7 +351,11 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   quality. Burmese text is especially difficult; layout labels are heuristics and
   are never presented as certain structure. Table labels only mark a text grid:
   cells, merged spans and reading order inside the table are not reconstructed,
-  figure regions are not detected, and equations are not transcribed.
+  and equations are not transcribed.
+- Region extraction does not detect figures, tables or equations. The user selects
+  the rectangle, and the stored element is an exact pixel crop rather than text,
+  cells or LaTeX. A crop is marked stale when the page is re-rendered after
+  extraction, but the crop file itself remains unchanged.
 - The bounding-box overlay only draws the latest successful run and is hidden
   when that run is stale, failed or lacks geometry. It shows where text was
   found; it is not a verified layout model.
@@ -355,9 +368,9 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 - PyMuPDF (the PDF rendering library) is dual-licensed under AGPL-3.0 or a
   commercial Artifex licence. Running DocuRebuild locally is unaffected, but
   anyone distributing a packaged build should review those terms before release.
-- OCR results become marked stale when the page image or rotation changes. They
-  are never silently applied to the document. The same applies to embedded PDF
-  text after a page is rotated.
+- OCR results and extracted regions become marked stale when the page image or
+  rotation changes. They are never silently applied as if they matched the new
+  page. The same applies to embedded PDF text after a page is rotated.
 - npm install scripts for `esbuild` are blocked by the local npm policy; Vite
   still runs because its binary is already present. If a fresh install fails,
   review the blocked install script with `npm install-scripts ls`.
@@ -373,7 +386,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 2. Main UI and workspace | Complete |
 | 3. Import and image processing | Complete |
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
-| 5. Element extraction | Planned |
+| 5. Element extraction | In progress: manual region crop, library, verification and figure insertion done; automatic detection and structured text/table reconstruction pending |
 | 6. AI integration and free usage first | Planned |
 | 7. Table, figure and equation reconstruction | Planned |
 | 8. Document editor and export | Planned |

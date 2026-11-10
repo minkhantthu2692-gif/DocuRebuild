@@ -195,6 +195,61 @@
     "sourceNote": "Source: page {{page}} · OCR · {{confidence}}% confidence · {{status}}",
     "noSelection": "Select at least one text block to insert."
   },
+  "elements": {
+    "open": "Extracted regions",
+    "openCount_one": "Extracted regions ({{count}})",
+    "openCount_other": "Extracted regions ({{count}})",
+    "select": "Select region",
+    "cancelSelect": "Stop selecting",
+    "selectHint": "Drag a rectangle on the page. Press Esc to cancel.",
+    "title": "Extracted regions · page {{page}}",
+    "description": "Crop a table, figure or equation from the source page. The original page and the crop stay available; nothing is generated.",
+    "newRegion": "New region",
+    "selectOnPage": "Select on page",
+    "kindLabel": "Element type",
+    "kind": {
+      "figure": "Figure",
+      "table": "Table",
+      "equation": "Equation"
+    },
+    "caption": "Caption (optional)",
+    "captionPlaceholder": "For example: Figure 2.4 — Phase diagram",
+    "x": "X",
+    "y": "Y",
+    "width": "Width",
+    "height": "Height",
+    "coordinateHint": "Coordinates are source-image pixels. You can type them directly.",
+    "includeNote": "Add a source note to the document",
+    "saveOnly": "Save region",
+    "saveAndInsert": "Save and insert",
+    "insert": "Insert",
+    "inserted": "Region inserted into the document.",
+    "saved": "Region saved.",
+    "deleted": "Region moved to this project’s local trash.",
+    "verify": "Verify",
+    "unverify": "Unverify",
+    "verified": "Verified",
+    "unverified": "Unverified",
+    "stale": "Page changed",
+    "regionSize": "{{width}} × {{height}} px",
+    "noCaption": "No caption",
+    "confirmDelete": "Delete?",
+    "listTitle": "Saved regions",
+    "sourceNote": "Source: page {{page}} · manual region · {{status}}",
+    "empty": {
+      "title": "No extracted regions yet",
+      "description": "Select a region on the page or type its coordinates, then save it here."
+    },
+    "loadError": {
+      "title": "Regions couldn’t be loaded",
+      "description": "The saved crops are unchanged. Try loading this page’s regions again."
+    },
+    "errors": {
+      "invalidRegion": "Select a region of at least 8 × 8 pixels, or enter valid coordinates.",
+      "outsidePage": "The region extends beyond the page image.",
+      "missingAsset": "This crop file is missing from the project."
+    }
+  },
   "edits": {
     "open": "Adjust image",
     "title": "Edit page {{page}}",

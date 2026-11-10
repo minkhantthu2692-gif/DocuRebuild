@@ -42,6 +42,7 @@ def meta() -> AppMeta:
             import_images=True,
             import_pdf=pdf_service.pdf_available(),
             image_transform=True,
+            element_extraction=True,
             ocr=ocr_service.engine_available(),
             ai=False,
             export=False,

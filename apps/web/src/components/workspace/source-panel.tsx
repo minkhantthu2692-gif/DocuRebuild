@@ -4,11 +4,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Image as ImageIcon,
+  Images,
   Layers,
   Maximize2,
   MoreHorizontal,
   RotateCcw,
   RotateCw,
+  ScanSearch,
   ScanText,
   SlidersHorizontal,
   Trash2,
@@ -19,7 +21,7 @@ import {
   ZoomOut,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -48,6 +50,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAppMeta } from "@/hooks/use-app";
+import { useElements } from "@/hooks/use-elements";
 import { useLatestOcr } from "@/hooks/use-ocr";
 import {
   useCancelImportJob,
@@ -61,6 +64,12 @@ import {
 } from "@/hooks/use-projects";
 import { api } from "@/lib/api";
 import {
+  displayRect,
+  selectionToSourceRect,
+  type DisplayPoint,
+  type SourceRect,
+} from "@/lib/element-region";
+import {
   IMAGE_ACCEPT_ATTRIBUTE,
   IMPORT_ACCEPT_ATTRIBUTE,
   partitionImportFiles,
@@ -69,6 +78,7 @@ import { containFrame, layoutBoxes, type ImageFrame } from "@/lib/layout-overlay
 import { cn } from "@/lib/utils";
 import { OcrDialog } from "./ocr-dialog";
 import { EditsDialog } from "./edits-dialog";
+import { ElementsDialog } from "./elements-dialog";
 
 interface SourcePanelProps {
   projectId: string;
@@ -286,12 +296,18 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   const [deleteTarget, setDeleteTarget] = useState<PageSummary | null>(null);
   const [ocrOpen, setOcrOpen] = useState(false);
   const [editsOpen, setEditsOpen] = useState(false);
+  const [elementsOpen, setElementsOpen] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [pendingSelection, setPendingSelection] = useState<SourceRect | null>(null);
+  const [dragStart, setDragStart] = useState<DisplayPoint | null>(null);
+  const [dragCurrent, setDragCurrent] = useState<DisplayPoint | null>(null);
   const [overlayOn, setOverlayOn] = useState(false);
   const [imageFrame, setImageFrame] = useState<ImageFrame | null>(null);
   const dragDepth = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const handledJobRef = useRef<string | null>(null);
   const resumeCheckedRef = useRef(false);
 
@@ -353,6 +369,18 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     setScale({ kind: "fit" });
   }, [currentPage?.id]);
 
+  // Cancel an unfinished marquee whenever the page changes; coordinates from
+  // one page must never be applied to another.
+  useEffect(() => {
+    setSelectMode(false);
+    setDragStart(null);
+    setDragCurrent(null);
+    setPendingSelection(null);
+  }, [currentPage?.id]);
+
+  const elementsQuery = useElements(projectId, currentPage?.id ?? null);
+  const elementCount = elementsQuery.data?.length ?? 0;
+
   // The overlay loads the latest OCR run only when the user turns it on, so a
   // page viewer without OCR does not poll the API.
   const latestOcrQuery = useLatestOcr(projectId, currentPage?.id ?? null, overlayOn);
@@ -363,6 +391,103 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     [meta],
   );
   const allowPdf = meta?.capabilities.import_pdf ?? false;
+
+  const pointInContent = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): DisplayPoint | null => {
+    const container = contentRef.current;
+    if (!container) return null;
+    const bounds = container.getBoundingClientRect();
+    return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+  };
+
+  const clampToFrame = (point: DisplayPoint, frame: ImageFrame): DisplayPoint => ({
+    x: Math.min(Math.max(point.x, frame.left), frame.left + frame.width),
+    y: Math.min(Math.max(point.y, frame.top), frame.top + frame.height),
+  });
+
+  const cancelRegionSelect = useCallback(() => {
+    setSelectMode(false);
+    setDragStart(null);
+    setDragCurrent(null);
+  }, []);
+
+  const abortDrag = () => {
+    setDragStart(null);
+    setDragCurrent(null);
+  };
+
+  const consumePendingSelection = useCallback(() => {
+    setPendingSelection(null);
+  }, []);
+
+  const handleElementsOpenChange = (open: boolean) => {
+    setElementsOpen(open);
+    if (!open) {
+      setSelectMode(false);
+      setDragStart(null);
+      setDragCurrent(null);
+    }
+  };
+
+  const beginRegionSelect = () => {
+    if (!currentPage) return;
+    setElementsOpen(false);
+    setSelectMode(true);
+    setDragStart(null);
+    setDragCurrent(null);
+  };
+
+  const handleSelectStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!selectMode || !imageFrame) return;
+    const point = pointInContent(event);
+    if (!point) return;
+    if (
+      point.x < imageFrame.left ||
+      point.x > imageFrame.left + imageFrame.width ||
+      point.y < imageFrame.top ||
+      point.y > imageFrame.top + imageFrame.height
+    ) {
+      return;
+    }
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const start = clampToFrame(point, imageFrame);
+    setDragStart(start);
+    setDragCurrent(start);
+  };
+
+  const handleSelectMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragStart || !imageFrame) return;
+    const point = pointInContent(event);
+    if (!point) return;
+    setDragCurrent(clampToFrame(point, imageFrame));
+  };
+
+  const handleSelectEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragStart || !imageFrame) return;
+    const point = pointInContent(event);
+    const end = point ? clampToFrame(point, imageFrame) : (dragCurrent ?? dragStart);
+    const region = selectionToSourceRect(dragStart, end, imageFrame);
+    setDragStart(null);
+    setDragCurrent(null);
+    if (!region) {
+      toast.error(t("elements.errors.invalidRegion"));
+      return;
+    }
+    setSelectMode(false);
+    setPendingSelection(region);
+    setElementsOpen(true);
+  };
+
+  useEffect(() => {
+    if (!selectMode) return;
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") cancelRegionSelect();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectMode, cancelRegionSelect]);
 
   const handleFiles = (files: FileList | File[]) => {
     const list = Array.from(files);
@@ -487,7 +612,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   }, []);
 
   useEffect(() => {
-    if (!overlayOn) {
+    if (!overlayOn && !selectMode) {
       setImageFrame(null);
       return;
     }
@@ -497,7 +622,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     if (imageRef.current) observer.observe(imageRef.current);
     if (viewportRef.current) observer.observe(viewportRef.current);
     return () => observer.disconnect();
-  }, [measureImage, overlayOn, imageSrc]);
+  }, [measureImage, overlayOn, selectMode, imageSrc]);
 
   const overlayBoxes = useMemo(() => {
     if (!overlayOn || !imageFrame || !latestOcr) return [];
@@ -809,6 +934,28 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
             />
 
             <ToolButton
+              label={t(selectMode ? "elements.cancelSelect" : "elements.select")}
+              icon={ScanSearch}
+              active={selectMode}
+              onClick={() =>
+                selectMode ? cancelRegionSelect() : beginRegionSelect()
+              }
+            />
+
+            <ToolButton
+              label={
+                elementCount > 0
+                  ? t("elements.openCount", { count: elementCount })
+                  : t("elements.open")
+              }
+              icon={Images}
+              onClick={() => {
+                cancelRegionSelect();
+                setElementsOpen(true);
+              }}
+            />
+
+            <ToolButton
               label={t(overlayOn ? "viewer.overlay.hide" : "viewer.overlay.show")}
               icon={Layers}
               active={overlayOn}
@@ -893,6 +1040,24 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
             </div>
           ) : null}
 
+          {selectMode ? (
+            <div
+              aria-live="polite"
+              className="flex shrink-0 items-center gap-2 border-b border-primary/30 bg-primary/5 px-2 py-1 text-2xs text-primary"
+            >
+              <ScanSearch className="size-3.5 shrink-0" aria-hidden="true" />
+              <span>{t("elements.selectHint")}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto shrink-0"
+                onClick={cancelRegionSelect}
+              >
+                {tCommon("actions.cancel")}
+              </Button>
+            </div>
+          ) : null}
+
           <div className="flex min-h-0 flex-1 flex-col-reverse sm:flex-row">
             <PageThumbnails
               pages={pages}
@@ -908,7 +1073,17 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
               ref={viewportRef}
               className="scrollbar-thin relative flex min-w-0 flex-1 overflow-auto bg-muted/30"
             >
-              <div className="relative flex h-full min-h-full w-full p-4">
+              <div
+                ref={contentRef}
+                onPointerDown={handleSelectStart}
+                onPointerMove={handleSelectMove}
+                onPointerUp={handleSelectEnd}
+                onPointerCancel={abortDrag}
+                className={cn(
+                  "relative flex h-full min-h-full w-full p-4",
+                  selectMode && "cursor-crosshair touch-none",
+                )}
+              >
                 {imageSrc ? (
                   <>
                     <img
@@ -955,6 +1130,13 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
                         ))}
                       </div>
                     ) : null}
+                    {selectMode && dragStart && dragCurrent ? (
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute border-2 border-primary bg-primary/15 shadow-sm"
+                        style={displayRect(dragStart, dragCurrent)}
+                      />
+                    ) : null}
                   </>
                 ) : (
                   <div className="m-auto flex flex-col items-center gap-2 text-xs text-muted-foreground">
@@ -991,6 +1173,17 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
         page={currentPage}
         open={ocrOpen}
         onOpenChange={setOcrOpen}
+        onInserted={onContentInserted}
+      />
+
+      <ElementsDialog
+        projectId={projectId}
+        page={currentPage}
+        open={elementsOpen}
+        onOpenChange={handleElementsOpenChange}
+        pendingSelection={pendingSelection}
+        onPendingConsumed={consumePendingSelection}
+        onRequestSelection={beginRegionSelect}
         onInserted={onContentInserted}
       />
 

@@ -105,6 +105,26 @@
     @apply my-8 border-t;
   }
 
+  .doc-content .ProseMirror figure.doc-figure {
+    @apply my-6 flex flex-col items-center gap-2;
+  }
+
+  .doc-content .ProseMirror figure.doc-figure img {
+    @apply mx-auto h-auto max-h-[34rem] w-auto max-w-full rounded-md border border-border/60 bg-muted/20 object-contain;
+  }
+
+  .doc-content .ProseMirror figure.doc-figure figcaption {
+    @apply flex flex-col gap-0.5 text-center text-xs leading-relaxed text-muted-foreground;
+  }
+
+  .doc-content .ProseMirror figure.doc-figure [data-figure-caption] {
+    @apply text-foreground;
+  }
+
+  .doc-content .ProseMirror figure.doc-figure.ProseMirror-selectednode {
+    @apply rounded-md outline outline-2 outline-offset-4 outline-primary/50;
+  }
+
   .doc-content .ProseMirror .is-empty::before {
     @apply pointer-events-none float-left h-0 text-muted-foreground/70;
     content: attr(data-placeholder);
