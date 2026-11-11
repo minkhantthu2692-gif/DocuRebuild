@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import socket
 import uuid
@@ -68,7 +69,12 @@ def default_base_url(provider: AiProviderKind) -> str:
     return DEFAULT_BASE_URLS[provider]
 
 
-def normalize_base_url(provider: AiProviderKind, value: str) -> str:
+def normalize_base_url(
+    provider: AiProviderKind,
+    value: str,
+    *,
+    allow_remote: bool = False,
+) -> str:
     cleaned = (value or "").strip().rstrip("/")
     if not cleaned:
         cleaned = default_base_url(provider)
@@ -85,9 +91,27 @@ def normalize_base_url(provider: AiProviderKind, value: str) -> str:
     # be local or user-owned, never a metadata service.
     if (parsed.hostname or "").lower() in {"169.254.169.254", "metadata.google.internal"}:
         raise AppError(422, "invalid_ai_settings", "That AI server address is not allowed.")
+    if not _is_loopback(parsed.hostname) and not allow_remote:
+        raise AppError(
+            403,
+            "ai_remote_not_allowed",
+            "This server is not on loopback. Enable remote AI consent in Settings first.",
+        )
     if provider == "openai_compatible" and not cleaned.endswith("/v1"):
         cleaned = f"{cleaned}/v1"
     return cleaned
+
+
+def _is_loopback(hostname: str | None) -> bool:
+    host = (hostname or "").strip().lower()
+    if not host:
+        return False
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def _decode_json(raw: bytes) -> Any:
@@ -188,13 +212,18 @@ def _openai_models(base_url: str) -> list[dict[str, Any]]:
     return models
 
 
-def probe_provider(provider: AiProviderKind, base_url: str = "") -> dict[str, Any]:
+def probe_provider(
+    provider: AiProviderKind,
+    base_url: str = "",
+    *,
+    allow_remote: bool = False,
+) -> dict[str, Any]:
     """Inspect a local server only when the user asks for a connection test.
 
     Expected failures are returned as a status instead of raised so Settings can
     explain what happened without pretending the server is ready.
     """
-    resolved = normalize_base_url(provider, base_url)
+    resolved = normalize_base_url(provider, base_url, allow_remote=allow_remote)
     try:
         if provider == "ollama":
             models, version = _ollama_models(resolved)
@@ -242,12 +271,17 @@ def _resolve_profile(
             provider=resolved_provider,
             base_url=base_url if base_url is not None else profile.base_url,
             model=resolved_model,
+            allow_remote=profile.allow_remote,
         )
     except ValidationError as exc:
         raise AppError(422, "invalid_ai_settings", "The AI settings are not valid.") from exc
     return (
         resolved.provider,
-        normalize_base_url(resolved.provider, resolved.base_url),
+        normalize_base_url(
+            resolved.provider,
+            resolved.base_url,
+            allow_remote=resolved.allow_remote,
+        ),
         resolved.model,
     )
 
@@ -388,6 +422,32 @@ def _suggestion_payload(row) -> dict[str, Any]:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
+def list_page_suggestions(
+    project_dir: Path,
+    page_id: str,
+    status: AiSuggestionStatus | None = None,
+) -> list[dict[str, Any]]:
+    if status is not None and status not in {"pending", "accepted", "rejected"}:
+        raise AppError(422, "invalid_ai_suggestion_status", "Unknown proposal status.")
+    with project_db(project_dir) as conn:
+        _get_page(conn, page_id)
+        if status is None:
+            rows = conn.execute(
+                "SELECT * FROM ai_suggestions WHERE page_id = ? ORDER BY created_at DESC",
+                (page_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM ai_suggestions
+                WHERE page_id = ? AND status = ?
+                ORDER BY created_at DESC
+                """,
+                (page_id, status),
+            ).fetchall()
+    return [_suggestion_payload(row) for row in rows]
 
 
 def create_cleanup_suggestion(

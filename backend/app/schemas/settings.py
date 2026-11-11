@@ -79,6 +79,8 @@ class AiProfileSettings(BaseModel):
     base_url: str = ""
     # Empty means no model is chosen, so AI actions stay disabled.
     model: str = Field(default="", max_length=200)
+    # Explicit consent for a non-loopback server. Loopback needs no consent.
+    allow_remote: bool = False
 
     @field_validator("base_url")
     @classmethod
@@ -97,6 +99,7 @@ class AiProfilePatch(BaseModel):
     provider: AiProviderKind | None = None
     base_url: str | None = None
     model: str | None = Field(default=None, max_length=200)
+    allow_remote: bool | None = None
 
     @field_validator("base_url")
     @classmethod

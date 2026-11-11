@@ -47,6 +47,7 @@
   "ai_not_configured": "Choose a local AI model in Settings before using AI assistance.",
   "ai_empty_response": "The local AI server returned no text. The OCR text was left unchanged.",
   "ai_text_too_long": "This text is too long for one AI request. Split it or review it manually.",
+  "ai_remote_not_allowed": "This AI server is not on localhost. Enable remote AI consent in Settings before sending text to it.",
   "ai_suggestion_not_found": "This AI proposal could not be found.",
   "ai_suggestion_not_pending": "This AI proposal was already accepted or rejected.",
   "ai_suggestion_stale": "The OCR text changed after this proposal was created. Request a new proposal.",

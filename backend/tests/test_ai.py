@@ -209,10 +209,20 @@ def _configure_ai(
     provider: str = "ollama",
     base_url: str,
     model: str = "qwen2.5:7b",
+    allow_remote: bool = False,
 ) -> None:
     response = client.patch(
         "/api/settings",
-        json={"ai": {"text": {"provider": provider, "base_url": base_url, "model": model}}},
+        json={
+            "ai": {
+                "text": {
+                    "provider": provider,
+                    "base_url": base_url,
+                    "model": model,
+                    "allow_remote": allow_remote,
+                }
+            }
+        },
     )
     assert response.status_code == 200, response.text
 
@@ -333,9 +343,62 @@ def test_probe_rejects_unsafe_or_credentialed_urls(client: TestClient) -> None:
         assert response.json()["detail"]["code"] == "invalid_ai_settings"
 
 
+def test_probe_requires_consent_for_non_loopback_url(client: TestClient, monkeypatch) -> None:
+    from urllib.error import URLError
+
+    from app.services import ai as ai_service
+
+    calls: list[str] = []
+
+    def refuse(*_args, **_kwargs):
+        calls.append("called")
+        raise URLError(ConnectionRefusedError(111, "Connection refused"))
+
+    monkeypatch.setattr(ai_service.urllib_request, "urlopen", refuse)
+
+    blocked = client.post(
+        "/api/ai/probe",
+        json={"provider": "ollama", "base_url": "http://192.0.2.10:11434"},
+    )
+    assert blocked.status_code == 403, blocked.text
+    assert blocked.json()["detail"]["code"] == "ai_remote_not_allowed"
+    # No connection may be attempted before the user consents.
+    assert calls == []
+
+    allowed = client.post(
+        "/api/ai/probe",
+        json={
+            "provider": "ollama",
+            "base_url": "http://192.0.2.10:11434",
+            "allow_remote": True,
+        },
+    )
+    assert allowed.status_code == 200, allowed.text
+    assert allowed.json()["status"] == "unreachable"
+    assert calls == ["called"]
+
+
+def test_normalize_base_url_treats_loopback_as_local() -> None:
+    from app.core.errors import AppError
+    from app.services.ai import normalize_base_url
+
+    for host in ("127.0.0.1", "localhost", "app.localhost", "[::1]"):
+        assert normalize_base_url("ollama", f"http://{host}:11434") == (
+            f"http://{host}:11434"
+        )
+    with pytest.raises(AppError) as error:
+        normalize_base_url("ollama", "http://192.0.2.10:11434")
+    assert error.value.code == "ai_remote_not_allowed"
+
+
 def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> None:
     defaults = client.get("/api/settings").json()["ai"]["text"]
-    assert defaults == {"provider": "ollama", "base_url": "", "model": ""}
+    assert defaults == {
+        "provider": "ollama",
+        "base_url": "",
+        "model": "",
+        "allow_remote": False,
+    }
 
     saved = client.patch(
         "/api/settings",
@@ -346,6 +409,19 @@ def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> N
         "provider": "openai_compatible",
         "base_url": "",
         "model": "local-model",
+        "allow_remote": False,
+    }
+
+    consented = client.patch(
+        "/api/settings",
+        json={"ai": {"text": {"base_url": "http://192.0.2.10:1234", "allow_remote": True}}},
+    )
+    assert consented.status_code == 200, consented.text
+    assert consented.json()["ai"]["text"] == {
+        "provider": "openai_compatible",
+        "base_url": "http://192.0.2.10:1234",
+        "model": "local-model",
+        "allow_remote": True,
     }
 
     for bad in (
@@ -364,6 +440,87 @@ def test_cleanup_requires_a_configured_model(
     response = _suggest(client, project["id"], page["id"], run["blocks"][0]["id"])
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "ai_not_configured"
+
+
+def test_cleanup_requires_consent_for_non_loopback_server(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    _configure_ai(client, base_url="http://192.0.2.10:11434")
+    page, run = _ocr_page(client, project, monkeypatch, "ai-remote-consent.png")
+    response = _suggest(client, project["id"], page["id"], run["blocks"][0]["id"])
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"]["code"] == "ai_remote_not_allowed"
+
+
+def test_page_suggestions_can_be_listed_and_filtered(
+    client: TestClient, project: dict, monkeypatch, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url)
+    page_a, run_a = _ocr_page(client, project, monkeypatch, "ai-list-a.png")
+    page_b, run_b = _ocr_page(client, project, monkeypatch, "ai-list-b.png")
+
+    first = _suggest(client, project["id"], page_a["id"], run_a["blocks"][0]["id"]).json()[
+        "suggestion"
+    ]
+    second = _suggest(client, project["id"], page_a["id"], run_a["blocks"][1]["id"]).json()[
+        "suggestion"
+    ]
+    third = _suggest(client, project["id"], page_b["id"], run_b["blocks"][0]["id"]).json()[
+        "suggestion"
+    ]
+    decided = client.patch(
+        f"/api/projects/{project['id']}/ai-suggestions/{first['id']}",
+        json={"status": "accepted"},
+    )
+    assert decided.status_code == 200, decided.text
+
+    all_a = client.get(
+        f"/api/projects/{project['id']}/pages/{page_a['id']}/ai-suggestions"
+    )
+    assert all_a.status_code == 200, all_a.text
+    assert {item["id"] for item in all_a.json()["suggestions"]} == {
+        first["id"],
+        second["id"],
+    }
+
+    accepted = client.get(
+        f"/api/projects/{project['id']}/pages/{page_a['id']}/ai-suggestions",
+        params={"status": "accepted"},
+    ).json()["suggestions"]
+    assert [item["id"] for item in accepted] == [first["id"]]
+    assert accepted[0]["status"] == "accepted"
+    assert accepted[0]["original_text"] == "Chapter One"
+    assert accepted[0]["proposed_text"] == "Chapter One (cleaned)"
+
+    pending = client.get(
+        f"/api/projects/{project['id']}/pages/{page_a['id']}/ai-suggestions",
+        params={"status": "pending"},
+    ).json()["suggestions"]
+    assert [item["id"] for item in pending] == [second["id"]]
+
+    rejected = client.get(
+        f"/api/projects/{project['id']}/pages/{page_a['id']}/ai-suggestions",
+        params={"status": "rejected"},
+    ).json()["suggestions"]
+    assert rejected == []
+
+    # Proposals stay scoped to the page that produced them.
+    other_page = client.get(
+        f"/api/projects/{project['id']}/pages/{page_b['id']}/ai-suggestions"
+    ).json()["suggestions"]
+    assert [item["id"] for item in other_page] == [third["id"]]
+
+    invalid = client.get(
+        f"/api/projects/{project['id']}/pages/{page_a['id']}/ai-suggestions",
+        params={"status": "unknown"},
+    )
+    assert invalid.status_code == 422
+
+    missing = client.get(
+        f"/api/projects/{project['id']}/pages/unknown-page/ai-suggestions"
+    )
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["code"] == "page_not_found"
 
 
 def test_cleanup_suggestion_is_reviewable_and_accepting_updates_text(

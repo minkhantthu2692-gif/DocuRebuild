@@ -31,7 +31,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/input";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
-import { useCreateAiSuggestion, useDecideAiSuggestion } from "@/hooks/use-ai";
+import {
+  useCreateAiSuggestion,
+  useDecideAiSuggestion,
+  usePageAiSuggestions,
+} from "@/hooks/use-ai";
 import { useAppMeta, useAppSettings } from "@/hooks/use-app";
 import { useOcrCapabilities, useLatestOcr, useStartOcr, useUpdateOcrBlock } from "@/hooks/use-ocr";
 import { formatDateTime, resolveLocale } from "@/lib/format";
@@ -76,16 +80,16 @@ export function OcrDialog({
   const updateBlock = useUpdateOcrBlock(projectId);
   const createSuggestion = useCreateAiSuggestion(projectId);
   const decideSuggestion = useDecideAiSuggestion(projectId);
+  const suggestionsQuery = usePageAiSuggestions(projectId, page?.id ?? null, open);
 
   const [languageValue, setLanguageValue] = useState("eng");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [includeNote, setIncludeNote] = useState(true);
-  const [suggestions, setSuggestions] = useState<Record<string, AiSuggestion>>({});
   const initializedRun = useRef<string | null>(null);
 
   const run = latestQuery.data ?? null;
-  const blocks = run?.blocks ?? [];
+  const blocks = useMemo(() => run?.blocks ?? [], [run]);
   const busy = startOcr.isPending || run?.status === "queued" || run?.status === "running";
   const aiAvailable = metaQuery.data?.capabilities.ai === true;
   const aiModel = settingsQuery.data?.ai.text.model.trim() ?? "";
@@ -127,12 +131,6 @@ export function OcrDialog({
     setSelected(Object.fromEntries(run.blocks.map((block) => [block.id, true])));
   }, [open, run]);
 
-  // A proposal belongs to one OCR run. A new run or a reopened dialog must not
-  // show a decision form for text that is no longer on screen.
-  useEffect(() => {
-    setSuggestions({});
-  }, [open, run?.id]);
-
   const selectedBlocks = blocks.filter((block) => selected[block.id] ?? true);
   const dirtyBlocks = blocks.filter(
     (block) => (drafts[block.id] ?? block.text) !== block.text,
@@ -143,6 +141,15 @@ export function OcrDialog({
       ? tErrors(run.error_code)
       : run?.error || t("ocr.failed");
   const embeddedText = run?.engine === "pdf-text";
+
+  const suggestions = useMemo(() => {
+    const blockIds = new Set(blocks.map((block) => block.id));
+    return Object.fromEntries(
+      (suggestionsQuery.data?.suggestions ?? [])
+        .filter((suggestion) => blockIds.has(suggestion.block_id))
+        .map((suggestion) => [suggestion.block_id, suggestion]),
+    ) as Record<string, AiSuggestion>;
+  }, [blocks, suggestionsQuery.data]);
 
   const reasonKey =
     capabilities?.reason &&
@@ -199,15 +206,7 @@ export function OcrDialog({
     if (!saved) return;
     createSuggestion.mutate(
       { pageId: page.id, blockId: block.id },
-      {
-        onSuccess: (response) => {
-          setSuggestions((current) => ({
-            ...current,
-            [response.suggestion.block_id]: response.suggestion,
-          }));
-        },
-        onError: (error) => toast.error(errorMessage(error)),
-      },
+      { onError: (error) => toast.error(errorMessage(error)) },
     );
   };
 
@@ -216,17 +215,11 @@ export function OcrDialog({
       { suggestionId: suggestion.id, payload: { status } },
       {
         onSuccess: (response) => {
-          const blockId = response.suggestion.block_id;
-          setSuggestions((current) => {
-            const next = { ...current };
-            delete next[blockId];
-            return next;
-          });
           if (status === "accepted") {
             // Let the updated block text from the server become the draft.
             setDrafts((current) => {
               const next = { ...current };
-              delete next[blockId];
+              delete next[response.suggestion.block_id];
               return next;
             });
             toast.success(t("ocr.ai.accepted"));

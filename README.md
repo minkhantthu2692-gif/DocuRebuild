@@ -14,8 +14,9 @@ data on your device, and treats every AI result as a reviewable proposal.
 > PDF pages are rendered locally and embedded text layers are stored as reviewable
 > proposals; image-only PDF pages can be processed with OCR. OCR and PDF import are
 > only advertised when their local dependencies actually work. The AI workflow only
-> talks to a local Ollama or OpenAI-compatible server that the user configures and
-> tests; every result is a proposal that must be accepted or rejected. Cloud
+> talks to an Ollama or OpenAI-compatible server that the user configures and tests;
+> loopback addresses are the default, and any other host needs explicit remote
+> consent. Every result is a proposal that must be accepted or rejected. Cloud
 > providers, free-tier adapters, paid usage, vision profiles, structured
 > table/figure/equation reconstruction, export and history are **not implemented
 > yet** and are clearly marked as unavailable in the UI. Nothing in this repository
@@ -265,13 +266,18 @@ application, and OCR review works without it.
      address is `http://127.0.0.1:1234/v1`.
 2. Open **Settings → Local AI**, keep or change the provider, and use **Test
    connection** to discover installed models.
-3. Choose a text model and select **Save profile**.
+3. Choose a text model and select **Save profile**. Localhost and loopback URLs
+   need no extra approval. If the server is on another host or IP that you control,
+   enable **Remote endpoint consent** first; until you do, the backend refuses to
+   contact that URL for either a connection test or a cleanup.
 4. Open **Extract text** on a page and select **Ask local AI** on one text block.
 
 Only that block's text is sent, to the URL you configured. The reply is stored as an
 unverified proposal with provider, model, URL and the original text. The OCR text
 does not change until you accept the proposal, and accepting is blocked if the block
 changed after the proposal was created. Rejecting keeps the OCR text unchanged.
+Pending proposals are read back from the project database when the dialog opens, so
+closing and reopening it does not discard an unreviewed proposal.
 
 The URL is only contacted when you press **Test connection** or **Ask local AI**;
 nothing is downloaded, loaded or generated in the background. There is no cloud
@@ -370,10 +376,11 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   Deleting a PDF page keeps the shared original until its last page is removed.
 - Asset paths stored in databases are relative and validated against traversal.
 - The local API binds to loopback by default and sends no telemetry.
-- The AI settings profile (provider, local base URL, model name) is stored in
-  `app.db`. No API keys exist in this phase. Project text sent for cleanup goes only
-  to the configured local server URL and is stored in the project database as a
-  reviewable proposal.
+- The AI settings profile (provider, local base URL, model name, remote consent) is
+  stored in `app.db`. No API keys exist in this phase. Project text sent for cleanup
+  goes only to the configured server URL; a non-loopback URL is refused unless remote
+  consent is explicitly enabled. Responses are stored in the project database as
+  reviewable proposals.
 - GitHub is used only for source code and documentation. User data is **not** a
   GitHub backup category. See [`AGENTS.md`](AGENTS.md).
 
@@ -424,11 +431,12 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 - Local AI cleanup is proposal-only and limited to one OCR text block per request.
   The model can still paraphrase, translate, drop or invent text; accepting a
   proposal marks the block corrected but does not make it verified. Very long blocks
-  are rejected instead of truncated. Only Ollama and OpenAI-compatible local servers
-  are supported; cloud free tiers, paid providers, API keys, vision tasks, usage
-  limits and provider fallbacks are not implemented yet. A local server's "free"
-  status depends on the user's own installation and hardware, so nothing is
-  advertised as universally free.
+  are rejected instead of truncated. Only Ollama and OpenAI-compatible servers that
+  the user configures are supported; loopback is the default, and any other host
+  requires explicit remote consent before a request. Cloud free tiers, paid
+  providers, API keys, vision tasks, usage limits and provider fallbacks are not
+  implemented yet. A local server's "free" status depends on the user's own
+  installation and hardware, so nothing is advertised as universally free.
 - The bounding-box overlay only draws the latest successful run and is hidden
   when that run is stale, failed or lacks geometry. It shows where text was
   found; it is not a verified layout model.
@@ -460,7 +468,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 3. Import and image processing | Complete |
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
-| 6. AI integration and free usage first | In progress: local AI providers and reviewable OCR text cleanup done; vision, free-tier/paid adapters, consent and usage limits pending |
+| 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary and reviewable persisted OCR text cleanup done; vision, free-tier/paid adapters and usage limits pending |
 | 7. Table, figure and equation reconstruction | Planned |
 | 8. Document editor and export | Planned |
 | 9. History, backup and recovery | Planned |

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from app.api.deps import DbSession, ProjectDep
 from app.schemas.ai import (
@@ -12,6 +12,8 @@ from app.schemas.ai import (
     AiSuggestionCreate,
     AiSuggestionDecisionIn,
     AiSuggestionDecisionOut,
+    AiSuggestionStatus,
+    AiSuggestionsOut,
 )
 from app.services import ai as ai_service
 from app.services import projects as project_service
@@ -28,7 +30,30 @@ def list_ai_providers() -> dict[str, Any]:
 
 @router.post("/ai/probe", response_model=AiProbeOut)
 def probe_ai_provider(payload: AiProbeRequest) -> dict[str, Any]:
-    return ai_service.probe_provider(payload.provider, payload.base_url)
+    return ai_service.probe_provider(
+        payload.provider,
+        payload.base_url,
+        allow_remote=payload.allow_remote,
+    )
+
+
+@router.get(
+    "/projects/{project_id}/pages/{page_id}/ai-suggestions",
+    response_model=AiSuggestionsOut,
+)
+def list_ai_suggestions(
+    project: ProjectDep,
+    page_id: str,
+    suggestion_status: AiSuggestionStatus | None = Query(default=None, alias="status"),
+) -> dict[str, Any]:
+    directory = project_service.ensure_project_storage(project)
+    return {
+        "suggestions": ai_service.list_page_suggestions(
+            directory,
+            page_id,
+            suggestion_status,
+        )
+    }
 
 
 @router.post(

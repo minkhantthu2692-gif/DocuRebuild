@@ -259,6 +259,7 @@ export interface AiProvidersResponse {
 export interface AiProbeRequest {
   provider: AiProviderKind;
   base_url?: string;
+  allow_remote?: boolean;
 }
 
 export interface AiModel {
@@ -307,11 +308,16 @@ export interface AiSuggestionDecisionResponse {
   run: OcrRun;
 }
 
+export interface AiSuggestionsResponse {
+  suggestions: AiSuggestion[];
+}
+
 /** One local AI server profile. Empty model means AI actions stay disabled. */
 export interface AiProfileSettings {
   provider: AiProviderKind;
   base_url: string;
   model: string;
+  allow_remote: boolean;
 }
 
 export interface AiSettings {

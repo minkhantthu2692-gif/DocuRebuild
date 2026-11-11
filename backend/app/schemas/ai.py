@@ -38,6 +38,8 @@ class AiProbeRequest(BaseModel):
 
     provider: AiProviderKind
     base_url: str = ""
+    # Required before any request leaves the loopback interface.
+    allow_remote: bool = False
 
 
 class AiModelOut(BaseModel):
@@ -79,6 +81,10 @@ class AiSuggestionOut(BaseModel):
     status: AiSuggestionStatus
     created_at: str
     updated_at: str
+
+
+class AiSuggestionsOut(BaseModel):
+    suggestions: list[AiSuggestionOut]
 
 
 class AiSuggestionDecisionIn(BaseModel):

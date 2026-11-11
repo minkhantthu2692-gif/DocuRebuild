@@ -14,7 +14,7 @@ presented in the UI until it actually works.
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
-| 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings and reviewable OCR text cleanup done; vision, remote/free-tier/paid adapters, consent, limits and fallbacks pending |
+| 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary and reviewable persisted OCR text cleanup done; vision, free-tier/paid adapters, limits and fallbacks pending |
 | 7. Table, figure and equation reconstruction | Planned | Depends on Phase 5/6 |
 | 8. Document editor and export | Partially started | Core editor exists; full model/export pending |
 | 9. History, backup and recovery | Planned | Event table exists; no restore UI |
@@ -214,14 +214,23 @@ described as universally free or universally accurate.
   `http://127.0.0.1:11434`) and `openai_compatible` (default
   `http://127.0.0.1:1234/v1`). No cloud service, API key or paid call is involved.
 - Settings → Local AI with an explicit, saved text profile (provider, base URL,
-  model). Empty model keeps AI actions disabled. URL drafts are validated and only
-  saved on request, and the provider default is shown as a placeholder.
+  model, remote consent). Empty model keeps AI actions disabled. URL drafts are
+  validated and only saved on request, and the provider default is shown as a
+  placeholder.
+- Loopback-only network boundary by default. `localhost`, `*.localhost` and loopback
+  IPs need no approval; any other host or IP returns `403 ai_remote_not_allowed` for
+  probes, cleanups and per-request overrides until the user enables remote endpoint
+  consent. Consent is stored with the profile and is never inferred from the URL.
 - User-triggered connection test and model discovery through Ollama `/api/tags` and
   `/api/version`, or OpenAI-compatible `/models`. Discovered models populate a
   manual-entry datalist; a typed model name always remains possible.
 - Reviewable OCR text cleanup. `POST .../ocr/blocks/{block_id}/ai-suggestions` sends
-  only that block's text to the configured local server and stores an unverified
+  only that block's text to the configured server and stores an unverified
   `ai_suggestion` with original text, proposed text, provider, model and base URL.
+- `GET .../pages/{page_id}/ai-suggestions?status=pending` exposes stored proposals.
+  The OCR dialog reloads pending proposals when it opens, so closing and reopening
+  the dialog no longer hides an unreviewed proposal. Proposals tied to an older OCR
+  run stay in the database but are not shown for the current run.
 - Accept/reject decisions through `PATCH .../ai-suggestions/{id}`. Accepting writes
   the proposal through the normal OCR correction path, marks the block corrected
   (not verified) and refuses when the block text changed after the proposal was
@@ -245,18 +254,19 @@ described as universally free or universally accurate.
 - Text/reasoning profile separation beyond OCR cleanup, plus task routing.
 - Optional free-tier and paid providers behind the same adapter, with dynamic
   model metadata, verified pricing/quotas and clearly marked costs.
-- Explicit consent before external transmission, spending limits, usage accounting,
-  rate-limit handling and provider fallbacks. No paid call may run without approval.
+- Spending limits, usage accounting, rate-limit handling and provider fallbacks. No
+  paid call may run without approval.
 - API-key storage outside the frontend and a secure secret store for future remote
   providers. Current local providers need no key.
 - AI history, comparison and bulk review; the current UI reviews one block at a
   time and keeps proposals in the project database.
 
-**Current limitation** — only a local Ollama or OpenAI-compatible server is
-supported. Model quality, availability, memory use and licence terms come from the
-user's installation; "free" is never assumed to be permanent. AI text can be wrong,
-so accepting a proposal does not mark it verified and manual review remains the
-source of truth.
+**Current limitation** — only an Ollama or OpenAI-compatible server that the user
+configures is supported; loopback is the default and a non-loopback endpoint requires
+explicit remote consent. Model quality, availability, memory use and licence terms
+come from the user's installation; "free" is never assumed to be permanent. AI text
+can be wrong, so accepting a proposal does not mark it verified and manual review
+remains the source of truth.
 
 ## Phase 7 — Tables, figures and equations (planned)
 

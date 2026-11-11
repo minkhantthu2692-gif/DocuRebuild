@@ -111,6 +111,9 @@
     "providerOpenAI": "OpenAI-compatible",
     "baseUrl": "Server URL",
     "baseUrlDescription": "Leave empty to use the provider default. The URL is only contacted when you test the connection or request a cleanup.",
+    "allowRemote": "Remote endpoint consent",
+    "allowRemoteDescription": "Localhost and loopback addresses work without this. Any other host or IP requires explicit consent before text is sent.",
+    "allowRemoteLabel": "Allow sending OCR text to a non-loopback server I control",
     "model": "Text model",
     "modelDescription": "Used for OCR text cleanup. Type a model name or test the connection to discover installed models.",
     "modelPlaceholder": "For example qwen2.5:7b",
@@ -134,7 +137,7 @@
     "unsaved": "Unsaved changes. Save the profile before using it.",
     "enabledHint": "AI cleanup is available in the OCR review dialog.",
     "notConfigured": "Choose a model to enable AI cleanup.",
-    "privacy": "Only the selected text block is sent, to the server URL you configure. No cloud service is contacted and no paid API is used. Every response stays a proposal until you accept it."
+    "privacy": "By default only a loopback server on this device is allowed. If you enable remote consent, the selected text block is sent to the URL you configure. No cloud account, API key or paid API is used. Every response stays a proposal until you accept it."
   },
   "storage": {
     "title": "Local storage",

@@ -6,6 +6,7 @@ import type {
   AiSuggestionCreate,
   AiSuggestionDecisionInput,
   AiSuggestionDecisionResponse,
+  AiSuggestionsResponse,
   AppCapabilities,
   AppMeta,
   AppSettings,
@@ -248,6 +249,16 @@ export const api = {
     request<AiSuggestionDecisionResponse>(
       `/projects/${projectId}/pages/${pageId}/ocr/blocks/${blockId}/ai-suggestions`,
       { method: "POST", body: JSON.stringify(payload) },
+    ),
+  listAiSuggestions: (
+    projectId: string,
+    pageId: string,
+    status?: "pending" | "accepted" | "rejected",
+  ) =>
+    request<AiSuggestionsResponse>(
+      `/projects/${projectId}/pages/${pageId}/ai-suggestions${
+        status ? `?status=${encodeURIComponent(status)}` : ""
+      }`,
     ),
   decideAiSuggestion: (
     projectId: string,

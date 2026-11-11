@@ -82,6 +82,7 @@ const DEFAULT_AI_PROFILE: AiProfileSettings = {
   provider: "ollama",
   base_url: "",
   model: "",
+  allow_remote: false,
 };
 
 interface SettingsSectionProps {
@@ -165,7 +166,8 @@ export function SettingsPage() {
   const aiDirty =
     aiDraft.provider !== aiSaved.provider ||
     aiDraft.base_url !== aiSaved.base_url ||
-    aiDraft.model !== aiSaved.model;
+    aiDraft.model !== aiSaved.model ||
+    aiDraft.allow_remote !== aiSaved.allow_remote;
   const providerDefault =
     aiProvidersQuery.data?.providers.find((item) => item.id === aiDraft.provider)
       ?.default_base_url ?? "";
@@ -191,7 +193,11 @@ export function SettingsPage() {
 
   const testAiConnection = () => {
     probeAi.mutate(
-      { provider: aiDraft.provider, base_url: aiDraft.base_url },
+      {
+        provider: aiDraft.provider,
+        base_url: aiDraft.base_url,
+        allow_remote: aiDraft.allow_remote,
+      },
       {
         onSuccess: (result) => setProbeResult(result),
         onError: (error) => toast.error(errorMessage(error)),
@@ -618,6 +624,21 @@ export function SettingsPage() {
                     updateAiDraft({ base_url: event.target.value });
                   }}
                 />
+              </SettingRow>
+
+              <SettingRow title={t("ai.allowRemote")} description={t("ai.allowRemoteDescription")}>
+                <label className="flex items-start gap-2 text-xs leading-relaxed">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 size-3.5 shrink-0 accent-primary"
+                    checked={aiDraft.allow_remote}
+                    onChange={(event) => {
+                      setProbeResult(null);
+                      updateAiDraft({ allow_remote: event.target.checked });
+                    }}
+                  />
+                  <span>{t("ai.allowRemoteLabel")}</span>
+                </label>
               </SettingRow>
 
               <SettingRow title={t("ai.model")} description={t("ai.modelDescription")}>

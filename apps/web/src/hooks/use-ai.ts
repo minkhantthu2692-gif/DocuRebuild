@@ -7,16 +7,40 @@ import type {
   AiSuggestionCreate,
   AiSuggestionDecisionInput,
   AiSuggestionDecisionResponse,
+  AiSuggestionsResponse,
 } from "@docurebuild/shared-types";
 
 import { latestOcrKey } from "@/hooks/use-ocr";
 import { api } from "@/lib/api";
+
+export function pageAiSuggestionsKey(
+  projectId: string,
+  pageId: string,
+  status: "pending" | "accepted" | "rejected" = "pending",
+) {
+  return ["ai", "suggestions", projectId, pageId, status] as const;
+}
 
 export function useAiProviders() {
   return useQuery<AiProvidersResponse>({
     queryKey: ["ai", "providers"],
     queryFn: api.listAiProviders,
     staleTime: Infinity,
+    retry: 1,
+  });
+}
+
+export function usePageAiSuggestions(
+  projectId: string,
+  pageId: string | null,
+  enabled: boolean,
+) {
+  return useQuery<AiSuggestionsResponse>({
+    queryKey: pageAiSuggestionsKey(projectId, pageId ?? "", "pending"),
+    queryFn: () => api.listAiSuggestions(projectId, pageId as string, "pending"),
+    enabled: enabled && Boolean(pageId),
+    staleTime: 0,
+    refetchOnMount: "always",
     retry: 1,
   });
 }
@@ -41,6 +65,18 @@ export function useCreateAiSuggestion(projectId: string) {
         latestOcrKey(projectId, response.run.page_id),
         response.run,
       );
+      const key = pageAiSuggestionsKey(
+        projectId,
+        response.suggestion.page_id,
+        "pending",
+      );
+      queryClient.setQueryData<AiSuggestionsResponse>(key, (current) => {
+        const suggestions = current?.suggestions ?? [];
+        if (suggestions.some((item) => item.id === response.suggestion.id)) {
+          return current;
+        }
+        return { suggestions: [response.suggestion, ...suggestions] };
+      });
     },
   });
 }
@@ -59,6 +95,19 @@ export function useDecideAiSuggestion(projectId: string) {
         latestOcrKey(projectId, response.run.page_id),
         response.run,
       );
+      const key = pageAiSuggestionsKey(
+        projectId,
+        response.suggestion.page_id,
+        "pending",
+      );
+      queryClient.setQueryData<AiSuggestionsResponse>(key, (current) => {
+        if (!current) return current;
+        return {
+          suggestions: current.suggestions.filter(
+            (item) => item.id !== response.suggestion.id,
+          ),
+        };
+      });
     },
   });
 }
