@@ -116,12 +116,15 @@ class AiSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: AiProfileSettings = Field(default_factory=AiProfileSettings)
+    # Rolling 24-hour cap for AI cleanup requests. Zero means unlimited.
+    request_limit: int = Field(default=0, ge=0, le=10_000)
 
 
 class AiPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: AiProfilePatch | None = None
+    request_limit: int | None = Field(default=None, ge=0, le=10_000)
 
 
 class AppSettings(BaseModel):

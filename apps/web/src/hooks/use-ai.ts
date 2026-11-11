@@ -8,6 +8,7 @@ import type {
   AiSuggestionDecisionInput,
   AiSuggestionDecisionResponse,
   AiSuggestionsResponse,
+  AiUsageResponse,
 } from "@docurebuild/shared-types";
 
 import { latestOcrKey } from "@/hooks/use-ocr";
@@ -26,6 +27,16 @@ export function useAiProviders() {
     queryKey: ["ai", "providers"],
     queryFn: api.listAiProviders,
     staleTime: Infinity,
+    retry: 1,
+  });
+}
+
+export function useAiUsage(enabled = true) {
+  return useQuery<AiUsageResponse>({
+    queryKey: ["ai", "usage"],
+    queryFn: api.getAiUsage,
+    enabled,
+    staleTime: 15_000,
     retry: 1,
   });
 }
@@ -77,6 +88,11 @@ export function useCreateAiSuggestion(projectId: string) {
         }
         return { suggestions: [response.suggestion, ...suggestions] };
       });
+      void queryClient.invalidateQueries({ queryKey: ["ai", "usage"] });
+    },
+    onError: () => {
+      // Failed requests are still counted when the provider was contacted.
+      void queryClient.invalidateQueries({ queryKey: ["ai", "usage"] });
     },
   });
 }

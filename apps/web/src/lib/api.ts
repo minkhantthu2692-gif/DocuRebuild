@@ -7,6 +7,7 @@ import type {
   AiSuggestionDecisionInput,
   AiSuggestionDecisionResponse,
   AiSuggestionsResponse,
+  AiUsageResponse,
   AppCapabilities,
   AppMeta,
   AppSettings,
@@ -235,6 +236,7 @@ export const api = {
     request<RegionProposals>(`/projects/${projectId}/pages/${pageId}/region-proposals`),
 
   listAiProviders: () => request<AiProvidersResponse>("/ai/providers"),
+  getAiUsage: () => request<AiUsageResponse>("/ai/usage"),
   probeAiProvider: (payload: AiProbeRequest) =>
     request<AiProbeResponse>("/ai/probe", {
       method: "POST",

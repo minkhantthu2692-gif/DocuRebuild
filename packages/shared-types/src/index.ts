@@ -246,6 +246,7 @@ export type AiProbeErrorCode =
 
 export type AiTask = "ocr_cleanup";
 export type AiSuggestionStatus = "pending" | "accepted" | "rejected";
+export type AiUsageOutcome = "success" | "error";
 
 export interface AiProvider {
   id: AiProviderKind;
@@ -312,6 +313,29 @@ export interface AiSuggestionsResponse {
   suggestions: AiSuggestion[];
 }
 
+export interface AiUsageEntry {
+  id: string;
+  provider: string;
+  model: string;
+  task: string;
+  outcome: AiUsageOutcome;
+  error_code: string | null;
+  project_id: string | null;
+  page_id: string | null;
+  block_id: string | null;
+  created_at: string;
+}
+
+export interface AiUsageResponse {
+  window_hours: number;
+  request_limit: number;
+  used: number;
+  remaining: number | null;
+  successful: number;
+  failed: number;
+  recent: AiUsageEntry[];
+}
+
 /** One local AI server profile. Empty model means AI actions stay disabled. */
 export interface AiProfileSettings {
   provider: AiProviderKind;
@@ -322,6 +346,8 @@ export interface AiProfileSettings {
 
 export interface AiSettings {
   text: AiProfileSettings;
+  /** Rolling 24-hour request cap. Zero means unlimited. */
+  request_limit: number;
 }
 
 /* -------------------------------------------------------------------------- */

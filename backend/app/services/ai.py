@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 import socket
 import uuid
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, Callable, NamedTuple
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from urllib.parse import urlparse
@@ -31,6 +32,8 @@ MAX_TEXT_LENGTH = 20_000
 PROBE_TIMEOUT = 5.0
 GENERATE_TIMEOUT = 60.0
 USER_AGENT = "DocuRebuild/0.1"
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
     "You correct OCR text for a document reconstruction tool. "
@@ -59,6 +62,29 @@ class Completion(NamedTuple):
     provider: AiProviderKind
     model: str
     base_url: str
+
+
+class RequestAttempt(NamedTuple):
+    """Metadata for one provider request that actually left the app."""
+
+    provider: AiProviderKind
+    model: str
+    base_url: str
+    error_code: str | None
+
+
+def _report_attempt(
+    callback: Callable[[RequestAttempt], None] | None,
+    attempt: RequestAttempt,
+) -> None:
+    if callback is None:
+        return
+    try:
+        callback(attempt)
+    except Exception:
+        # Usage accounting must never turn a successful proposal into an error
+        # or hide the original provider failure.
+        logger.exception("Could not record local AI usage metadata.")
 
 
 def provider_catalog() -> list[dict[str, str]]:
@@ -361,6 +387,7 @@ def request_cleanup(
     provider: AiProviderKind | None = None,
     base_url: str | None = None,
     model: str | None = None,
+    on_attempt: Callable[[RequestAttempt], None] | None = None,
 ) -> Completion:
     if not text.strip():
         raise AppError(422, "ocr_block_empty", "This OCR block has no text to review.")
@@ -372,7 +399,18 @@ def request_cleanup(
         base_url=base_url,
         model=model,
     )
-    cleaned = _chat_completion(resolved_provider, resolved_url, resolved_model, text)
+    try:
+        cleaned = _chat_completion(resolved_provider, resolved_url, resolved_model, text)
+    except AppError as exc:
+        _report_attempt(
+            on_attempt,
+            RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
+        )
+        raise
+    _report_attempt(
+        on_attempt,
+        RequestAttempt(resolved_provider, resolved_model, resolved_url, None),
+    )
     return Completion(cleaned, resolved_provider, resolved_model, resolved_url)
 
 
@@ -459,6 +497,7 @@ def create_cleanup_suggestion(
     provider: AiProviderKind | None = None,
     base_url: str | None = None,
     model: str | None = None,
+    on_attempt: Callable[[RequestAttempt], None] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     with project_db(project_dir) as conn:
         _page, block, _run = _load_block(conn, page_id, block_id)
@@ -472,6 +511,7 @@ def create_cleanup_suggestion(
         provider=provider,
         base_url=base_url,
         model=model,
+        on_attempt=on_attempt,
     )
 
     now = utc_iso()

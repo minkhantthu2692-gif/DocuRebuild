@@ -22,6 +22,7 @@ AiProbeErrorCode = Literal[
 ]
 AiTask = Literal["ocr_cleanup"]
 AiSuggestionStatus = Literal["pending", "accepted", "rejected"]
+AiUsageOutcome = Literal["success", "error"]
 
 
 class AiProviderOut(BaseModel):
@@ -85,6 +86,29 @@ class AiSuggestionOut(BaseModel):
 
 class AiSuggestionsOut(BaseModel):
     suggestions: list[AiSuggestionOut]
+
+
+class AiUsageEntryOut(BaseModel):
+    id: str
+    provider: str
+    model: str
+    task: str
+    outcome: AiUsageOutcome
+    error_code: str | None = None
+    project_id: str | None = None
+    page_id: str | None = None
+    block_id: str | None = None
+    created_at: str
+
+
+class AiUsageOut(BaseModel):
+    window_hours: int
+    request_limit: int
+    used: int
+    remaining: int | None = None
+    successful: int
+    failed: int
+    recent: list[AiUsageEntryOut]
 
 
 class AiSuggestionDecisionIn(BaseModel):

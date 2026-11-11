@@ -236,6 +236,12 @@ def _suggest(
     )
 
 
+def _usage(client: TestClient) -> dict:
+    response = client.get("/api/ai/usage")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 def test_ai_providers_catalog(client: TestClient) -> None:
     body = client.get("/api/ai/providers").json()
     providers = {item["id"]: item["default_base_url"] for item in body["providers"]}
@@ -392,7 +398,9 @@ def test_normalize_base_url_treats_loopback_as_local() -> None:
 
 
 def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> None:
-    defaults = client.get("/api/settings").json()["ai"]["text"]
+    ai_settings = client.get("/api/settings").json()["ai"]
+    assert ai_settings["request_limit"] == 0
+    defaults = ai_settings["text"]
     assert defaults == {
         "provider": "ollama",
         "base_url": "",
@@ -424,6 +432,11 @@ def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> N
         "allow_remote": True,
     }
 
+    limited = client.patch("/api/settings", json={"ai": {"request_limit": 25}})
+    assert limited.status_code == 200, limited.text
+    assert limited.json()["ai"]["request_limit"] == 25
+    assert client.get("/api/ai/usage").json()["request_limit"] == 25
+
     for bad in (
         {"base_url": "ftp://127.0.0.1:1234"},
         {"base_url": "http://user:secret@127.0.0.1:1234"},
@@ -431,6 +444,10 @@ def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> N
     ):
         response = client.patch("/api/settings", json={"ai": {"text": bad}})
         assert response.status_code == 422, bad
+
+    for bad_limit in (-1, 10_001):
+        response = client.patch("/api/settings", json={"ai": {"request_limit": bad_limit}})
+        assert response.status_code == 422, bad_limit
 
 
 def test_cleanup_requires_a_configured_model(
@@ -440,6 +457,8 @@ def test_cleanup_requires_a_configured_model(
     response = _suggest(client, project["id"], page["id"], run["blocks"][0]["id"])
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "ai_not_configured"
+    # Validation failures never contacted a provider, so they are not counted.
+    assert _usage(client)["used"] == 0
 
 
 def test_cleanup_requires_consent_for_non_loopback_server(
@@ -450,6 +469,71 @@ def test_cleanup_requires_consent_for_non_loopback_server(
     response = _suggest(client, project["id"], page["id"], run["blocks"][0]["id"])
     assert response.status_code == 403, response.text
     assert response.json()["detail"]["code"] == "ai_remote_not_allowed"
+    assert _usage(client)["used"] == 0
+
+
+def test_cleanup_records_usage_and_enforces_rolling_limit(
+    client: TestClient, project: dict, monkeypatch, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url)
+    page, run = _ocr_page(client, project, monkeypatch, "ai-usage.png")
+
+    # Connection tests are not charged against the request limit.
+    probe = client.post(
+        "/api/ai/probe",
+        json={"provider": "ollama", "base_url": stub_ai.base_url},
+    )
+    assert probe.status_code == 200
+    empty = _usage(client)
+    assert empty["used"] == 0
+    assert empty["recent"] == []
+    assert empty["request_limit"] == 0
+    assert empty["remaining"] is None
+
+    created = _suggest(client, project["id"], page["id"], run["blocks"][0]["id"])
+    assert created.status_code == 201, created.text
+    after_success = _usage(client)
+    assert after_success["used"] == 1
+    assert after_success["successful"] == 1
+    assert after_success["failed"] == 0
+    entry = after_success["recent"][0]
+    assert entry["outcome"] == "success"
+    assert entry["provider"] == "ollama"
+    assert entry["model"] == "qwen2.5:7b"
+    assert entry["task"] == "ocr_cleanup"
+    assert entry["project_id"] == project["id"]
+    assert entry["page_id"] == page["id"]
+    assert entry["block_id"] == run["blocks"][0]["id"]
+
+    # A provider request that fails still counts, because it used the server.
+    _configure_ai(client, base_url=_closed_port_url())
+    failed = _suggest(client, project["id"], page["id"], run["blocks"][1]["id"])
+    assert failed.status_code == 502, failed.text
+    assert failed.json()["detail"]["code"] == "ai_unreachable"
+    after_failure = _usage(client)
+    assert after_failure["used"] == 2
+    assert after_failure["successful"] == 1
+    assert after_failure["failed"] == 1
+    assert after_failure["recent"][0]["outcome"] == "error"
+    assert after_failure["recent"][0]["error_code"] == "ai_unreachable"
+
+    limited = client.patch("/api/settings", json={"ai": {"request_limit": 2}})
+    assert limited.status_code == 200, limited.text
+    blocked = _suggest(client, project["id"], page["id"], run["blocks"][0]["id"])
+    assert blocked.status_code == 429, blocked.text
+    assert blocked.json()["detail"]["code"] == "ai_request_limit_reached"
+    after_block = _usage(client)
+    assert after_block["used"] == 2
+    assert after_block["request_limit"] == 2
+    assert after_block["remaining"] == 0
+
+    # Raising the cap immediately allows another request.
+    raised = client.patch("/api/settings", json={"ai": {"request_limit": 3}})
+    assert raised.status_code == 200
+    _configure_ai(client, base_url=stub_ai.base_url)
+    allowed = _suggest(client, project["id"], page["id"], run["blocks"][0]["id"])
+    assert allowed.status_code == 201, allowed.text
+    assert _usage(client)["used"] == 3
 
 
 def test_page_suggestions_can_be_listed_and_filtered(

@@ -44,7 +44,10 @@ function mergeSettings(current: AppSettings | undefined, patch: SettingsPatch): 
       motion: "full",
     },
     editor: { document_font: "serif" },
-    ai: { text: { provider: "ollama", base_url: "", model: "", allow_remote: false } },
+    ai: {
+      text: { provider: "ollama", base_url: "", model: "", allow_remote: false },
+      request_limit: 0,
+    },
   };
   return {
     ...base,

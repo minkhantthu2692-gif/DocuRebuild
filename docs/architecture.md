@@ -44,9 +44,10 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
-| `services.settings` | Persisted appearance, language, editor and local AI profile settings |
+| `services.settings` | Persisted appearance, language, editor, AI profile and request-limit settings |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence, corrections, staleness |
 | `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, listing and review decisions |
+| `services.ai_usage` | Local AI request metadata, rolling-window request counting and usage summaries |
 | `api.routes.*` | HTTP surface (`/api/...`) |
 
 ### Storage model
@@ -54,7 +55,8 @@ to the same local API; the API is not intended to be exposed publicly.
 The application database (`app.db`) contains only global state:
 
 - `projects` — id, name, description, directory, timestamps
-- `app_settings` — key/value JSON (appearance, language, editor, local AI profile)
+- `app_settings` — key/value JSON (appearance, language, editor, local AI profile and request limit)
+- `ai_usage` — local AI request metadata: provider, model, task, outcome, error code, project/page/block ids and timestamp; never document text
 - `schema_migrations` — created by Alembic
 
 Each project owns a portable folder and its own `project.db`:
@@ -146,6 +148,7 @@ GET    /api/health
 GET    /api/meta
 GET    /api/ocr/capabilities
 GET    /api/ai/providers
+GET    /api/ai/usage
 POST   /api/ai/probe
 GET    /api/settings
 PATCH  /api/settings
@@ -387,6 +390,17 @@ src/
   runs for probes, cleanup requests and per-request overrides, after the metadata
   block. The backend calls only the configured URL, using Python's standard library;
   no new runtime dependency is introduced.
+- `ai_usage` records one row for each cleanup request that actually leaves the app,
+  including provider failures. Validation failures that never contact the server are
+  not counted, and connection tests are excluded. The row stores provider, model,
+  task, outcome, error code, project/page/block ids and a timestamp — never document
+  text or the model reply. `GET /api/ai/usage` returns the rolling 24-hour count,
+  success/failure split and the 20 most recent entries.
+- `ai.request_limit` (0 = unlimited, maximum 10,000) is checked before each cleanup
+  request. Reaching the cap returns `429 ai_request_limit_reached` without contacting
+  the provider. The limit and usage summary are shown in Settings, and the recent
+  request list is metadata only. The ledger lives in the application database, so it
+  spans projects without copying project text into the app database.
 - `POST .../ocr/blocks/{block_id}/ai-suggestions` loads the block and run, refuses
   missing, unfinished or stale OCR results, and sends the **block text only** with a
   fixed correction system prompt (`temperature: 0`). The network call happens
@@ -410,9 +424,9 @@ src/
   and shows a Settings link when no model is configured.
 - Tests use a loopback stub HTTP server, not a real model, and cover discovery,
   unreachable/timeout/HTTP/invalid probes, remote-consent refusal, both adapters,
-  proposal listing and filtering, stale runs, stale text, rejection, validation and
-  schema migration. This verifies protocol handling and review safety, not model
-  quality.
+  proposal listing and filtering, usage recording and rolling-limit enforcement,
+  stale runs, stale text, rejection, validation and schema migration. This verifies
+  protocol handling and review safety, not model quality.
 
 ### Design system
 
@@ -443,6 +457,9 @@ src/
   to every response.
 - No secrets are stored in the frontend. No AI provider keys exist in this phase;
   local providers require none. The AI profile stores only a local URL and model name.
+- AI usage history is metadata only: provider, model, task, outcome, error code,
+  project/page/block ids and timestamps. It never stores sent text or model output,
+  and a request limit is enforced before a provider is contacted.
 - OCR and PDF rendering run entirely on the local machine. Page images and PDF
   files are never uploaded; the backend reads the project's own source/display
   assets and invokes local libraries. Missing engine/language packs are reported,

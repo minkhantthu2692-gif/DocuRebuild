@@ -41,10 +41,10 @@ import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Separator } from "@/components/ui/separator";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
-import { useAiProviders, useProbeAiProvider } from "@/hooks/use-ai";
+import { useAiProviders, useAiUsage, useProbeAiProvider } from "@/hooks/use-ai";
 import { useAppMeta, useAppSettings, useHealth, useUpdateSettings } from "@/hooks/use-app";
 import { useOcrCapabilities } from "@/hooks/use-ocr";
-import { formatNumber, resolveLocale } from "@/lib/format";
+import { formatDateTime, formatNumber, resolveLocale } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const ACCENTS: AccentName[] = [
@@ -146,11 +146,13 @@ export function SettingsPage() {
   const healthQuery = useHealth();
   const ocrQuery = useOcrCapabilities();
   const aiProvidersQuery = useAiProviders();
+  const aiUsageQuery = useAiUsage();
   const probeAi = useProbeAiProvider();
   const updateSettings = useUpdateSettings();
   const errorMessage = useApiErrorMessage();
   const [copied, setCopied] = useState(false);
   const [aiDraftOverride, setAiDraftOverride] = useState<AiProfileSettings | null>(null);
+  const [aiLimitDraft, setAiLimitDraft] = useState<string | null>(null);
   const [probeResult, setProbeResult] = useState<AiProbeResponse | null>(null);
 
   const settings = settingsQuery.data;
@@ -162,12 +164,22 @@ export function SettingsPage() {
   const ocr = ocrQuery.data;
 
   const aiSaved = settings?.ai?.text ?? DEFAULT_AI_PROFILE;
+  const aiLimitSaved = settings?.ai?.request_limit ?? 0;
   const aiDraft = aiDraftOverride ?? aiSaved;
+  const aiLimitValue = aiLimitDraft ?? String(aiLimitSaved);
+  const parsedAiLimit = Number(aiLimitValue);
+  const aiLimitValid =
+    aiLimitValue.trim() !== "" &&
+    Number.isInteger(parsedAiLimit) &&
+    parsedAiLimit >= 0 &&
+    parsedAiLimit <= 10_000;
   const aiDirty =
     aiDraft.provider !== aiSaved.provider ||
     aiDraft.base_url !== aiSaved.base_url ||
     aiDraft.model !== aiSaved.model ||
-    aiDraft.allow_remote !== aiSaved.allow_remote;
+    aiDraft.allow_remote !== aiSaved.allow_remote ||
+    (aiLimitValid && parsedAiLimit !== aiLimitSaved);
+  const aiUsage = aiUsageQuery.data;
   const providerDefault =
     aiProvidersQuery.data?.providers.find((item) => item.id === aiDraft.provider)
       ?.default_base_url ?? "";
@@ -206,11 +218,13 @@ export function SettingsPage() {
   };
 
   const saveAiProfile = () => {
+    if (!aiLimitValid) return;
     updateSettings.mutate(
-      { ai: { text: aiDraft } },
+      { ai: { text: aiDraft, request_limit: parsedAiLimit } },
       {
         onSuccess: () => {
           setAiDraftOverride(null);
+          setAiLimitDraft(null);
           toast.success(t("ai.saved"));
         },
         onError: (error) => toast.error(errorMessage(error)),
@@ -659,6 +673,46 @@ export function SettingsPage() {
                 ) : null}
               </SettingRow>
 
+              <SettingRow
+                title={t("ai.requestLimit")}
+                description={t("ai.requestLimitDescription")}
+              >
+                <div className="space-y-1.5">
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={10_000}
+                    step={1}
+                    value={aiLimitValue}
+                    aria-label={t("ai.requestLimit")}
+                    aria-invalid={!aiLimitValid}
+                    onChange={(event) => setAiLimitDraft(event.target.value)}
+                  />
+                  <p
+                    className={cn(
+                      "text-2xs leading-relaxed",
+                      aiLimitValid ? "text-muted-foreground" : "text-warning",
+                    )}
+                  >
+                    {!aiLimitValid
+                      ? t("ai.requestLimitInvalid")
+                      : aiUsage
+                        ? aiLimitSaved > 0
+                          ? t("ai.usageLimited", {
+                              used: formatNumber(aiUsage.used, locale),
+                              limit: formatNumber(aiLimitSaved, locale),
+                            })
+                          : t("ai.usageUnlimited", {
+                              used: formatNumber(aiUsage.used, locale),
+                            })
+                        : aiUsageQuery.isError
+                          ? t("ai.usageUnavailable")
+                          : t("ai.usageLoading")}
+                  </p>
+                </div>
+              </SettingRow>
+
               <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-background/40 p-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-wrap items-center gap-2">
@@ -715,10 +769,39 @@ export function SettingsPage() {
                 )}
               </div>
 
+              {aiUsage && aiUsage.recent.length > 0 ? (
+                <SettingRow
+                  title={t("ai.usageHistory")}
+                  description={t("ai.usageHistoryDescription")}
+                  stacked
+                >
+                  <ul className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/60 bg-background/40 text-xs">
+                    {aiUsage.recent.slice(0, 5).map((entry) => (
+                      <li
+                        key={entry.id}
+                        className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{entry.model}</p>
+                          <p className="truncate text-2xs text-muted-foreground">
+                            {entry.provider} · {formatDateTime(entry.created_at, locale)}
+                          </p>
+                        </div>
+                        <Badge variant={entry.outcome === "success" ? "success" : "warning"}>
+                          {entry.outcome === "success"
+                            ? t("ai.usageSuccess")
+                            : t("ai.usageFailed")}
+                        </Badge>
+                      </li>
+                    ))}
+                  </ul>
+                </SettingRow>
+              ) : null}
+
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   size="sm"
-                  disabled={!aiDirty || updateSettings.isPending}
+                  disabled={!aiDirty || !aiLimitValid || updateSettings.isPending}
                   onClick={saveAiProfile}
                 >
                   {t("ai.saveProfile")}

@@ -14,7 +14,7 @@ presented in the UI until it actually works.
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
-| 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary and reviewable persisted OCR text cleanup done; vision, free-tier/paid adapters, limits and fallbacks pending |
+| 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history and reviewable persisted OCR text cleanup done; vision, free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | Planned | Depends on Phase 5/6 |
 | 8. Document editor and export | Partially started | Core editor exists; full model/export pending |
 | 9. History, backup and recovery | Planned | Event table exists; no restore UI |
@@ -231,6 +231,15 @@ described as universally free or universally accurate.
   The OCR dialog reloads pending proposals when it opens, so closing and reopening
   the dialog no longer hides an unreviewed proposal. Proposals tied to an older OCR
   run stay in the database but are not shown for the current run.
+- Local AI usage ledger in the application database. Every cleanup request that
+  actually contacts a provider is recorded with provider, model, task, outcome,
+  error code, project/page/block ids and a timestamp. Document text and model output
+  are never stored in this ledger. Validation failures and connection tests are not
+  counted.
+- Configurable rolling 24-hour request limit (`0` = unlimited, maximum 10,000),
+  enforced before the provider is contacted with `429 ai_request_limit_reached`.
+  Settings shows requests used in the last 24 hours and the five most recent
+  metadata-only entries through `GET /api/ai/usage`.
 - Accept/reject decisions through `PATCH .../ai-suggestions/{id}`. Accepting writes
   the proposal through the normal OCR correction path, marks the block corrected
   (not verified) and refuses when the block text changed after the proposal was
@@ -244,8 +253,9 @@ described as universally free or universally accurate.
 - Capability reporting: `ai` is `true` because the adapter and review workflow
   exist, while Settings still requires a working local server and model before any
   action can run. Backend tests use a loopback stub server and cover discovery,
-  timeouts, unreachable servers, invalid responses, stale runs, stale text,
-  rejection and validation. Frontend tests cover i18n key parity.
+  timeouts, unreachable servers, invalid responses, remote consent, usage recording,
+  rolling-limit enforcement, stale runs, stale text, rejection and validation.
+  Frontend tests cover i18n key parity.
 
 **Remaining**
 
@@ -254,8 +264,8 @@ described as universally free or universally accurate.
 - Text/reasoning profile separation beyond OCR cleanup, plus task routing.
 - Optional free-tier and paid providers behind the same adapter, with dynamic
   model metadata, verified pricing/quotas and clearly marked costs.
-- Spending limits, usage accounting, rate-limit handling and provider fallbacks. No
-  paid call may run without approval.
+- Spending limits, cost estimation and rate-limit handling for future paid
+  providers, plus provider fallbacks. No paid call may run without approval.
 - API-key storage outside the frontend and a secure secret store for future remote
   providers. Current local providers need no key.
 - AI history, comparison and bulk review; the current UI reviews one block at a

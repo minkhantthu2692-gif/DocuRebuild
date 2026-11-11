@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Query, status
+from sqlalchemy.orm import Session
 
 from app.api.deps import DbSession, ProjectDep
 from app.schemas.ai import (
@@ -14,18 +16,37 @@ from app.schemas.ai import (
     AiSuggestionDecisionOut,
     AiSuggestionStatus,
     AiSuggestionsOut,
+    AiUsageOut,
 )
 from app.services import ai as ai_service
+from app.services import ai_usage
 from app.services import projects as project_service
 from app.services.projects import touch_project
 from app.services.settings import get_app_settings
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["ai"])
+
+
+def _commit_usage(session: Session) -> None:
+    """Persist usage metadata without hiding the provider or validation error."""
+    try:
+        session.commit()
+    except Exception:
+        logger.exception("Could not persist local AI usage metadata.")
+        session.rollback()
 
 
 @router.get("/ai/providers", response_model=AiProvidersOut)
 def list_ai_providers() -> dict[str, Any]:
     return {"providers": ai_service.provider_catalog()}
+
+
+@router.get("/ai/usage", response_model=AiUsageOut)
+def read_ai_usage(session: DbSession) -> dict[str, Any]:
+    ai_settings = get_app_settings(session).ai
+    return ai_usage.usage_summary(session, ai_settings.request_limit)
 
 
 @router.post("/ai/probe", response_model=AiProbeOut)
@@ -69,16 +90,36 @@ def create_ai_cleanup_suggestion(
     session: DbSession,
 ) -> dict[str, Any]:
     directory = project_service.ensure_project_storage(project)
-    profile = get_app_settings(session).ai.text
-    suggestion, run = ai_service.create_cleanup_suggestion(
-        directory,
-        page_id,
-        block_id,
-        profile,
-        provider=payload.provider,
-        base_url=payload.base_url,
-        model=payload.model,
-    )
+    ai_settings = get_app_settings(session).ai
+    ai_usage.ensure_within_limit(session, ai_settings.request_limit)
+
+    def record_attempt(attempt: ai_service.RequestAttempt) -> None:
+        ai_usage.record_attempt(
+            session,
+            provider=attempt.provider,
+            model=attempt.model,
+            task="ocr_cleanup",
+            outcome="error" if attempt.error_code else "success",
+            error_code=attempt.error_code,
+            project_id=project.id,
+            page_id=page_id,
+            block_id=block_id,
+        )
+
+    try:
+        suggestion, run = ai_service.create_cleanup_suggestion(
+            directory,
+            page_id,
+            block_id,
+            ai_settings.text,
+            provider=payload.provider,
+            base_url=payload.base_url,
+            model=payload.model,
+            on_attempt=record_attempt,
+        )
+    except Exception:
+        _commit_usage(session)
+        raise
     touch_project(session, project)
     return {"suggestion": suggestion, "run": run}
 

@@ -42,3 +42,27 @@ class AppSetting(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
+
+
+class AiUsage(Base):
+    """One AI request attempt, stored as metadata only.
+
+    No document text is recorded here. The row exists so the user can see how
+    many requests were sent and so a configurable rolling-window limit can be
+    enforced before the next request leaves the device.
+    """
+
+    __tablename__ = "ai_usage"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    model: Mapped[str] = mapped_column(String(200), nullable=False)
+    task: Mapped[str] = mapped_column(String(32), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    project_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    page_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    block_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, index=True
+    )
