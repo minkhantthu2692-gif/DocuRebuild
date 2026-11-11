@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from typing import Literal
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.schemas.ai import AiProviderKind
 
 ThemeMode = Literal["system", "light", "dark"]
 AccentName = Literal["indigo", "violet", "blue", "teal", "emerald", "amber", "rose"]
@@ -51,12 +54,80 @@ class EditorPatch(BaseModel):
     document_font: DocumentFont | None = None
 
 
+def _validate_base_url(value: str) -> str:
+    """Accept an empty value or a credential-free http(s) base URL."""
+    cleaned = value.strip().rstrip("/")
+    if not cleaned:
+        return ""
+    if len(cleaned) > 500:
+        raise ValueError("Base URL is too long.")
+    parsed = urlparse(cleaned)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Base URL must be an http or https URL.")
+    if parsed.username or parsed.password:
+        raise ValueError("Base URL must not contain credentials.")
+    return cleaned
+
+
+class AiProfileSettings(BaseModel):
+    """One local AI server profile for a task profile (text for now)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: AiProviderKind = "ollama"
+    # Empty uses the provider's documented local default.
+    base_url: str = ""
+    # Empty means no model is chosen, so AI actions stay disabled.
+    model: str = Field(default="", max_length=200)
+
+    @field_validator("base_url")
+    @classmethod
+    def _check_base_url(cls, value: str) -> str:
+        return _validate_base_url(value)
+
+    @field_validator("model")
+    @classmethod
+    def _check_model(cls, value: str) -> str:
+        return value.strip()
+
+
+class AiProfilePatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: AiProviderKind | None = None
+    base_url: str | None = None
+    model: str | None = Field(default=None, max_length=200)
+
+    @field_validator("base_url")
+    @classmethod
+    def _check_base_url(cls, value: str | None) -> str | None:
+        return None if value is None else _validate_base_url(value)
+
+    @field_validator("model")
+    @classmethod
+    def _check_model(cls, value: str | None) -> str | None:
+        return None if value is None else value.strip()
+
+
+class AiSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: AiProfileSettings = Field(default_factory=AiProfileSettings)
+
+
+class AiPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: AiProfilePatch | None = None
+
+
 class AppSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     language: LanguageCode = "en"
     appearance: AppearanceSettings = Field(default_factory=AppearanceSettings)
     editor: EditorSettings = Field(default_factory=EditorSettings)
+    ai: AiSettings = Field(default_factory=AiSettings)
 
 
 class SettingsUpdate(BaseModel):
@@ -65,3 +136,4 @@ class SettingsUpdate(BaseModel):
     language: LanguageCode | None = None
     appearance: AppearancePatch | None = None
     editor: EditorPatch | None = None
+    ai: AiPatch | None = None

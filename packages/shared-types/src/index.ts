@@ -42,6 +42,7 @@ export interface AppSettings {
   language: LanguageCode;
   appearance: AppearanceSettings;
   editor: EditorSettings;
+  ai: AiSettings;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -222,6 +223,99 @@ export interface OcrCapabilities {
   preferred_languages: string[];
   reason: string | null;
   setup_hint: string | null;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                    AI                                      */
+/* -------------------------------------------------------------------------- */
+
+export type AiProviderKind = "ollama" | "openai_compatible";
+
+export type AiProbeStatus =
+  | "ready"
+  | "unreachable"
+  | "timeout"
+  | "http_error"
+  | "invalid_response";
+
+export type AiProbeErrorCode =
+  | "ai_unreachable"
+  | "ai_timeout"
+  | "ai_http_error"
+  | "ai_invalid_response";
+
+export type AiTask = "ocr_cleanup";
+export type AiSuggestionStatus = "pending" | "accepted" | "rejected";
+
+export interface AiProvider {
+  id: AiProviderKind;
+  default_base_url: string;
+}
+
+export interface AiProvidersResponse {
+  providers: AiProvider[];
+}
+
+export interface AiProbeRequest {
+  provider: AiProviderKind;
+  base_url?: string;
+}
+
+export interface AiModel {
+  id: string;
+  family: string | null;
+  parameter_size: string | null;
+}
+
+export interface AiProbeResponse {
+  status: AiProbeStatus;
+  provider: AiProviderKind;
+  base_url: string;
+  models: AiModel[];
+  version: string | null;
+  error_code: AiProbeErrorCode | null;
+  http_status: number | null;
+}
+
+export interface AiSuggestionCreate {
+  provider?: AiProviderKind;
+  base_url?: string;
+  model?: string;
+}
+
+export interface AiSuggestion {
+  id: string;
+  page_id: string;
+  block_id: string;
+  task: AiTask;
+  original_text: string;
+  proposed_text: string;
+  provider: AiProviderKind;
+  model: string;
+  base_url: string;
+  status: AiSuggestionStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiSuggestionDecisionInput {
+  status: "accepted" | "rejected";
+}
+
+export interface AiSuggestionDecisionResponse {
+  suggestion: AiSuggestion;
+  run: OcrRun;
+}
+
+/** One local AI server profile. Empty model means AI actions stay disabled. */
+export interface AiProfileSettings {
+  provider: AiProviderKind;
+  base_url: string;
+  model: string;
+}
+
+export interface AiSettings {
+  text: AiProfileSettings;
 }
 
 /* -------------------------------------------------------------------------- */

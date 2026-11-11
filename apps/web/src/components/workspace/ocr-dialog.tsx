@@ -6,12 +6,15 @@ import {
   Play,
   RefreshCw,
   ScanText,
+  Sparkles,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
-import type { OcrBlock, OcrBlockKind, PageSummary } from "@docurebuild/shared-types";
+import type { AiSuggestion, OcrBlock, OcrBlockKind, PageSummary } from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,6 +31,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/input";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
+import { useCreateAiSuggestion, useDecideAiSuggestion } from "@/hooks/use-ai";
+import { useAppMeta, useAppSettings } from "@/hooks/use-app";
 import { useOcrCapabilities, useLatestOcr, useStartOcr, useUpdateOcrBlock } from "@/hooks/use-ocr";
 import { formatDateTime, resolveLocale } from "@/lib/format";
 import {
@@ -64,19 +69,27 @@ export function OcrDialog({
 
   const capabilitiesQuery = useOcrCapabilities();
   const capabilities = capabilitiesQuery.data;
+  const metaQuery = useAppMeta();
+  const settingsQuery = useAppSettings();
   const latestQuery = useLatestOcr(projectId, page?.id ?? null, open);
   const startOcr = useStartOcr(projectId);
   const updateBlock = useUpdateOcrBlock(projectId);
+  const createSuggestion = useCreateAiSuggestion(projectId);
+  const decideSuggestion = useDecideAiSuggestion(projectId);
 
   const [languageValue, setLanguageValue] = useState("eng");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [includeNote, setIncludeNote] = useState(true);
+  const [suggestions, setSuggestions] = useState<Record<string, AiSuggestion>>({});
   const initializedRun = useRef<string | null>(null);
 
   const run = latestQuery.data ?? null;
   const blocks = run?.blocks ?? [];
   const busy = startOcr.isPending || run?.status === "queued" || run?.status === "running";
+  const aiAvailable = metaQuery.data?.capabilities.ai === true;
+  const aiModel = settingsQuery.data?.ai.text.model.trim() ?? "";
+  const aiConfigured = aiAvailable && aiModel.length > 0;
 
   const languageOptions = useMemo(
     () => buildLanguageOptions(capabilities?.languages, t),
@@ -113,6 +126,12 @@ export function OcrDialog({
     setDrafts(Object.fromEntries(run.blocks.map((block) => [block.id, block.text])));
     setSelected(Object.fromEntries(run.blocks.map((block) => [block.id, true])));
   }, [open, run]);
+
+  // A proposal belongs to one OCR run. A new run or a reopened dialog must not
+  // show a decision form for text that is no longer on screen.
+  useEffect(() => {
+    setSuggestions({});
+  }, [open, run?.id]);
 
   const selectedBlocks = blocks.filter((block) => selected[block.id] ?? true);
   const dirtyBlocks = blocks.filter(
@@ -169,6 +188,54 @@ export function OcrDialog({
     updateBlock.mutate(
       { pageId: page.id, blockId: block.id, verified: value },
       { onError: (error) => toast.error(errorMessage(error)) },
+    );
+  };
+
+  const requestAiCleanup = async (block: OcrBlock) => {
+    if (!page || !run || run.stale || !aiConfigured) return;
+    // The proposal must describe the text that is actually stored, so pending
+    // local corrections are saved before the request.
+    const saved = await saveCorrections(true);
+    if (!saved) return;
+    createSuggestion.mutate(
+      { pageId: page.id, blockId: block.id },
+      {
+        onSuccess: (response) => {
+          setSuggestions((current) => ({
+            ...current,
+            [response.suggestion.block_id]: response.suggestion,
+          }));
+        },
+        onError: (error) => toast.error(errorMessage(error)),
+      },
+    );
+  };
+
+  const decideProposal = (suggestion: AiSuggestion, status: "accepted" | "rejected") => {
+    decideSuggestion.mutate(
+      { suggestionId: suggestion.id, payload: { status } },
+      {
+        onSuccess: (response) => {
+          const blockId = response.suggestion.block_id;
+          setSuggestions((current) => {
+            const next = { ...current };
+            delete next[blockId];
+            return next;
+          });
+          if (status === "accepted") {
+            // Let the updated block text from the server become the draft.
+            setDrafts((current) => {
+              const next = { ...current };
+              delete next[blockId];
+              return next;
+            });
+            toast.success(t("ocr.ai.accepted"));
+          } else {
+            toast.success(t("ocr.ai.rejected"));
+          }
+        },
+        onError: (error) => toast.error(errorMessage(error)),
+      },
     );
   };
 
@@ -301,6 +368,22 @@ export function OcrDialog({
                     )}
                   </p>
                 </div>
+
+                {aiAvailable && !aiConfigured ? (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border/60 bg-background/50 p-3 text-2xs leading-relaxed text-muted-foreground">
+                    <Sparkles className="size-icon-sm shrink-0 text-primary" aria-hidden="true" />
+                    <p>
+                      {t("ocr.ai.notConfigured")}{" "}
+                      <Link
+                        to="/settings#ai"
+                        className="font-medium text-primary underline-offset-2 hover:underline"
+                        onClick={() => onOpenChange(false)}
+                      >
+                        {t("ocr.ai.openSettings")}
+                      </Link>
+                    </p>
+                  </div>
+                ) : null}
               </>
             ) : (
               <div className="space-y-3">
@@ -447,6 +530,15 @@ export function OcrDialog({
                           {blocks.map((block) => {
                             const draft = drafts[block.id] ?? block.text;
                             const dirty = draft !== block.text;
+                            const suggestion = suggestions[block.id];
+                            const proposalStale = Boolean(
+                              suggestion &&
+                                (draft !== suggestion.original_text ||
+                                  block.text !== suggestion.original_text),
+                            );
+                            const requestingThis =
+                              createSuggestion.isPending &&
+                              createSuggestion.variables?.blockId === block.id;
                             return (
                               <article
                                 key={block.id}
@@ -521,6 +613,107 @@ export function OcrDialog({
                                   <p className="mt-1 text-2xs text-warning">
                                     {t("ocr.unsavedCorrection")}
                                   </p>
+                                ) : null}
+
+                                {suggestion ? (
+                                  <div className="mt-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
+                                    <div className="flex flex-wrap items-center gap-1.5 text-2xs">
+                                      <Sparkles className="size-icon-sm text-primary" aria-hidden="true" />
+                                      <span className="font-medium">
+                                        {t("ocr.ai.proposedBy", {
+                                          provider: t(
+                                            `ocr.ai.providers.${suggestion.provider}`,
+                                          ),
+                                          model: suggestion.model,
+                                        })}
+                                      </span>
+                                      <Badge variant="warning">
+                                        {t("ocr.ai.unverified")}
+                                      </Badge>
+                                    </div>
+                                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                      <div className="rounded-md border border-border/60 bg-background/60 p-2">
+                                        <p className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                          {t("ocr.ai.original")}
+                                        </p>
+                                        <p
+                                          dir="auto"
+                                          className="mt-1 whitespace-pre-wrap break-words font-document text-xs leading-relaxed"
+                                        >
+                                          {suggestion.original_text}
+                                        </p>
+                                      </div>
+                                      <div className="rounded-md border border-primary/30 bg-background/60 p-2">
+                                        <p className="text-2xs font-semibold uppercase tracking-wider text-primary">
+                                          {t("ocr.ai.proposed")}
+                                        </p>
+                                        <p
+                                          dir="auto"
+                                          className="mt-1 whitespace-pre-wrap break-words font-document text-xs leading-relaxed"
+                                        >
+                                          {suggestion.proposed_text}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <p
+                                      className={cn(
+                                        "mt-2 text-2xs leading-relaxed",
+                                        proposalStale
+                                          ? "text-warning"
+                                          : "text-muted-foreground",
+                                      )}
+                                    >
+                                      {proposalStale
+                                        ? t("ocr.ai.stale")
+                                        : t("ocr.ai.note")}
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap justify-end gap-2">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="gap-1.5"
+                                        disabled={decideSuggestion.isPending}
+                                        onClick={() =>
+                                          decideProposal(suggestion, "rejected")
+                                        }
+                                      >
+                                        <X />
+                                        {t("ocr.ai.reject")}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        className="gap-1.5"
+                                        disabled={
+                                          proposalStale || decideSuggestion.isPending
+                                        }
+                                        onClick={() =>
+                                          decideProposal(suggestion, "accepted")
+                                        }
+                                      >
+                                        <Check />
+                                        {t("ocr.ai.accept")}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : aiConfigured && block.text.trim() ? (
+                                  <div className="mt-2 flex justify-end">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="gap-1.5"
+                                      disabled={run.stale || createSuggestion.isPending}
+                                      onClick={() => void requestAiCleanup(block)}
+                                    >
+                                      {requestingThis ? (
+                                        <Spinner className="size-icon-sm" />
+                                      ) : (
+                                        <Sparkles />
+                                      )}
+                                      {requestingThis
+                                        ? t("ocr.ai.running")
+                                        : t("ocr.ai.cleanup")}
+                                    </Button>
+                                  </div>
                                 ) : null}
                               </article>
                             );

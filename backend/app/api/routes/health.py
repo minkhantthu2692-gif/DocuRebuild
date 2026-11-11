@@ -45,7 +45,9 @@ def meta() -> AppMeta:
             element_extraction=True,
             region_proposals=True,
             ocr=ocr_service.engine_available(),
-            ai=False,
+            # The local AI adapter and review workflow exist, but a user must
+            # configure and test a local server and model before using it.
+            ai=True,
             export=False,
         ),
         max_import_mb=settings.max_import_mb,

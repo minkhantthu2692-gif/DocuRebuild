@@ -193,7 +193,27 @@
     "insertSelected": "Insert selected",
     "inserted": "OCR text inserted into the document.",
     "sourceNote": "Source: page {{page}} · OCR · {{confidence}}% confidence · {{status}}",
-    "noSelection": "Select at least one text block to insert."
+    "noSelection": "Select at least one text block to insert.",
+    "ai": {
+      "cleanup": "Ask local AI",
+      "running": "Requesting proposal…",
+      "proposedBy": "Proposed by {{provider}} · {{model}}",
+      "original": "Current OCR text",
+      "proposed": "AI proposal",
+      "unverified": "Unverified proposal",
+      "note": "Compare with the source page before accepting. Accepting replaces this block’s text and marks it corrected.",
+      "accept": "Accept",
+      "reject": "Reject",
+      "accepted": "AI proposal accepted. Review the result against the source page.",
+      "rejected": "AI proposal rejected. The OCR text is unchanged.",
+      "stale": "This block changed after the proposal was created. Request a new proposal.",
+      "notConfigured": "No local AI model is configured yet.",
+      "openSettings": "Set up local AI",
+      "providers": {
+        "ollama": "Ollama",
+        "openai_compatible": "OpenAI-compatible"
+      }
+    }
   },
   "elements": {
     "open": "Extracted regions",

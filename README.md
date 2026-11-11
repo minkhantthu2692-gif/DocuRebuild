@@ -6,16 +6,20 @@ DocuRebuild turns scans, photographs and PDF documents into accurate, structured
 and editable documents. It keeps original source files immutable, keeps project
 data on your device, and treats every AI result as a reviewable proposal.
 
-> **Project status — early development (Phase 5 of 12).**
+> **Project status — early development (Phase 6 of 12).**
 > The workspace, local project storage, image and PDF import, non-destructive
-> image adjustments, the rich-text editor, local Tesseract OCR and manual region
-> extraction are implemented. Imports run as background jobs with page-level
-> progress, cancellation and localized failures. PDF pages are rendered locally and
-> embedded text layers are stored as reviewable proposals; image-only PDF pages can
-> be processed with OCR. OCR and PDF import are only advertised when their local
-> dependencies actually work. AI providers, structured table/figure/equation
-> reconstruction, export and history are **not implemented yet** and are clearly
-> marked as unavailable in the UI. Nothing in this repository fakes those features.
+> image adjustments, the rich-text editor, local Tesseract OCR, manual region
+> extraction and an optional local-AI OCR text cleanup are implemented. Imports run
+> as background jobs with page-level progress, cancellation and localized failures.
+> PDF pages are rendered locally and embedded text layers are stored as reviewable
+> proposals; image-only PDF pages can be processed with OCR. OCR and PDF import are
+> only advertised when their local dependencies actually work. The AI workflow only
+> talks to a local Ollama or OpenAI-compatible server that the user configures and
+> tests; every result is a proposal that must be accepted or rejected. Cloud
+> providers, free-tier adapters, paid usage, vision profiles, structured
+> table/figure/equation reconstruction, export and history are **not implemented
+> yet** and are clearly marked as unavailable in the UI. Nothing in this repository
+> fakes those features.
 
 ---
 
@@ -57,6 +61,15 @@ data on your device, and treats every AI result as a reviewable proposal.
   candidates, and a measured bounding-box overlay can be shown on the source
   image. OCR is never advertised as available unless the engine and language
   data are actually detected.
+- **Optional local AI text cleanup** — connect an Ollama server or an
+  OpenAI-compatible local server (for example LM Studio) in Settings, test the
+  connection, discover installed models and choose a text model. In the OCR dialog,
+  "Ask local AI" sends only the selected text block to that configured local URL and
+  stores the reply as an `ai_suggestion` with provider, model, base URL and original
+  text. The proposal is shown beside the current OCR text and can be accepted or
+  rejected. Accepting is refused when the block changed after the proposal was
+  created, and OCR text changes are refused if the run is stale. No cloud provider
+  or paid API is used, and AI output never becomes document content automatically.
 - **Region extraction (manual + suggestions)** — drag a rectangle on the source page
   or type its source-pixel coordinates, then crop a figure, table or equation
   region. Crops are stored as immutable project assets, can be captioned, verified
@@ -75,21 +88,25 @@ data on your device, and treats every AI result as a reviewable proposal.
   character counts, and debounced autosave.
 - **Appearance and language** — light/dark/system themes, accent colours, radius,
   blur, density, text size, reduced motion, and live English/Burmese switching.
-- **Local-only defaults** — no account, no cloud database, no telemetry, no network
-  request unless you explicitly add a future provider integration.
+- **Local-only defaults** — no account, no cloud database, no telemetry, and no
+  outbound request unless you explicitly test or use a local AI server you
+  configured. The app remains usable without any AI provider.
 
 ### Not available yet
 
 Structured element reconstruction (table cells, equation transcription, generative
-figure detection), AI providers, DOCX/TXT export, revision history, backups/restore
-UI, desktop packaging and PWA install support are planned but not implemented. OCR
-extracts text blocks, reading order and conservative layout hints; it does not build
-table structure or transcribe equations. Region extraction produces exact pixel
-crops and can read their plain text locally; it does not build structured table
-cells or equation markup. Region suggestions are deterministic heuristics over the
-OCR text layout, not a vision model: they cover OCR table/equation blocks and the
-empty band above a figure-like caption, and they are skipped when no suitable
-layout exists. See [`docs/roadmap.md`](docs/roadmap.md).
+figure detection), cloud/free-tier AI providers, vision and image-generation
+profiles, DOCX/TXT export, revision history, backups/restore UI, desktop packaging
+and PWA install support are planned but not implemented. OCR extracts text blocks,
+reading order and conservative layout hints; it does not build table structure or
+transcribe equations. Region extraction produces exact pixel crops and can read
+their plain text locally; it does not build structured table cells or equation
+markup. Region suggestions are deterministic heuristics over the OCR text layout,
+not a vision model: they cover OCR table/equation blocks and the empty band above a
+figure-like caption, and they are skipped when no suitable layout exists. The local
+AI workflow currently covers only OCR text cleanup with the configured text model;
+it does not run vision tasks, switch providers silently, or use any remote service.
+See [`docs/roadmap.md`](docs/roadmap.md).
 
 ---
 
@@ -153,6 +170,8 @@ Local runtime data is **never** stored in this repository. See
 - Node.js **20 or newer** (Node 24 tested) and npm 10+
 - Python **3.11 or newer** (3.12 tested)
 - Optional: Tesseract 5+ for local OCR, with `eng` and/or `mya` traineddata
+- Optional: Ollama or an OpenAI-compatible local server (for example LM Studio)
+  for reviewable AI text cleanup. No API key or account is required.
 
 PDF import needs no separate system package: PyMuPDF is installed with the
 backend requirements and runs entirely on the local machine.
@@ -233,6 +252,31 @@ After a run finishes, the layers button in the source toolbar shows the measured
 block boxes on the page with a per-kind legend. The overlay is hidden when the
 stored result no longer matches the page (for example after a rotation) so stale
 coordinates are never drawn.
+
+### Optional local AI cleanup
+
+AI cleanup is optional and free to run locally. It is not needed to use the
+application, and OCR review works without it.
+
+1. Start a local server:
+   - **Ollama** — default `http://127.0.0.1:11434`; pull a text model such as
+     `ollama pull qwen2.5:7b`.
+   - **OpenAI-compatible** — for example LM Studio's local server; the default
+     address is `http://127.0.0.1:1234/v1`.
+2. Open **Settings → Local AI**, keep or change the provider, and use **Test
+   connection** to discover installed models.
+3. Choose a text model and select **Save profile**.
+4. Open **Extract text** on a page and select **Ask local AI** on one text block.
+
+Only that block's text is sent, to the URL you configured. The reply is stored as an
+unverified proposal with provider, model, URL and the original text. The OCR text
+does not change until you accept the proposal, and accepting is blocked if the block
+changed after the proposal was created. Rejecting keeps the OCR text unchanged.
+
+The URL is only contacted when you press **Test connection** or **Ask local AI**;
+nothing is downloaded, loaded or generated in the background. There is no cloud
+provider, API key or paid call in this phase. A model name can also be typed
+manually when discovery is unsupported by the server.
 
 ### PDF import
 
@@ -326,6 +370,10 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   Deleting a PDF page keeps the shared original until its last page is removed.
 - Asset paths stored in databases are relative and validated against traversal.
 - The local API binds to loopback by default and sends no telemetry.
+- The AI settings profile (provider, local base URL, model name) is stored in
+  `app.db`. No API keys exist in this phase. Project text sent for cleanup goes only
+  to the configured local server URL and is stored in the project database as a
+  reviewable proposal.
 - GitHub is used only for source code and documentation. User data is **not** a
   GitHub backup category. See [`AGENTS.md`](AGENTS.md).
 
@@ -373,6 +421,14 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   It does not reconstruct table cells, merged spans, reading order inside tables or
   equation markup. The text is an unverified proposal and may omit or misread
   characters; manual correction is always available and never overwrites the crop.
+- Local AI cleanup is proposal-only and limited to one OCR text block per request.
+  The model can still paraphrase, translate, drop or invent text; accepting a
+  proposal marks the block corrected but does not make it verified. Very long blocks
+  are rejected instead of truncated. Only Ollama and OpenAI-compatible local servers
+  are supported; cloud free tiers, paid providers, API keys, vision tasks, usage
+  limits and provider fallbacks are not implemented yet. A local server's "free"
+  status depends on the user's own installation and hardware, so nothing is
+  advertised as universally free.
 - The bounding-box overlay only draws the latest successful run and is hidden
   when that run is stale, failed or lacks geometry. It shows where text was
   found; it is not a verified layout model.
@@ -404,7 +460,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 3. Import and image processing | Complete |
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
-| 6. AI integration and free usage first | Planned |
+| 6. AI integration and free usage first | In progress: local AI providers and reviewable OCR text cleanup done; vision, free-tier/paid adapters, consent and usage limits pending |
 | 7. Table, figure and equation reconstruction | Planned |
 | 8. Document editor and export | Planned |
 | 9. History, backup and recovery | Planned |

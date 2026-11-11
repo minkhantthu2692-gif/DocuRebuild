@@ -1,4 +1,11 @@
 import type {
+  AiProbeRequest,
+  AiProbeResponse,
+  AiProvidersResponse,
+  AiSettings,
+  AiSuggestionCreate,
+  AiSuggestionDecisionInput,
+  AiSuggestionDecisionResponse,
   AppCapabilities,
   AppMeta,
   AppSettings,
@@ -73,6 +80,7 @@ export interface SettingsPatch {
   language?: LanguageCode;
   appearance?: Partial<AppearanceSettings>;
   editor?: Partial<EditorSettings>;
+  ai?: Partial<AiSettings>;
 }
 
 export interface ProjectCreatePayload {
@@ -225,6 +233,32 @@ export const api = {
   getRegionProposals: (projectId: string, pageId: string) =>
     request<RegionProposals>(`/projects/${projectId}/pages/${pageId}/region-proposals`),
 
+  listAiProviders: () => request<AiProvidersResponse>("/ai/providers"),
+  probeAiProvider: (payload: AiProbeRequest) =>
+    request<AiProbeResponse>("/ai/probe", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  createAiCleanupSuggestion: (
+    projectId: string,
+    pageId: string,
+    blockId: string,
+    payload: AiSuggestionCreate,
+  ) =>
+    request<AiSuggestionDecisionResponse>(
+      `/projects/${projectId}/pages/${pageId}/ocr/blocks/${blockId}/ai-suggestions`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  decideAiSuggestion: (
+    projectId: string,
+    suggestionId: string,
+    payload: AiSuggestionDecisionInput,
+  ) =>
+    request<AiSuggestionDecisionResponse>(
+      `/projects/${projectId}/ai-suggestions/${suggestionId}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+
   assetUrl: (projectId: string, assetId: string | null, version?: string) => {
     if (!assetId) return null;
     const suffix = version ? `?v=${encodeURIComponent(version)}` : "";
@@ -239,6 +273,6 @@ export const DEFAULT_CAPABILITIES: AppCapabilities = {
   element_extraction: false,
   region_proposals: false,
   ocr: false,
-  ai: false,
+  ai: true,
   export: false,
 };

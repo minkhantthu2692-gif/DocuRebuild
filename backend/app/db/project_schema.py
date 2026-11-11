@@ -182,6 +182,29 @@ PROJECT_MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE elements ADD COLUMN text_updated_at TEXT;
         """,
     ),
+    (
+        8,
+        """
+        CREATE TABLE IF NOT EXISTS ai_suggestions (
+            id TEXT PRIMARY KEY,
+            page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+            block_id TEXT NOT NULL REFERENCES ocr_blocks(id) ON DELETE CASCADE,
+            task TEXT NOT NULL DEFAULT 'ocr_cleanup',
+            original_text TEXT NOT NULL DEFAULT '',
+            proposed_text TEXT NOT NULL DEFAULT '',
+            provider TEXT NOT NULL,
+            model TEXT NOT NULL,
+            base_url TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_ai_suggestions_block
+            ON ai_suggestions(block_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_ai_suggestions_page
+            ON ai_suggestions(page_id, created_at DESC);
+        """,
+    ),
 ]
 
 

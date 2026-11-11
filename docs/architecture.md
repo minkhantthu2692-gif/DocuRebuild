@@ -44,8 +44,9 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
-| `services.settings` | Persisted appearance, language and editor settings |
+| `services.settings` | Persisted appearance, language, editor and local AI profile settings |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence, corrections, staleness |
+| `services.ai` | Local provider catalog, URL validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals and review decisions |
 | `api.routes.*` | HTTP surface (`/api/...`) |
 
 ### Storage model
@@ -53,7 +54,7 @@ to the same local API; the API is not intended to be exposed publicly.
 The application database (`app.db`) contains only global state:
 
 - `projects` — id, name, description, directory, timestamps
-- `app_settings` — key/value JSON (appearance, language, editor)
+- `app_settings` — key/value JSON (appearance, language, editor, local AI profile)
 - `schema_migrations` — created by Alembic
 
 Each project owns a portable folder and its own `project.db`:
@@ -68,6 +69,7 @@ Each project owns a portable folder and its own `project.db`:
 - `ocr_runs` — page extraction attempts: status, engine/version, languages, source asset, rotation, mean confidence, error, timestamps; embedded PDF text uses `engine = pdf-text` and a null confidence
 - `ocr_blocks` — reviewable text blocks with bbox, confidence, kind, line/word counts, correction and verification flags
 - `elements` — extracted regions: page, kind, immutable crop asset, source asset id, source-pixel rectangle, caption, manual/acquisition source, verification, extracted text with confidence/engine/language provenance, correction flag and timestamps
+- `ai_suggestions` — unverified AI proposals: page, OCR block, task (`ocr_cleanup`), original and proposed text, provider, model, base URL, status (`pending`/`accepted`/`rejected`) and timestamps
 - `schema_migrations` — per-project migration versions
 
 Project folder layout:
@@ -143,6 +145,8 @@ Batch imports:
 GET    /api/health
 GET    /api/meta
 GET    /api/ocr/capabilities
+GET    /api/ai/providers
+POST   /api/ai/probe
 GET    /api/settings
 PATCH  /api/settings
 GET    /api/projects
@@ -170,6 +174,8 @@ GET    /api/projects/{id}/pages/{page_id}/ocr
 POST   /api/projects/{id}/pages/{page_id}/ocr
 GET    /api/projects/{id}/ocr/runs/{run_id}
 PATCH  /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}
+POST   /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}/ai-suggestions
+PATCH  /api/projects/{id}/ai-suggestions/{suggestion_id}
 GET    /api/projects/{id}/pages/{page_id}/elements
 POST   /api/projects/{id}/pages/{page_id}/elements
 GET    /api/projects/{id}/pages/{page_id}/region-proposals
@@ -355,6 +361,48 @@ src/
   OCR did not read are not suggested, and no cell or equation structure is
   derived. `region_proposals` in `/api/meta` advertises the feature.
 
+### Local AI cleanup
+
+- Phase 6 starts with the smallest useful AI workflow: correcting one OCR text
+  block. The provider layer is deliberately local-only and adapter-based:
+  `ollama` and `openai_compatible` share the same request, validation and review
+  path. `GET /api/ai/providers` returns the catalog and default URLs; the frontend
+  never hardcodes a provider list.
+- `app_settings.ai.text` stores `{ provider, base_url, model }` in `app.db`. An empty
+  `base_url` uses the provider default; an empty `model` keeps every AI action
+  disabled. The Settings page edits a local draft and saves explicitly, so typing a
+  URL does not trigger a PATCH or a network request.
+- `POST /api/ai/probe` is user-triggered. It reads Ollama `/api/tags` and
+  `/api/version`, or OpenAI-compatible `/models`, with a short timeout and a
+  1 MB response cap. Expected failures (`unreachable`, `timeout`, `http_error`,
+  `invalid_response`) are returned as status plus a stable error code so Settings
+  can explain them without pretending the server is ready.
+- `normalize_base_url` accepts only `http`/`https`, rejects embedded credentials and
+  the well-known cloud metadata hosts, and appends `/v1` for OpenAI-compatible
+  servers when missing. The backend calls only the configured URL, using Python's
+  standard library; no new runtime dependency is introduced.
+- `POST .../ocr/blocks/{block_id}/ai-suggestions` loads the block and run, refuses
+  missing, unfinished or stale OCR results, and sends the **block text only** with a
+  fixed correction system prompt (`temperature: 0`). The network call happens
+  outside the SQLite transaction. Empty, non-text and oversized responses are
+  rejected rather than stored.
+- The reply is inserted into `ai_suggestions` with `status = pending`. Before insert,
+  the block text is read again; if a manual correction happened during the request,
+  the proposal is refused as stale instead of overwriting newer text.
+- Accepting a proposal re-checks that the OCR run and block text still match the
+  original proposal, then writes through `ocr.update_block`, which sets
+  `corrected = true` and `verified = false`. An accepted proposal is therefore not a
+  verification. Rejecting only updates the proposal status, so it remains possible
+  after the page changes.
+- The OCR dialog shows the current text and the proposal side by side with provider
+  and model badges. It disables **Accept** when the block changed after the proposal
+  and shows a Settings link when no model is configured. A new OCR run or reopening
+  the dialog clears in-memory proposals; stored rows remain in the project database.
+- Tests use a loopback stub HTTP server, not a real model, and cover discovery,
+  unreachable/timeout/HTTP/invalid probes, both adapters, stale runs, stale text,
+  rejection, validation and schema migration. This verifies protocol handling and
+  review safety, not model quality.
+
 ### Design system
 
 - All visual values come from CSS custom properties in
@@ -382,11 +430,17 @@ src/
   configured.
 - Security headers (`nosniff`, `DENY`, `no-referrer`, `same-origin`) are applied
   to every response.
-- No secrets are stored in the frontend. No AI provider keys exist yet.
+- No secrets are stored in the frontend. No AI provider keys exist in this phase;
+  local providers require none. The AI profile stores only a local URL and model name.
 - OCR and PDF rendering run entirely on the local machine. Page images and PDF
   files are never uploaded; the backend reads the project's own source/display
   assets and invokes local libraries. Missing engine/language packs are reported,
   never bypassed with a cloud fallback.
+- AI requests are sent only when the user tests a connection or asks for a cleanup,
+  and only to the URL saved or entered in Settings. Only one OCR text block is
+  transmitted. The backend rejects non-HTTP(S) URLs, embedded credentials and
+  well-known metadata hosts; it never switches to a remote or paid provider on
+  failure, and responses are bounded and stored as reviewable proposals.
 - Uploaded file names are validated and generated asset names are independent of
   user input.
 - The source repository URL is configuration (`DOCUREBUILD_REPOSITORY_URL`),
@@ -418,6 +472,11 @@ src/
   download, and are cheap to explain and test. The trade-off is that figure
   regions and table structures are not detected yet; those need a later
   engine adapter rather than more regexes.
+- **AI starts local and proposal-only** — the first AI workflow corrects one OCR
+  block through a user-configured local server, with stored provider/model/URL
+  provenance and explicit accept/reject. This keeps the free-first, accuracy-first
+  guarantees and needs no secret store, at the cost of no vision tasks, remote free
+  tiers, batch review or automatic routing yet.
 - **Element extraction is manual first** — a crop is an exact pixel copy of the
   page, not inferred structure. This preserves accuracy and needs no model, at the
   cost of no automatic figure/table/equation detection. A table crop stays an

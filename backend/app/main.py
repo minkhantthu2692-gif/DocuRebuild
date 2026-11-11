@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.core.handlers import install_error_handlers
 from app.db.session import run_migrations
 from app.api.routes import (
+    ai,
     elements,
     health,
     ocr,
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(ocr.router, prefix="/api")
     app.include_router(elements.router, prefix="/api")
     app.include_router(regions.router, prefix="/api")
+    app.include_router(ai.router, prefix="/api")
     return app
 
 

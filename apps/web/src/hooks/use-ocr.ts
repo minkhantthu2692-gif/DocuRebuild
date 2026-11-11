@@ -4,9 +4,11 @@ import type { OcrRun } from "@docurebuild/shared-types";
 
 import { api } from "@/lib/api";
 
-function latestKey(projectId: string, pageId: string) {
+export function latestOcrKey(projectId: string, pageId: string) {
   return ["ocr", "latest", projectId, pageId] as const;
 }
+
+const latestKey = latestOcrKey;
 
 export function useOcrCapabilities() {
   return useQuery({

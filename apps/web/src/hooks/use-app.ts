@@ -44,12 +44,14 @@ function mergeSettings(current: AppSettings | undefined, patch: SettingsPatch): 
       motion: "full",
     },
     editor: { document_font: "serif" },
+    ai: { text: { provider: "ollama", base_url: "", model: "" } },
   };
   return {
     ...base,
     ...(patch.language ? { language: patch.language } : {}),
     appearance: { ...base.appearance, ...patch.appearance },
     editor: { ...base.editor, ...patch.editor },
+    ai: { ...base.ai, ...patch.ai },
   };
 }
 

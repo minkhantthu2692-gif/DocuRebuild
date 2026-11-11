@@ -14,7 +14,7 @@ presented in the UI until it actually works.
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
-| 6. AI integration and free usage first | Planned | Depends on elements and review model |
+| 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings and reviewable OCR text cleanup done; vision, remote/free-tier/paid adapters, consent, limits and fallbacks pending |
 | 7. Table, figure and equation reconstruction | Planned | Depends on Phase 5/6 |
 | 8. Document editor and export | Partially started | Core editor exists; full model/export pending |
 | 9. History, backup and recovery | Planned | Event table exists; no restore UI |
@@ -206,14 +206,57 @@ described as universally free or universally accurate.
   currently require manual selection.
 - Structured table cells and equation transcription, which belong to Phase 7.
 
-## Phase 6 — AI integration and free usage first (planned)
+## Phase 6 — AI integration and free usage first (in progress)
 
-- Local providers (Ollama, LM Studio, OpenAI-compatible local servers).
-- Free-tier and paid providers behind one adapter with dynamic model discovery.
-- Independent Vision, Text/Reasoning and Image Generation profiles.
-- Explicit consent before external transmission, usage limits, cost guards,
-  rate-limit handling, fallbacks and task routing.
-- No paid call without user approval; no silent provider switch.
+**Delivered**
+
+- Provider catalog with two local adapter kinds: `ollama` (default
+  `http://127.0.0.1:11434`) and `openai_compatible` (default
+  `http://127.0.0.1:1234/v1`). No cloud service, API key or paid call is involved.
+- Settings → Local AI with an explicit, saved text profile (provider, base URL,
+  model). Empty model keeps AI actions disabled. URL drafts are validated and only
+  saved on request, and the provider default is shown as a placeholder.
+- User-triggered connection test and model discovery through Ollama `/api/tags` and
+  `/api/version`, or OpenAI-compatible `/models`. Discovered models populate a
+  manual-entry datalist; a typed model name always remains possible.
+- Reviewable OCR text cleanup. `POST .../ocr/blocks/{block_id}/ai-suggestions` sends
+  only that block's text to the configured local server and stores an unverified
+  `ai_suggestion` with original text, proposed text, provider, model and base URL.
+- Accept/reject decisions through `PATCH .../ai-suggestions/{id}`. Accepting writes
+  the proposal through the normal OCR correction path, marks the block corrected
+  (not verified) and refuses when the block text changed after the proposal was
+  created. Rejecting keeps the OCR text and still works after the page changes.
+- Per-block review UI showing the current OCR text beside the proposal, provider and
+  model badges, explicit accept/reject actions, a stale-proposal warning and a link
+  to Settings when no model is configured.
+- SSRF guards for the configured URL: `http`/`https` only, no embedded credentials,
+  and the well-known cloud metadata addresses are rejected. Requests use short
+  connect/probe timeouts, bounded response size and no automatic paid fallback.
+- Capability reporting: `ai` is `true` because the adapter and review workflow
+  exist, while Settings still requires a working local server and model before any
+  action can run. Backend tests use a loopback stub server and cover discovery,
+  timeouts, unreachable servers, invalid responses, stale runs, stale text,
+  rejection and validation. Frontend tests cover i18n key parity.
+
+**Remaining**
+
+- Vision profile and vision tasks (figure/region proposals, table structure
+  assistance) with the same proposal and verification guarantees.
+- Text/reasoning profile separation beyond OCR cleanup, plus task routing.
+- Optional free-tier and paid providers behind the same adapter, with dynamic
+  model metadata, verified pricing/quotas and clearly marked costs.
+- Explicit consent before external transmission, spending limits, usage accounting,
+  rate-limit handling and provider fallbacks. No paid call may run without approval.
+- API-key storage outside the frontend and a secure secret store for future remote
+  providers. Current local providers need no key.
+- AI history, comparison and bulk review; the current UI reviews one block at a
+  time and keeps proposals in the project database.
+
+**Current limitation** — only a local Ollama or OpenAI-compatible server is
+supported. Model quality, availability, memory use and licence terms come from the
+user's installation; "free" is never assumed to be permanent. AI text can be wrong,
+so accepting a proposal does not mark it verified and manual review remains the
+source of truth.
 
 ## Phase 7 — Tables, figures and equations (planned)
 

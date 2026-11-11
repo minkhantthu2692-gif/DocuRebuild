@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  Brain,
   Check,
   ChevronRight,
   Copy,
@@ -21,6 +22,9 @@ import { toast } from "sonner";
 
 import type {
   AccentName,
+  AiProfileSettings,
+  AiProbeResponse,
+  AiProviderKind,
   BlurLevel,
   Density,
   DocumentFont,
@@ -33,9 +37,11 @@ import type {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Separator } from "@/components/ui/separator";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
+import { useAiProviders, useProbeAiProvider } from "@/hooks/use-ai";
 import { useAppMeta, useAppSettings, useHealth, useUpdateSettings } from "@/hooks/use-app";
 import { useOcrCapabilities } from "@/hooks/use-ocr";
 import { formatNumber, resolveLocale } from "@/lib/format";
@@ -60,7 +66,7 @@ const ROADMAP: Array<{
   { key: "pdf", status: "done" },
   { key: "processing", status: "inProgress" },
   { key: "ocr", status: "inProgress" },
-  { key: "ai", status: "planned" },
+  { key: "ai", status: "inProgress" },
   { key: "editor", status: "inProgress" },
   { key: "export", status: "planned" },
   { key: "history", status: "planned" },
@@ -71,6 +77,12 @@ const STATUS_VARIANT = {
   inProgress: "warning",
   planned: "outline",
 } as const;
+
+const DEFAULT_AI_PROFILE: AiProfileSettings = {
+  provider: "ollama",
+  base_url: "",
+  model: "",
+};
 
 interface SettingsSectionProps {
   id: string;
@@ -132,9 +144,13 @@ export function SettingsPage() {
   const metaQuery = useAppMeta();
   const healthQuery = useHealth();
   const ocrQuery = useOcrCapabilities();
+  const aiProvidersQuery = useAiProviders();
+  const probeAi = useProbeAiProvider();
   const updateSettings = useUpdateSettings();
   const errorMessage = useApiErrorMessage();
   const [copied, setCopied] = useState(false);
+  const [aiDraftOverride, setAiDraftOverride] = useState<AiProfileSettings | null>(null);
+  const [probeResult, setProbeResult] = useState<AiProbeResponse | null>(null);
 
   const settings = settingsQuery.data;
   const appearance = settings?.appearance;
@@ -143,6 +159,22 @@ export function SettingsPage() {
   const locale = resolveLocale(i18n.resolvedLanguage);
   const health = healthQuery.data;
   const ocr = ocrQuery.data;
+
+  const aiSaved = settings?.ai?.text ?? DEFAULT_AI_PROFILE;
+  const aiDraft = aiDraftOverride ?? aiSaved;
+  const aiDirty =
+    aiDraft.provider !== aiSaved.provider ||
+    aiDraft.base_url !== aiSaved.base_url ||
+    aiDraft.model !== aiSaved.model;
+  const providerDefault =
+    aiProvidersQuery.data?.providers.find((item) => item.id === aiDraft.provider)
+      ?.default_base_url ?? "";
+  const discoveredModels = probeResult?.status === "ready" ? probeResult.models : [];
+
+  const updateAiDraft = (patch: Partial<AiProfileSettings>) => {
+    setAiDraftOverride({ ...aiDraft, ...patch });
+  };
+
   const ocrReason =
     ocr?.reason &&
     ["not_configured", "not_found", "not_executable", "no_languages", "error"].includes(
@@ -157,11 +189,35 @@ export function SettingsPage() {
     });
   };
 
+  const testAiConnection = () => {
+    probeAi.mutate(
+      { provider: aiDraft.provider, base_url: aiDraft.base_url },
+      {
+        onSuccess: (result) => setProbeResult(result),
+        onError: (error) => toast.error(errorMessage(error)),
+      },
+    );
+  };
+
+  const saveAiProfile = () => {
+    updateSettings.mutate(
+      { ai: { text: aiDraft } },
+      {
+        onSuccess: () => {
+          setAiDraftOverride(null);
+          toast.success(t("ai.saved"));
+        },
+        onError: (error) => toast.error(errorMessage(error)),
+      },
+    );
+  };
+
   const sectionLinks: Array<{ id: string; label: string }> = [
     { id: "appearance", label: t("sections.appearance") },
     { id: "language", label: t("sections.language") },
     { id: "editor", label: t("sections.editor") },
     { id: "ocr", label: t("sections.ocr") },
+    { id: "ai", label: t("sections.ai") },
     { id: "storage", label: t("sections.storage") },
     { id: "about", label: t("sections.about") },
   ];
@@ -525,6 +581,135 @@ export function SettingsPage() {
               <div className="flex gap-2 rounded-lg border border-border/60 bg-background/50 p-3 text-2xs leading-relaxed text-muted-foreground">
                 <ShieldCheck className="mt-0.5 size-icon-sm shrink-0 text-success" aria-hidden="true" />
                 <p>{t("ocr.privacy")}</p>
+              </div>
+            </SettingsSection>
+
+            <SettingsSection id="ai" icon={Brain} title={t("sections.ai")}>
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold">{t("ai.title")}</h3>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("ai.description")}
+                </p>
+              </div>
+
+              <SettingRow title={t("ai.provider")} description={t("ai.providerDescription")}>
+                <SegmentedControl
+                  label={t("ai.provider")}
+                  value={aiDraft.provider}
+                  onValueChange={(value) => {
+                    setProbeResult(null);
+                    updateAiDraft({ provider: value as AiProviderKind });
+                  }}
+                  options={[
+                    { value: "ollama", label: t("ai.providerOllama") },
+                    { value: "openai_compatible", label: t("ai.providerOpenAI") },
+                  ]}
+                />
+              </SettingRow>
+
+              <SettingRow title={t("ai.baseUrl")} description={t("ai.baseUrlDescription")}>
+                <Input
+                  value={aiDraft.base_url}
+                  placeholder={providerDefault}
+                  spellCheck={false}
+                  aria-label={t("ai.baseUrl")}
+                  onChange={(event) => {
+                    setProbeResult(null);
+                    updateAiDraft({ base_url: event.target.value });
+                  }}
+                />
+              </SettingRow>
+
+              <SettingRow title={t("ai.model")} description={t("ai.modelDescription")}>
+                <Input
+                  value={aiDraft.model}
+                  placeholder={t("ai.modelPlaceholder")}
+                  spellCheck={false}
+                  aria-label={t("ai.model")}
+                  list={discoveredModels.length > 0 ? "ai-model-options" : undefined}
+                  onChange={(event) => updateAiDraft({ model: event.target.value })}
+                />
+                {discoveredModels.length > 0 ? (
+                  <datalist id="ai-model-options">
+                    {discoveredModels.map((model) => (
+                      <option key={model.id} value={model.id} />
+                    ))}
+                  </datalist>
+                ) : null}
+              </SettingRow>
+
+              <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-background/40 p-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium">{t("ai.status")}</span>
+                    <Badge
+                      variant={
+                        probeAi.isPending
+                          ? "outline"
+                          : probeResult?.status === "ready"
+                            ? "success"
+                            : probeResult
+                              ? "warning"
+                              : "outline"
+                      }
+                    >
+                      {probeAi.isPending
+                        ? t("ai.testing")
+                        : probeResult?.status === "ready"
+                          ? t("ai.connected")
+                          : probeResult
+                            ? t("ai.disconnected")
+                            : t("ai.notTested")}
+                    </Badge>
+                    {probeResult?.version ? (
+                      <span className="text-2xs text-muted-foreground">
+                        v{probeResult.version}
+                      </span>
+                    ) : null}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 self-start sm:self-auto"
+                    disabled={probeAi.isPending}
+                    onClick={testAiConnection}
+                  >
+                    <RefreshCw className={probeAi.isPending ? "animate-spin" : undefined} />
+                    {t("ai.testConnection")}
+                  </Button>
+                </div>
+
+                {probeResult?.status === "ready" ? (
+                  <p className="text-2xs text-muted-foreground">
+                    {discoveredModels.length > 0
+                      ? t("ai.modelsFound", { count: discoveredModels.length })
+                      : t("ai.noModels")}
+                  </p>
+                ) : probeResult ? (
+                  <p className="text-2xs text-warning">
+                    {t(`ai.errorReasons.${probeResult.error_code ?? "ai_unreachable"}`)}
+                  </p>
+                ) : (
+                  <p className="text-2xs text-muted-foreground">{t("ai.testHint")}</p>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  disabled={!aiDirty || updateSettings.isPending}
+                  onClick={saveAiProfile}
+                >
+                  {t("ai.saveProfile")}
+                </Button>
+                <span className="text-2xs text-muted-foreground">
+                  {aiDraft.model ? t("ai.enabledHint") : t("ai.notConfigured")}
+                </span>
+              </div>
+
+              <div className="flex gap-2 rounded-lg border border-border/60 bg-background/50 p-3 text-2xs leading-relaxed text-muted-foreground">
+                <ShieldCheck className="mt-0.5 size-icon-sm shrink-0 text-success" aria-hidden="true" />
+                <p>{t("ai.privacy")}</p>
               </div>
             </SettingsSection>
 

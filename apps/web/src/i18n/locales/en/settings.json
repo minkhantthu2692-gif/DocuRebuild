@@ -10,6 +10,7 @@
     "language": "Language & region",
     "editor": "Editor",
     "ocr": "Local OCR",
+    "ai": "Local AI",
     "storage": "Storage",
     "about": "About"
   },
@@ -100,6 +101,39 @@
       "no_languages": "Tesseract is installed, but no language data is available.",
       "error": "The OCR engine could not be checked."
     }
+  },
+  "ai": {
+    "title": "Local AI assistance",
+    "description": "Connect a local inference server to propose OCR text corrections. AI output is always a proposal until you review it.",
+    "provider": "Provider",
+    "providerDescription": "Both options expect a server running on this device or your own network.",
+    "providerOllama": "Ollama",
+    "providerOpenAI": "OpenAI-compatible",
+    "baseUrl": "Server URL",
+    "baseUrlDescription": "Leave empty to use the provider default. The URL is only contacted when you test the connection or request a cleanup.",
+    "model": "Text model",
+    "modelDescription": "Used for OCR text cleanup. Type a model name or test the connection to discover installed models.",
+    "modelPlaceholder": "For example qwen2.5:7b",
+    "status": "Connection",
+    "testing": "Testing…",
+    "connected": "Connected",
+    "disconnected": "Not connected",
+    "notTested": "Not tested",
+    "testConnection": "Test connection",
+    "modelsFound": "{{count}} model(s) found",
+    "noModels": "The server responded but reported no models. Pull or load a model first.",
+    "testHint": "A connection test only lists models. It does not download, load, or generate anything.",
+    "errorReasons": {
+      "ai_unreachable": "Nothing is listening at this URL. Start the local server and check the port.",
+      "ai_timeout": "The server did not answer in time. It may still be loading the model.",
+      "ai_http_error": "The server answered with an error. Check the URL and the server log.",
+      "ai_invalid_response": "The response did not look like an Ollama or OpenAI-compatible API."
+    },
+    "saveProfile": "Save profile",
+    "saved": "Local AI profile saved",
+    "enabledHint": "AI cleanup is available in the OCR review dialog.",
+    "notConfigured": "Choose a model to enable AI cleanup.",
+    "privacy": "Only the selected text block is sent, to the server URL you configure. No cloud service is contacted and no paid API is used. Every response stays a proposal until you accept it."
   },
   "storage": {
     "title": "Local storage",

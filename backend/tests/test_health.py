@@ -40,7 +40,9 @@ def test_meta_is_honest_about_available_capabilities(
     assert capabilities["image_transform"] is True
     # Not yet implemented; must not be advertised.
     assert capabilities["ocr"] is False
-    assert capabilities["ai"] is False
+    # The local AI adapter and review workflow exist; a provider and model must
+    # still be configured by the user before any AI request can run.
+    assert capabilities["ai"] is True
     assert capabilities["export"] is False
 
 
