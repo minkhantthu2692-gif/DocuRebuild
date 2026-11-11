@@ -231,6 +231,11 @@ described as universally free or universally accurate.
   The OCR dialog reloads pending proposals when it opens, so closing and reopening
   the dialog no longer hides an unreviewed proposal. Proposals tied to an older OCR
   run stay in the database but are not shown for the current run.
+- Per-block proposal history in the OCR dialog. Accepted and rejected proposals keep
+  their original text, proposed text, provider, model and decision time, so the AI's
+  influence stays auditable after later manual corrections. History is read-only and
+  does not change OCR text. The page list endpoint accepts `status` and `limit`
+  (default 200, maximum 500).
 - Local AI usage ledger in the application database. Every cleanup request that
   actually contacts a provider is recorded with provider, model, task, outcome,
   error code, project/page/block ids and a timestamp. Document text and model output
@@ -268,8 +273,8 @@ described as universally free or universally accurate.
   providers, plus provider fallbacks. No paid call may run without approval.
 - API-key storage outside the frontend and a secure secret store for future remote
   providers. Current local providers need no key.
-- AI history, comparison and bulk review; the current UI reviews one block at a
-  time and keeps proposals in the project database.
+- AI history, comparison across pages and bulk review; the current UI reviews one
+  block at a time and shows per-block history in the project database.
 
 **Current limitation** — only an Ollama or OpenAI-compatible server that the user
 configures is supported; loopback is the default and a non-loopback endpoint requires

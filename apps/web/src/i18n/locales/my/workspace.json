@@ -209,6 +209,10 @@
       "stale": "အဆိုပြုချက် ဖန်တီးပြီးနောက် ဤဘလောက် ပြောင်းလဲသွားသည်။ အဆိုပြုချက်အသစ် တောင်းပါ။",
       "notConfigured": "ဒေသတွင်း AI မော်ဒယ် မသတ်မှတ်ရသေးပါ။",
       "openSettings": "ဒေသတွင်း AI ပြင်ဆင်ရန်",
+      "history": "အဆိုပြုချက် မှတ်တမ်း ({{count}})",
+      "historyAccepted": "လက်ခံခဲ့သည်",
+      "historyRejected": "ပယ်ခဲ့သည်",
+      "historyCompare": "မူရင်းနှင့် အဆိုပြုချက်ကို နှိုင်းယှဉ်ရန်",
       "providers": {
         "ollama": "Ollama",
         "openai_compatible": "OpenAI-ကိုက်ညီ"

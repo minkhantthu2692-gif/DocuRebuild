@@ -419,6 +419,12 @@ src/
   it opens and after each change, so proposals survive closing and reopening the
   dialog. The UI only renders proposals whose `block_id` belongs to the current OCR
   run, which keeps proposals from an older run hidden; the database rows remain.
+- The same endpoint without `status` returns every proposal for the page, capped by
+  `limit` (default 200, maximum 500). The OCR dialog also reads this list and shows
+  accepted and rejected proposals for the current run's blocks as a per-block
+  history with status, provider, model, decision time and the preserved
+  original/proposed text. History is read-only, never rewrites OCR text, and remains
+  available after later manual corrections.
 - The OCR dialog shows the current text and the proposal side by side with provider
   and model badges. It disables **Accept** when the block changed after the proposal
   and shows a Settings link when no model is configured.

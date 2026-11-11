@@ -279,7 +279,10 @@ unverified proposal with provider, model, URL and the original text. The OCR tex
 does not change until you accept the proposal, and accepting is blocked if the block
 changed after the proposal was created. Rejecting keeps the OCR text unchanged.
 Pending proposals are read back from the project database when the dialog opens, so
-closing and reopening it does not discard an unreviewed proposal.
+closing and reopening it does not discard an unreviewed proposal. Accepted and
+rejected proposals remain available in the block's read-only **Proposal history**,
+including the original and proposed text, provider, model and decision time. That
+record is kept even if the block is corrected again later.
 
 Each cleanup attempt is recorded in the local application database as metadata only:
 provider, model, task, outcome, error code and time. The selected document text is

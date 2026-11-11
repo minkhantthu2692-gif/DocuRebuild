@@ -66,6 +66,7 @@ def list_ai_suggestions(
     project: ProjectDep,
     page_id: str,
     suggestion_status: AiSuggestionStatus | None = Query(default=None, alias="status"),
+    limit: int = Query(default=200, ge=1, le=500),
 ) -> dict[str, Any]:
     directory = project_service.ensure_project_storage(project)
     return {
@@ -73,6 +74,7 @@ def list_ai_suggestions(
             directory,
             page_id,
             suggestion_status,
+            limit,
         )
     }
 

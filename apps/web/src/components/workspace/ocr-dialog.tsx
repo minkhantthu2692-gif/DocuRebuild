@@ -34,6 +34,7 @@ import { useApiErrorMessage } from "@/hooks/use-api-error";
 import {
   useCreateAiSuggestion,
   useDecideAiSuggestion,
+  usePageAiSuggestionHistory,
   usePageAiSuggestions,
 } from "@/hooks/use-ai";
 import { useAppMeta, useAppSettings } from "@/hooks/use-app";
@@ -56,6 +57,59 @@ interface OcrDialogProps {
 }
 
 const TESSERACT_GUIDE = "https://tesseract-ocr.github.io/tessdoc/Installation.html";
+
+interface ProposalComparisonProps {
+  original: string;
+  proposed: string;
+  originalLabel: string;
+  proposedLabel: string;
+  mutedProposed?: boolean;
+}
+
+function ProposalComparison({
+  original,
+  proposed,
+  originalLabel,
+  proposedLabel,
+  mutedProposed = false,
+}: ProposalComparisonProps) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      <div className="rounded-md border border-border/60 bg-background/60 p-2">
+        <p className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {originalLabel}
+        </p>
+        <p
+          dir="auto"
+          className="mt-1 whitespace-pre-wrap break-words font-document text-xs leading-relaxed"
+        >
+          {original}
+        </p>
+      </div>
+      <div
+        className={cn(
+          "rounded-md border bg-background/60 p-2",
+          mutedProposed ? "border-border/60" : "border-primary/30",
+        )}
+      >
+        <p
+          className={cn(
+            "text-2xs font-semibold uppercase tracking-wider",
+            mutedProposed ? "text-muted-foreground" : "text-primary",
+          )}
+        >
+          {proposedLabel}
+        </p>
+        <p
+          dir="auto"
+          className="mt-1 whitespace-pre-wrap break-words font-document text-xs leading-relaxed"
+        >
+          {proposed}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export function OcrDialog({
   projectId,
@@ -81,6 +135,7 @@ export function OcrDialog({
   const createSuggestion = useCreateAiSuggestion(projectId);
   const decideSuggestion = useDecideAiSuggestion(projectId);
   const suggestionsQuery = usePageAiSuggestions(projectId, page?.id ?? null, open);
+  const historyQuery = usePageAiSuggestionHistory(projectId, page?.id ?? null, open);
 
   const [languageValue, setLanguageValue] = useState("eng");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -150,6 +205,17 @@ export function OcrDialog({
         .map((suggestion) => [suggestion.block_id, suggestion]),
     ) as Record<string, AiSuggestion>;
   }, [blocks, suggestionsQuery.data]);
+
+  const proposalHistory = useMemo(() => {
+    const blockIds = new Set(blocks.map((block) => block.id));
+    const grouped: Record<string, AiSuggestion[]> = {};
+    (historyQuery.data?.suggestions ?? []).forEach((suggestion) => {
+      if (suggestion.status === "pending") return;
+      if (!blockIds.has(suggestion.block_id)) return;
+      (grouped[suggestion.block_id] ??= []).push(suggestion);
+    });
+    return grouped;
+  }, [blocks, historyQuery.data]);
 
   const reasonKey =
     capabilities?.reason &&
@@ -532,6 +598,7 @@ export function OcrDialog({
                             const requestingThis =
                               createSuggestion.isPending &&
                               createSuggestion.variables?.blockId === block.id;
+                            const history = proposalHistory[block.id] ?? [];
                             return (
                               <article
                                 key={block.id}
@@ -624,29 +691,13 @@ export function OcrDialog({
                                         {t("ocr.ai.unverified")}
                                       </Badge>
                                     </div>
-                                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                      <div className="rounded-md border border-border/60 bg-background/60 p-2">
-                                        <p className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                          {t("ocr.ai.original")}
-                                        </p>
-                                        <p
-                                          dir="auto"
-                                          className="mt-1 whitespace-pre-wrap break-words font-document text-xs leading-relaxed"
-                                        >
-                                          {suggestion.original_text}
-                                        </p>
-                                      </div>
-                                      <div className="rounded-md border border-primary/30 bg-background/60 p-2">
-                                        <p className="text-2xs font-semibold uppercase tracking-wider text-primary">
-                                          {t("ocr.ai.proposed")}
-                                        </p>
-                                        <p
-                                          dir="auto"
-                                          className="mt-1 whitespace-pre-wrap break-words font-document text-xs leading-relaxed"
-                                        >
-                                          {suggestion.proposed_text}
-                                        </p>
-                                      </div>
+                                    <div className="mt-2">
+                                      <ProposalComparison
+                                        original={suggestion.original_text}
+                                        proposed={suggestion.proposed_text}
+                                        originalLabel={t("ocr.ai.original")}
+                                        proposedLabel={t("ocr.ai.proposed")}
+                                      />
                                     </div>
                                     <p
                                       className={cn(
@@ -707,6 +758,59 @@ export function OcrDialog({
                                         : t("ocr.ai.cleanup")}
                                     </Button>
                                   </div>
+                                ) : null}
+
+                                {history.length > 0 ? (
+                                  <details className="mt-2 rounded-lg border border-border/60 bg-background/40 px-2.5 py-2">
+                                    <summary className="cursor-pointer select-none text-2xs font-medium text-muted-foreground">
+                                      {t("ocr.ai.history", { count: history.length })}
+                                    </summary>
+                                    <ul className="mt-2 space-y-2">
+                                      {history.map((entry) => (
+                                        <li
+                                          key={entry.id}
+                                          className="rounded-md border border-border/60 bg-background/50 p-2"
+                                        >
+                                          <div className="flex flex-wrap items-center gap-1.5 text-2xs">
+                                            <Badge
+                                              variant={
+                                                entry.status === "accepted"
+                                                  ? "success"
+                                                  : "outline"
+                                              }
+                                            >
+                                              {entry.status === "accepted"
+                                                ? t("ocr.ai.historyAccepted")
+                                                : t("ocr.ai.historyRejected")}
+                                            </Badge>
+                                            <span className="text-muted-foreground">
+                                              {t(
+                                                `ocr.ai.providers.${entry.provider}`,
+                                              )}{" "}
+                                              · {entry.model}
+                                            </span>
+                                            <span className="ml-auto text-muted-foreground">
+                                              {formatDateTime(entry.updated_at, locale)}
+                                            </span>
+                                          </div>
+                                          <details className="mt-1.5">
+                                            <summary className="cursor-pointer select-none text-2xs text-muted-foreground">
+                                              {t("ocr.ai.historyCompare")}
+                                            </summary>
+                                            <div className="mt-2">
+                                              <ProposalComparison
+                                                original={entry.original_text}
+                                                proposed={entry.proposed_text}
+                                                originalLabel={t("ocr.ai.original")}
+                                                proposedLabel={t("ocr.ai.proposed")}
+                                                mutedProposed
+                                              />
+                                            </div>
+                                          </details>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </details>
                                 ) : null}
                               </article>
                             );

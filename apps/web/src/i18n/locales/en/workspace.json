@@ -209,6 +209,10 @@
       "stale": "This block changed after the proposal was created. Request a new proposal.",
       "notConfigured": "No local AI model is configured yet.",
       "openSettings": "Set up local AI",
+      "history": "Proposal history ({{count}})",
+      "historyAccepted": "Accepted",
+      "historyRejected": "Rejected",
+      "historyCompare": "Compare original and proposal",
       "providers": {
         "ollama": "Ollama",
         "openai_compatible": "OpenAI-compatible"

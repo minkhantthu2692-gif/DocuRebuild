@@ -466,6 +466,7 @@ def list_page_suggestions(
     project_dir: Path,
     page_id: str,
     status: AiSuggestionStatus | None = None,
+    limit: int = 200,
 ) -> list[dict[str, Any]]:
     if status is not None and status not in {"pending", "accepted", "rejected"}:
         raise AppError(422, "invalid_ai_suggestion_status", "Unknown proposal status.")
@@ -473,8 +474,13 @@ def list_page_suggestions(
         _get_page(conn, page_id)
         if status is None:
             rows = conn.execute(
-                "SELECT * FROM ai_suggestions WHERE page_id = ? ORDER BY created_at DESC",
-                (page_id,),
+                """
+                SELECT * FROM ai_suggestions
+                WHERE page_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (page_id, limit),
             ).fetchall()
         else:
             rows = conn.execute(
@@ -482,8 +488,9 @@ def list_page_suggestions(
                 SELECT * FROM ai_suggestions
                 WHERE page_id = ? AND status = ?
                 ORDER BY created_at DESC
+                LIMIT ?
                 """,
-                (page_id, status),
+                (page_id, status, limit),
             ).fetchall()
     return [_suggestion_payload(row) for row in rows]
 

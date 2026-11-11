@@ -594,6 +594,19 @@ def test_page_suggestions_can_be_listed_and_filtered(
     ).json()["suggestions"]
     assert [item["id"] for item in other_page] == [third["id"]]
 
+    limited = client.get(
+        f"/api/projects/{project['id']}/pages/{page_a['id']}/ai-suggestions",
+        params={"limit": 1},
+    ).json()["suggestions"]
+    assert [item["id"] for item in limited] == [second["id"]]
+
+    for bad_limit in (0, 501):
+        response = client.get(
+            f"/api/projects/{project['id']}/pages/{page_a['id']}/ai-suggestions",
+            params={"limit": bad_limit},
+        )
+        assert response.status_code == 422, bad_limit
+
     invalid = client.get(
         f"/api/projects/{project['id']}/pages/{page_a['id']}/ai-suggestions",
         params={"status": "unknown"},
@@ -699,6 +712,15 @@ def test_cleanup_rejects_when_ocr_text_changed_after_proposal(
     assert rejected.status_code == 200, rejected.text
     assert rejected.json()["suggestion"]["status"] == "rejected"
     assert rejected.json()["run"]["blocks"][0]["text"] == "Chapter One (manual)"
+
+    # The reviewed proposal stays available as an audit record, including the
+    # original and proposed text from before the manual correction.
+    history = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/ai-suggestions"
+    ).json()["suggestions"]
+    assert [item["status"] for item in history] == ["rejected"]
+    assert history[0]["original_text"] == "Chapter One"
+    assert history[0]["proposed_text"] == "Chapter One (cleaned)"
 
 
 def test_cleanup_refuses_a_stale_ocr_run(

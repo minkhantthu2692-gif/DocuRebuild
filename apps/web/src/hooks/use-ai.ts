@@ -17,7 +17,7 @@ import { api } from "@/lib/api";
 export function pageAiSuggestionsKey(
   projectId: string,
   pageId: string,
-  status: "pending" | "accepted" | "rejected" = "pending",
+  status: "pending" | "accepted" | "rejected" | "all" = "pending",
 ) {
   return ["ai", "suggestions", projectId, pageId, status] as const;
 }
@@ -49,6 +49,22 @@ export function usePageAiSuggestions(
   return useQuery<AiSuggestionsResponse>({
     queryKey: pageAiSuggestionsKey(projectId, pageId ?? "", "pending"),
     queryFn: () => api.listAiSuggestions(projectId, pageId as string, "pending"),
+    enabled: enabled && Boolean(pageId),
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: 1,
+  });
+}
+
+/** Accepted and rejected proposals are kept for review; pending ones are shown separately. */
+export function usePageAiSuggestionHistory(
+  projectId: string,
+  pageId: string | null,
+  enabled: boolean,
+) {
+  return useQuery<AiSuggestionsResponse>({
+    queryKey: pageAiSuggestionsKey(projectId, pageId ?? "", "all"),
+    queryFn: () => api.listAiSuggestions(projectId, pageId as string),
     enabled: enabled && Boolean(pageId),
     staleTime: 0,
     refetchOnMount: "always",
@@ -88,6 +104,18 @@ export function useCreateAiSuggestion(projectId: string) {
         }
         return { suggestions: [response.suggestion, ...suggestions] };
       });
+      const historyKey = pageAiSuggestionsKey(
+        projectId,
+        response.suggestion.page_id,
+        "all",
+      );
+      queryClient.setQueryData<AiSuggestionsResponse>(historyKey, (current) => {
+        if (!current) return current;
+        if (current.suggestions.some((item) => item.id === response.suggestion.id)) {
+          return current;
+        }
+        return { suggestions: [response.suggestion, ...current.suggestions] };
+      });
       void queryClient.invalidateQueries({ queryKey: ["ai", "usage"] });
     },
     onError: () => {
@@ -121,6 +149,19 @@ export function useDecideAiSuggestion(projectId: string) {
         return {
           suggestions: current.suggestions.filter(
             (item) => item.id !== response.suggestion.id,
+          ),
+        };
+      });
+      const historyKey = pageAiSuggestionsKey(
+        projectId,
+        response.suggestion.page_id,
+        "all",
+      );
+      queryClient.setQueryData<AiSuggestionsResponse>(historyKey, (current) => {
+        if (!current) return current;
+        return {
+          suggestions: current.suggestions.map((item) =>
+            item.id === response.suggestion.id ? response.suggestion : item,
           ),
         };
       });
