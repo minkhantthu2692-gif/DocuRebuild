@@ -131,6 +131,7 @@
     },
     "saveProfile": "Save profile",
     "saved": "Local AI profile saved",
+    "unsaved": "Unsaved changes. Save the profile before using it.",
     "enabledHint": "AI cleanup is available in the OCR review dialog.",
     "notConfigured": "Choose a model to enable AI cleanup.",
     "privacy": "Only the selected text block is sent, to the server URL you configure. No cloud service is contacted and no paid API is used. Every response stays a proposal until you accept it."

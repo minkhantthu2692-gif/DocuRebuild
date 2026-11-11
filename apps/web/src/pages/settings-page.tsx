@@ -703,7 +703,11 @@ export function SettingsPage() {
                   {t("ai.saveProfile")}
                 </Button>
                 <span className="text-2xs text-muted-foreground">
-                  {aiDraft.model ? t("ai.enabledHint") : t("ai.notConfigured")}
+                  {aiDirty
+                    ? t("ai.unsaved")
+                    : aiDraft.model
+                      ? t("ai.enabledHint")
+                      : t("ai.notConfigured")}
                 </span>
               </div>
 
