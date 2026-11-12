@@ -1,4 +1,5 @@
 import {
+  Activity,
   ArrowLeft,
   CircleAlert,
   FileText,
@@ -19,6 +20,7 @@ import { DeleteProjectDialog } from "@/components/projects/delete-project-dialog
 import { RenameProjectDialog } from "@/components/projects/rename-project-dialog";
 import { DownloadBackupMenuItem } from "@/components/projects/backup-actions";
 import { EditorPanel } from "@/components/workspace/editor-panel";
+import { ProjectActivityDialog } from "@/components/workspace/project-activity-dialog";
 import { SourcePanel } from "@/components/workspace/source-panel";
 import { WorkspaceActionsProvider } from "@/components/workspace/workspace-actions";
 import { Badge } from "@/components/ui/badge";
@@ -71,6 +73,7 @@ export function WorkspacePage() {
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>("source");
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
 
   useEffect(() => {
     if (!projectId || openedProjectId.current === projectId) return;
@@ -224,6 +227,11 @@ export function WorkspacePage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setActivityOpen(true)}>
+                <Activity />
+                <span>{t("activity.open")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DownloadBackupMenuItem projectId={projectId} />
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
@@ -332,6 +340,11 @@ export function WorkspacePage() {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         onDeleted={() => navigate("/", { replace: true })}
+      />
+      <ProjectActivityDialog
+        projectId={projectId}
+        open={activityOpen}
+        onOpenChange={setActivityOpen}
       />
       </div>
     </WorkspaceActionsProvider>

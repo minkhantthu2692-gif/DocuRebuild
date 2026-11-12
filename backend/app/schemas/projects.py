@@ -78,3 +78,11 @@ class DocumentRevisionSummary(BaseModel):
 class DocumentRevisionOut(DocumentRevisionSummary):
     content: dict[str, Any]
     plain_text: str
+
+
+class HistoryEventOut(BaseModel):
+    id: str
+    event_type: str
+    summary: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: str

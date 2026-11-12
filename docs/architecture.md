@@ -69,7 +69,7 @@ Each project owns a portable folder and its own `project.db`:
 - `pages` — page order, source/display/thumbnail asset references, rotation,
   `pdf_page_number` for PDF pages, status, and an `edits` JSON document holding the
   ordered geometry steps plus filter settings
-- `history_events` — append-only local event log
+- `history_events` — append-only local activity log: event type, human summary, small JSON metadata payload (counts, formats, sizes, ids) and timestamp; read by the project activity dialog
 - `jobs` — background import jobs: status, progress, total/imported pages, current file, payload (file counts/names), error code/message and timestamps
 - `ocr_runs` — page extraction attempts: status, engine/version, languages, source asset, rotation, mean confidence, error, timestamps; embedded PDF text uses `engine = pdf-text` and a null confidence
 - `ocr_blocks` — reviewable text blocks with bbox, confidence, kind, line/word counts, correction and verification flags
@@ -172,6 +172,7 @@ GET    /api/projects/{id}/document/revisions?limit=50
 POST   /api/projects/{id}/document/revisions
 GET    /api/projects/{id}/document/revisions/{revision_id}
 POST   /api/projects/{id}/document/revisions/{revision_id}/restore
+GET    /api/projects/{id}/history?limit=50
 GET    /api/projects/{id}/pages
 POST   /api/projects/{id}/pages/import
 POST   /api/projects/{id}/imports
@@ -451,6 +452,8 @@ src/
 - The editor downloads through a temporary anchor. Before that it awaits the same
   save path used by autosave and aborts the download when the save fails, so a
   stale file is never produced. `export` in `/api/meta` advertises the feature.
+- A successful export also records a `document_exported` activity entry with the
+  format and byte size. The exported text is not stored in the log.
 
 ### Document versions
 
@@ -481,6 +484,25 @@ src/
   with `setContent(..., { emitUpdate: true })`, the document cache is updated and
   the editor marks it saved; editor undo history restarts, while both states remain
   available as versions.
+
+### Project activity
+
+- `services.history.list_events` reads `history_events` for one project, newest
+  first by `created_at` then `rowid`, and parses the stored JSON payload defensively.
+  `GET /api/projects/{id}/history` accepts `limit` (1–200, default 50).
+- Events are written by the service that does the work through
+  `projects.record_history`: project creation, imports and cancellations, page
+  processing/reset/deletion, region extraction and text corrections, OCR start and
+  completion/failure, exports, backup creation and restore.
+- Payloads are metadata only — page/element/run ids, counts, export format and byte
+  size, backup filename and size, OCR languages, confidence and block count, or an
+  error code. Document text, OCR output and image data are never copied into the log.
+- The dialog labels known event types through the `workspace` i18n namespace and
+  formats details with locale-aware date, number and file-size helpers. An event type
+  written by a newer build is still listed, using its stored English summary as the
+  fallback label.
+- Writing a history event is best-effort: a logging failure is logged and never
+  fails the import, export, OCR run or backup that produced it.
 
 ### Project backup and restore
 
@@ -652,6 +674,9 @@ src/
 - Document versions are stored in the project database. Saving, listing and
   restoring them never contacts a provider or the network: no AI call is made and
   no text leaves the machine. Versions are not a substitute for an external backup.
+- The project activity log is read and written on the local machine only. Entries
+  contain metadata (counts, formats, sizes, ids, timestamps), never document text,
+  OCR output or image bytes, and reading the log makes no provider or network call.
 - Project backups are created and validated entirely on the local machine. The
   archive is written under the local data directory, streamed to the browser and
   deleted; restore files are staged there and removed after validation or failure.

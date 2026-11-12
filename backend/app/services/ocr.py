@@ -22,6 +22,7 @@ from app.core.errors import AppError
 from app.core.storage import resolve_within
 from app.db.project_schema import project_db, utc_iso
 from app.services.layout import classify_text_block
+from app.services.projects import record_history
 
 logger = logging.getLogger(__name__)
 
@@ -378,6 +379,17 @@ def start_ocr(project_dir: Path, page_id: str, languages: list[str]) -> dict[str
             ),
         )
 
+    record_history(
+        project_dir,
+        "ocr_started",
+        "Started text extraction",
+        {
+            "run_id": run_id,
+            "page_id": page_id,
+            "languages": "+".join(requested),
+        },
+    )
+
     try:
         _get_executor().submit(_execute_ocr_run, run_id, project_dir, page_id, requested)
     except RuntimeError:
@@ -403,6 +415,12 @@ def _mark_failed(project_dir: Path, run_id: str, message: str, code: str) -> Non
                 """,
                 (message, code, now, now, run_id),
             )
+        record_history(
+            project_dir,
+            "ocr_failed",
+            "Text extraction failed",
+            {"run_id": run_id, "error_code": code},
+        )
     except Exception:  # pragma: no cover - project may have been removed.
         logger.exception("Could not mark OCR run %s as failed", run_id)
 
@@ -463,6 +481,17 @@ def _execute_ocr_run(
                     run_id,
                 ),
             )
+        record_history(
+            project_dir,
+            "ocr_succeeded",
+            "Text extraction completed",
+            {
+                "run_id": run_id,
+                "page_id": page_id,
+                "mean_confidence": result["mean_confidence"],
+                "blocks": len(result["blocks"]),
+            },
+        )
     except AppError as exc:
         _mark_failed(project_dir, run_id, exc.message, exc.code)
     except subprocess.TimeoutExpired:

@@ -485,6 +485,18 @@ export interface DocumentRevision extends DocumentRevisionSummary {
   plain_text: string;
 }
 
+/**
+ * One local activity entry. `payload` is metadata only (counts, formats, ids);
+ * it never contains document text, OCR output or image data.
+ */
+export interface HistoryEvent {
+  id: string;
+  event_type: string;
+  summary: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
 /* -------------------------------------------------------------------------- */
 /*                              App metadata                                  */
 /* -------------------------------------------------------------------------- */

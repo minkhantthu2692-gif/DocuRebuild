@@ -20,6 +20,7 @@ import type {
   EditorSettings,
   ElementSummary,
   HealthStatus,
+  HistoryEvent,
   ImportJob,
   JSONContent,
   LanguageCode,
@@ -145,6 +146,8 @@ export const api = {
     form.append("file", file);
     return request<ProjectDetail>("/projects/restore", { method: "POST", body: form });
   },
+  listProjectHistory: (projectId: string, limit = 100) =>
+    request<HistoryEvent[]>(`/projects/${projectId}/history?limit=${limit}`),
 
   getDocument: (projectId: string) =>
     request<DocumentRecord>(`/projects/${projectId}/document`),

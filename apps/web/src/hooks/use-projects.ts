@@ -88,6 +88,15 @@ export function useOpenProject(projectId: string) {
   });
 }
 
+export function useProjectHistory(projectId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["project-history", projectId],
+    queryFn: () => api.listProjectHistory(projectId as string),
+    enabled: Boolean(projectId) && enabled,
+    retry: 1,
+  });
+}
+
 export function usePages(projectId: string | undefined) {
   return useQuery({
     queryKey: ["pages", projectId],

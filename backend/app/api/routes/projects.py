@@ -28,12 +28,14 @@ from app.schemas.projects import (
     DocumentPayload,
     DocumentRevisionOut,
     DocumentRevisionSummary,
+    HistoryEventOut,
     ProjectCreate,
     ProjectDetail,
     ProjectSummary,
     ProjectUpdate,
 )
 from app.services import documents, projects as project_service
+from app.services import history as history_service
 from app.services import imports as import_service
 from app.services import pages as page_service
 from app.services import project_backup
@@ -183,6 +185,12 @@ def export_document_file(
     directory = project_service.ensure_project_storage(project)
     body, filename, content_type = export_document(directory, project.name, export_format)
     ascii_name = safe_filename(project.name, export_format)
+    project_service.record_history(
+        directory,
+        "document_exported",
+        f"Exported {export_format}",
+        {"format": export_format, "byte_size": len(body.encode("utf-8"))},
+    )
     disposition = (
         f'attachment; filename="{ascii_name}"; '
         f"filename*=UTF-8''{quote(filename, safe='')}"
@@ -243,6 +251,16 @@ def restore_document_revision(
     document = documents.restore_revision(directory, revision_id)
     touch_project(session, project)
     return document
+
+
+@router.get("/{project_id}/history", response_model=list[HistoryEventOut])
+def read_project_history(
+    project: ProjectDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[dict[str, Any]]:
+    """Local activity log for this project, newest first."""
+    directory = project_service.ensure_project_storage(project)
+    return history_service.list_events(directory, limit)
 
 
 # --------------------------------------------------------------------------- #

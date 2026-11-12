@@ -584,8 +584,14 @@ def _add_import_history(project_dir: Path, count: int, *, cancelled: bool = Fals
     with project_db(project_dir) as conn:
         conn.execute(
             "INSERT INTO history_events (id, event_type, summary, payload, created_at)"
-            " VALUES (?, ?, ?, '{}', ?)",
-            (str(uuid.uuid4()), event_type, summary, _now()),
+            " VALUES (?, ?, ?, ?, ?)",
+            (
+                str(uuid.uuid4()),
+                event_type,
+                summary,
+                json.dumps({"count": count, "cancelled": cancelled}, ensure_ascii=False),
+                _now(),
+            ),
         )
 
 

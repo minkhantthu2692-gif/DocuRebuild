@@ -116,6 +116,10 @@ data on your device, and treats every AI result as a reviewable proposal.
   toggle the header, or delete the table. Every cell is typed by hand; no cell text
   is generated from a source image. Tables are part of the saved document, version
   history, backups and Markdown/TXT export.
+- **Project activity log** — the workspace project menu lists local events newest
+  first: imports, page processing, region extraction, OCR, document exports and
+  backups. Entries are metadata only (counts, formats, sizes, ids and timestamps);
+  document text and OCR output are never copied into the log.
 - **Appearance and language** — light/dark/system themes, accent colours, radius,
   blur, density, text size, reduced motion, and live English/Burmese switching.
 - **Local-only defaults** — no account, no cloud database, no telemetry, and no
@@ -406,6 +410,24 @@ The editor header also opens the local version history:
 - Comparing two versions side by side is not implemented yet. Version history is a
   recovery aid for the same project database; it is not a backup.
 
+### Project activity
+
+Open **Project activity** from the workspace project menu to review what happened
+in this project:
+
+- The list is newest first and covers project creation, imports (including a
+  cancelled import), page processing and deletion, region extraction and text
+  corrections, local OCR runs, Markdown/TXT exports, backups and restores.
+- Each entry shows a localized event label, a local timestamp and, when relevant,
+  the recorded detail: page count, export format and size, backup archive size, OCR
+  languages, mean confidence, block count or error code.
+- Only metadata is stored in the project's own database. Page images, document
+  text and OCR output are not duplicated into the activity log, and nothing is
+  uploaded.
+- The newest 100 entries are shown. The log is a local record, not a backup, and it
+  can be refreshed while the dialog is open. Unknown event types from a newer build
+  still appear with their recorded summary instead of being hidden.
+
 ### Project backup and restore
 
 Backups are local files, not a cloud service and not a GitHub upload:
@@ -548,6 +570,10 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 - AI usage history lives in the application database and contains only provider,
   model, task, outcome, error code and timestamps. It never stores the selected
   document text, page images, model output or the full server response.
+- The project activity log is stored in `project.db` and contains event type,
+  summary, a small metadata payload (such as counts, format, byte size or OCR
+  language), and a timestamp. It never stores document text, OCR output, image data
+  or credentials.
 - Project backups are ordinary files that you download and store yourself. They are
   built and verified locally, are never uploaded by the app, and are not synced to
   GitHub. Treat them like the project folder itself, because they contain the source
@@ -589,6 +615,9 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   understands its format; a backup created by a newer build is rejected as
   `backup_incompatible`. Restore is whole-project only: individual pages, assets or
   versions cannot be merged from an archive into an existing project.
+- The activity log shows the newest 100 events and cannot be filtered, exported or
+  pruned yet. Event labels are localized for known event types; an event written by
+  a newer build falls back to its stored summary, which may be English.
 - `npm audit` reports moderate findings in the ESLint/TypeScript-ESLint toolchain
   (via `minimatch`). They are development-only and do not ship in the client
   bundle; no fixed upstream release is available yet.
@@ -656,7 +685,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools and faithful table export done; automatic table extraction, merge/split UI, equations and figure structure pending |
 | 8. Document editor and export | In progress: rich-text editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
-| 9. History, backup and recovery | In progress: local document versions with manual checkpoints and restore, plus verified project backup download and additive restore; processing/AI/export history views and scheduled backups pending |
+| 9. History, backup and recovery | In progress: local document versions with manual checkpoints and restore, a project activity log covering imports, processing, OCR, exports and backups, plus verified project backup download and additive restore; version comparison, log filtering and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
 

@@ -17,7 +17,7 @@ presented in the UI until it actually works.
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion and row/column/header tools, plus faithful Markdown/TXT table export; automatic table extraction, merge/split UI, equations and figure structure pending |
 | 8. Document editor and export | In progress | Core editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
-| 9. History, backup and recovery | In progress | Document versions with manual checkpoints and restore, plus verified project backup download and additive (new-project) restore; processing/AI/export history and selective restore pending |
+| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints and restore, a local project activity log for imports, processing, OCR, exports and backups, plus verified project backup download and additive (new-project) restore; version comparison, selective restore and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
 
@@ -413,10 +413,19 @@ OMML validation.
   and `max_backup_mb` checks, English/Burmese strings and error codes, plus backend
   round-trip, conflict-name, unsafe-path and invalid-archive tests and component
   tests for the download name and restore dialog.
+- Project activity log: `GET /api/projects/{id}/history?limit=50` returns newest-first
+  local events with metadata-only payloads. Imports, page processing, region
+  extraction, OCR start/completion/failure, exports, backups and restores record
+  events; the workspace dialog labels known types in English and Burmese, formats
+  counts, sizes and confidence values, and falls back to the stored summary for an
+  unknown future event type.
+- Backend tests for ordering, per-project scoping, limit validation, missing projects,
+  import/export payloads and the absence of document text in the log, plus a
+  component test for labels, details, empty, error and unknown-event states.
 
 **Pending**
 
-- Processing, AI and export history views; document version comparison.
+- Document version comparison and activity-log filtering or export.
 - Selective restore (single page, asset or version from an archive), scheduled or
   automatic backups, backup encryption and retention management. Editor undo/redo
   stays separate from revision history.
