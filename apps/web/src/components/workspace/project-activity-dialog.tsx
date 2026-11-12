@@ -1,7 +1,15 @@
 import type { TFunction } from "i18next";
-import { Activity, CircleAlert, Search } from "lucide-react";
+import {
+  Activity,
+  CircleAlert,
+  Download,
+  FileJson,
+  FileSpreadsheet,
+  Search,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 import type { HistoryEvent } from "@docurebuild/shared-types";
 
@@ -14,6 +22,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
@@ -32,6 +47,13 @@ import {
   type ActivityCategory,
 } from "@/lib/activity-filter";
 import {
+  activityExportFilename,
+  buildActivityCsv,
+  buildActivityJson,
+  type ActivityExportItem,
+} from "@/lib/activity-export";
+import { saveBlob } from "@/lib/download";
+import {
   formatDateTime,
   formatFileSize,
   formatNumber,
@@ -40,6 +62,7 @@ import {
 
 interface ProjectActivityDialogProps {
   projectId: string;
+  projectName?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -130,6 +153,7 @@ function eventDetails(event: HistoryEvent, t: TFunction, locale: string): string
 
 export function ProjectActivityDialog({
   projectId,
+  projectName = "",
   open,
   onOpenChange,
 }: ProjectActivityDialogProps) {
@@ -157,6 +181,47 @@ export function ProjectActivityDialog({
     return filterActivityEvents(events, category, search, textFor);
   }, [events, category, search, t, locale]);
 
+  // Export exactly what the dialog shows, including the active filters.
+  const exportItems = useMemo<ActivityExportItem[]>(
+    () =>
+      filteredEvents.map((event) => ({
+        event,
+        label: KNOWN_EVENTS.has(event.event_type)
+          ? t(`activity.events.${event.event_type}`)
+          : t("activity.unknown"),
+        details: eventDetails(event, t, locale),
+      })),
+    [filteredEvents, t, locale],
+  );
+
+  const exportActivity = (format: "csv" | "json") => {
+    if (exportItems.length === 0) return;
+    const filename = activityExportFilename(projectName, format);
+    if (format === "csv") {
+      // The byte-order mark keeps Burmese text readable in spreadsheet apps.
+      saveBlob(
+        new Blob([`\uFEFF${buildActivityCsv(exportItems)}`], {
+          type: "text/csv;charset=utf-8",
+        }),
+        filename,
+      );
+    } else {
+      saveBlob(
+        new Blob(
+          [
+            buildActivityJson(exportItems, {
+              projectId,
+              filters: { category, search },
+            }),
+          ],
+          { type: "application/json;charset=utf-8" },
+        ),
+        filename,
+      );
+    }
+    toast.success(t("activity.export.saved", { count: exportItems.length }));
+  };
+
   return (
     <Dialog
       open={open}
@@ -183,6 +248,32 @@ export function ProjectActivityDialog({
           >
             {t("activity.refresh")}
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={exportItems.length === 0}
+                aria-label={t("activity.export.label")}
+              >
+                <Download />
+                {t("activity.export.label")}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuLabel className="max-w-64 whitespace-normal text-2xs font-normal normal-case leading-relaxed tracking-normal text-muted-foreground">
+                {t("activity.export.scope", { count: exportItems.length })}
+              </DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => exportActivity("csv")}>
+                <FileSpreadsheet />
+                {t("activity.export.csv")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => exportActivity("json")}>
+                <FileJson />
+                {t("activity.export.json")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {filtersActive ? (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
               {t("activity.filters.clear")}

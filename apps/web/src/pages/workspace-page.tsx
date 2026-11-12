@@ -343,6 +343,7 @@ export function WorkspacePage() {
       />
       <ProjectActivityDialog
         projectId={projectId}
+        projectName={project?.name}
         open={activityOpen}
         onOpenChange={setActivityOpen}
       />

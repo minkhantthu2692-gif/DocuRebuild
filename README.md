@@ -120,7 +120,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 - **Project activity log** — the workspace project menu lists local events newest
   first: imports, page processing, region extraction, OCR, document exports and
   backups. Entries are metadata only (counts, formats, sizes, ids and timestamps);
-  document text and OCR output are never copied into the log.
+  document text and OCR output are never copied into the log. The list can be
+  filtered, searched and exported as CSV or JSON without uploading anything.
 - **Appearance and language** — light/dark/system themes, accent colours, radius,
   blur, density, text size, reduced motion, and live English/Burmese switching.
 - **Local-only defaults** — no account, no cloud database, no telemetry, and no
@@ -440,6 +441,12 @@ in this project:
   formats, codes and metadata values. Filtering is local and read-only; clearing
   the filters restores the newest 100 entries. Unknown event types remain visible
   under **Other events** instead of disappearing.
+- **Export** downloads exactly the events currently matching the filters, either as
+  CSV for a spreadsheet or as JSON that keeps every metadata field. CSV values are
+  quoted and escaped, spreadsheet formula prefixes are neutralised, and a UTF-8
+  byte-order mark keeps Burmese text readable. The file is built in the browser
+  from the loaded entries, so exporting sends nothing and the export states which
+  filters were active.
 - The newest 100 entries are shown. The log is a local record, not a backup, and it
   can be refreshed while the dialog is open. Unknown event types from a newer build
   still appear with their recorded summary instead of being hidden.
@@ -631,9 +638,9 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   understands its format; a backup created by a newer build is rejected as
   `backup_incompatible`. Restore is whole-project only: individual pages, assets or
   versions cannot be merged from an archive into an existing project.
-- The activity log shows the newest 100 events. It can be filtered and searched in
-  the dialog but cannot be exported or pruned yet. Event labels are localized for
-  known event types; an event written by a newer build falls back to its stored
+- The activity log shows the newest 100 events. It can be filtered, searched and
+  exported from the dialog, but it cannot be pruned yet. Event labels are localized
+  for known event types; an event written by a newer build falls back to its stored
   summary, which may be English.
 - `npm audit` reports moderate findings in the ESLint/TypeScript-ESLint toolchain
   (via `minimatch`). They are development-only and do not ship in the client
@@ -702,7 +709,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split and faithful table export done; automatic table extraction, equations and figure structure pending |
 | 8. Document editor and export | In progress: rich-text editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
-| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable project activity log covering imports, processing, OCR, exports and backups, plus verified project backup download and additive restore; activity-log export and scheduled backups pending |
+| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, plus verified project backup download and additive restore; selective restore and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
 

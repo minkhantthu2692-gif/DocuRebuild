@@ -11,7 +11,13 @@ const mocks = vi.hoisted(() => ({
   events: [] as HistoryEvent[],
   isLoading: false,
   isError: false,
+  saveBlob: vi.fn(),
+  success: vi.fn(),
 }));
+
+vi.mock("sonner", () => ({ toast: { success: mocks.success, error: vi.fn() } }));
+
+vi.mock("@/lib/download", () => ({ saveBlob: mocks.saveBlob }));
 
 vi.mock("@/hooks/use-projects", () => ({
   useProjectHistory: () => ({
@@ -31,11 +37,12 @@ const event = (patch: Partial<HistoryEvent> & Pick<HistoryEvent, "id">): History
   ...patch,
 });
 
-function renderDialog() {
+function renderDialog(projectName = "") {
   const onOpenChange = vi.fn();
   render(
     <ProjectActivityDialog
       projectId="project-1"
+      projectName={projectName}
       open
       onOpenChange={onOpenChange}
     />,
@@ -53,6 +60,8 @@ beforeEach(() => {
   mocks.isLoading = false;
   mocks.isError = false;
   mocks.refetch.mockReset();
+  mocks.saveBlob.mockReset();
+  mocks.success.mockReset();
 });
 
 describe("ProjectActivityDialog", () => {
@@ -154,6 +163,54 @@ describe("ProjectActivityDialog", () => {
 
     expect(screen.getByText("2 events")).toBeInTheDocument();
     expect(screen.getByText("Document exported")).toBeInTheDocument();
+  });
+
+  it("exports only the events matching the active filters", async () => {
+    mocks.events = [
+      event({ id: "export", event_type: "document_exported", payload: { format: "txt" } }),
+      event({ id: "import", event_type: "pages_imported", payload: { count: 1 } }),
+    ];
+    renderDialog("Field notes");
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search activity" }), {
+      target: { value: "Document exported" },
+    });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Export" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "CSV for a spreadsheet" }));
+
+    expect(mocks.saveBlob).toHaveBeenCalledTimes(1);
+    const [blob, filename] = mocks.saveBlob.mock.calls[0] as [Blob, string];
+    expect(blob.type).toBe("text/csv;charset=utf-8");
+    expect(filename).toMatch(/^Field notes-activity-\d{8}\.csv$/);
+    expect(mocks.success).toHaveBeenCalledWith("1 event exported.");
+  });
+
+  it("offers JSON with the full metadata of the visible events", async () => {
+    mocks.events = [
+      event({ id: "export", event_type: "document_exported", payload: { format: "txt" } }),
+    ];
+    renderDialog("Field notes");
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Export" }), { key: "Enter" });
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "JSON with full metadata" }),
+    );
+
+    expect(mocks.saveBlob).toHaveBeenCalledTimes(1);
+    const [blob, filename] = mocks.saveBlob.mock.calls[0] as [Blob, string];
+    expect(blob.type).toBe("application/json;charset=utf-8");
+    expect(filename).toMatch(/^Field notes-activity-\d{8}\.json$/);
+  });
+
+  it("disables export when no event matches the filters", () => {
+    mocks.events = [event({ id: "export", event_type: "document_exported" })];
+    renderDialog();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search activity" }), {
+      target: { value: "no such event" },
+    });
+
+    expect(screen.getByRole("button", { name: "Export" })).toBeDisabled();
   });
 
   it("keeps unknown events visible with their recorded summary", () => {

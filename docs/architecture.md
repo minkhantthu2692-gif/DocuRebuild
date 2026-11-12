@@ -524,6 +524,16 @@ src/
   detail text, the event type, the stored summary and scalar metadata payload values,
   case-insensitively; document text and OCR output are not available to search
   because they are never logged. Filters reset when the dialog closes.
+- Export also runs locally and covers exactly the events currently matching the
+  filters, so a filtered export cannot silently include other events. `lib/activity-export.ts`
+  writes RFC 4180 CSV (quoted commas, quotes and line breaks, CRLF rows, a stable
+  English header, details joined with `·`) or a versioned JSON archive that keeps the
+  raw event records plus the localized label and details and records the active
+  filters. CSV values that begin with `=`, `+`, `-` or `@` are prefixed with an
+  apostrophe so a log value cannot execute as a spreadsheet formula; the download
+  adds a UTF-8 byte-order mark so Burmese text opens correctly. Filenames use the
+  sanitized project name, the local date and the chosen extension. No log data leaves
+  the device.
 - Writing a history event is best-effort: a logging failure is logged and never
   fails the import, export, OCR run or backup that produced it.
 

@@ -205,6 +205,15 @@
       "noMatchesTitle": "No matching events",
       "noMatches": "Try a different event type or search term."
     },
+    "export": {
+      "label": "Export",
+      "scope_one": "Exports the {{count}} matching event. Filters are included.",
+      "scope_other": "Exports the {{count}} matching events. Filters are included.",
+      "csv": "CSV for a spreadsheet",
+      "json": "JSON with full metadata",
+      "saved_one": "{{count}} event exported.",
+      "saved_other": "{{count}} events exported."
+    },
     "details": {
       "imported_one": "{{count}} page imported",
       "imported_other": "{{count}} pages imported",
