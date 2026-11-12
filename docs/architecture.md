@@ -366,6 +366,14 @@ src/
   node, so they survive document saves. The document references the project asset
   by URL; the crop itself is not embedded or re-encoded. Extracted text is inserted
   through the normal text insertion path with a provenance note.
+- A selected figure can be edited through the toolbar caption dialog. Editing
+  applies only to a real node selection (`selectedFigure` ignores a collapsed
+  cursor), writes only the `caption` and `alt` attributes, and leaves `src`, `note`,
+  `width` and `height` untouched, so provenance cannot be rewritten by a caption
+  correction. The change is ordinary document content: autosave, versions, backups
+  and Markdown/plain-text export all see the corrected caption without special
+  handling. Applying re-reads the stored position first, so a figure removed while
+  the dialog was open is never replaced by whichever node now sits there.
 - No external detector or AI model is invoked. Region text uses the same local
   Tesseract adapter as page OCR; `element_extraction` in `/api/meta` reports the
   manual region and local text paths.

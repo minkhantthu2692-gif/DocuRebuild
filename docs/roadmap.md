@@ -15,7 +15,7 @@ presented in the UI until it actually works.
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, plus faithful Markdown/TXT table export; automatic table extraction, equations and figure structure pending |
+| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions and faithful Markdown/TXT table export; automatic table extraction, equations and figure numbering pending |
 | 8. Document editor and export | In progress | Core editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
 | 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, plus verified project backup download and additive (new-project) restore; selective restore and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
@@ -324,6 +324,10 @@ the user must review every region before extracting it.
 - Markdown export renders GFM tables (escaped `|`, `<br>` for multiple blocks, a
   blank structural header when none exists) and falls back to HTML for merged
   cells so spans are not lost. Plain-text export keeps every cell.
+- Figure captions and alt text can be corrected after insertion. Selecting the whole
+  figure enables the caption tool; the image, its stored source note, its size and
+  its position stay unchanged, and the corrected caption is what Markdown and
+  plain-text export write. A collapsed cursor next to a figure never edits it.
 
 **Pending**
 
@@ -331,7 +335,8 @@ the user must review every region before extracting it.
   view.
 - Automatic table-structure extraction from OCR/vision (always as a reviewable
   proposal, never inserted without approval).
-- Structured figure representation and optional reconstruction with approval.
+- Figure numbering, cross-references, inline images in running text and optional
+  structured figure reconstruction with approval.
 - LaTeX editing and live preview; validated OMML export for Word.
 - Uncertain cells/symbols are marked for review, never invented.
 
@@ -381,9 +386,8 @@ code blocks, rules, inline marks, tables and figure markers. Equations, footnote
 and page layout are not part of the editor model yet, so they cannot be exported.
 DOCX, PDF and OMML export remain unimplemented.
 
-**Pending** — per-cell alignment, images inline in text, captions, equations,
-footnotes, page layout, headers/footers, page numbers, DOCX export and OMML
-validation.
+**Pending** — per-cell alignment, images inline in text, equations, footnotes, page
+layout, headers/footers, page numbers, DOCX export and OMML validation.
 
 ## Phase 9 — History, backup and recovery (in progress)
 

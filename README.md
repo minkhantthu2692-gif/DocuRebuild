@@ -95,7 +95,8 @@ data on your device, and treats every AI result as a reviewable proposal.
   blockquotes, code blocks, alignment, inline formatting, links, undo/redo, word
   and character counts, debounced autosave, and find/replace with match-case and
   replace-all. Matches can span inline formatting but never jump between
-  paragraphs or hard breaks.
+  paragraphs or hard breaks. Selecting a figure lets you correct its caption and alt
+  text while the image and its source note stay untouched.
 - **Local Markdown and TXT export** — the editor header downloads the saved
   document as Markdown or plain text. The export is generated on this device by
   the backend from the same document the editor autosaves; unsaved changes are
@@ -623,7 +624,8 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 
 - The editor covers core rich text and manual tables, not the full target model
   (equations, footnotes and page layout are pending). Figures are supported as
-  block image nodes from the region library.
+  block image nodes from the region library; their caption and alt text can be
+  edited, but figure numbering and cross-references are not implemented.
 - Table limits: inserting offers 1–10 rows and columns, and merged cells can be
   created by selecting multiple cells and choosing merge/split. There is no
   per-cell alignment beyond paragraph alignment and no column resizing. Automatic
@@ -707,7 +709,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split and faithful table export done; automatic table extraction, equations and figure structure pending |
+| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions and faithful table export done; automatic table extraction, equations and figure numbering pending |
 | 8. Document editor and export | In progress: rich-text editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
 | 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, plus verified project backup download and additive restore; selective restore and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned |

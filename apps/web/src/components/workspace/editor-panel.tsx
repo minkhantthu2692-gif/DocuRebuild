@@ -5,6 +5,7 @@ import {
   AlignLeft,
   AlignRight,
   Bold,
+  Captions,
   CaseSensitive,
   Check,
   ChevronDown,
@@ -63,7 +64,7 @@ import { useAppSettings, useUpdateSettings } from "@/hooks/use-app";
 import { useDocument, useSaveDocument } from "@/hooks/use-document";
 import { api } from "@/lib/api";
 import { createEditorExtensions } from "@/lib/editor-extensions";
-import { figureInsertionContent } from "@/lib/editor-figure";
+import { figureInsertionContent, figureAt, selectedFigure, type SelectedFigure } from "@/lib/editor-figure";
 import { findMatches } from "@/lib/editor-search";
 import { resolveLocale } from "@/lib/format";
 import { normalizeLinkUrl } from "@/lib/link";
@@ -149,6 +150,10 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [linkUrl, setLinkUrl] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [figureSelection, setFigureSelection] = useState<SelectedFigure | null>(null);
+  const [figureOpen, setFigureOpen] = useState(false);
+  const [figureCaption, setFigureCaption] = useState("");
+  const [figureAlt, setFigureAlt] = useState("");
 
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
@@ -180,7 +185,11 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
       latestContent.current = instance.getJSON() as JSONContent;
       latestText.current = text;
       setPlainText(text);
+      setFigureSelection(selectedFigure(instance.state));
       setRevision(revisionRef.current);
+    },
+    onSelectionUpdate: ({ editor: instance }) => {
+      setFigureSelection(selectedFigure(instance.state));
     },
   });
 
@@ -383,6 +392,38 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     editor.chain().focus().extendMarkRange("link").unsetLink().run();
     setLinkOpen(false);
   }, [editor]);
+
+  const openFigureDialog = useCallback(() => {
+    if (!editor) return;
+    const figure = selectedFigure(editor.state);
+    if (!figure) return;
+    setFigureCaption(figure.caption);
+    setFigureAlt(figure.alt);
+    setFigureOpen(true);
+  }, [editor]);
+
+  const applyFigureCaption = useCallback(() => {
+    if (!editor || !figureSelection) return;
+    if (!figureAt(editor.state, figureSelection.pos)) {
+      // The document changed while the dialog was open, so the stored position
+      // no longer points at this figure. Never edit a different node.
+      setFigureOpen(false);
+      toast.error(t("editor.figure.gone"));
+      return;
+    }
+    // Re-select the node so the edit applies to the figure that was opened,
+    // even if focus moved into the dialog in the meantime.
+    editor
+      .chain()
+      .focus()
+      .setNodeSelection(figureSelection.pos)
+      .updateAttributes("figure", {
+        caption: figureCaption.trim(),
+        alt: figureAlt.trim(),
+      })
+      .run();
+    setFigureOpen(false);
+  }, [editor, figureSelection, figureCaption, figureAlt, t]);
 
   const applyRestoredDocument = useCallback(
     (record: DocumentRecord) => {
@@ -732,6 +773,13 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
 
         <EditorTableMenu editor={editor} />
 
+        <ToolbarButton
+          label={t("editor.figure.edit")}
+          icon={Captions}
+          disabled={!editor?.isEditable || !figureSelection}
+          onClick={openFigureDialog}
+        />
+
         <Separator orientation="vertical" className="mx-1 h-5" />
 
         <ToolbarButton
@@ -998,6 +1046,73 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
                 {tCommon("actions.cancel")}
               </Button>
               <Button type="submit">{t("editor.link.apply")}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={figureOpen} onOpenChange={setFigureOpen}>
+        <DialogContent className="max-w-lg">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              applyFigureCaption();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>{t("editor.figure.title")}</DialogTitle>
+              <DialogDescription>{t("editor.figure.description")}</DialogDescription>
+            </DialogHeader>
+
+            <div className="mt-4 space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="figure-caption">{t("editor.figure.caption")}</Label>
+                <Input
+                  id="figure-caption"
+                  value={figureCaption}
+                  onChange={(event) => setFigureCaption(event.target.value)}
+                  placeholder={t("editor.figure.captionPlaceholder")}
+                  autoFocus
+                />
+                <p className="text-2xs leading-relaxed text-muted-foreground">
+                  {t("editor.figure.captionHint")}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="figure-alt">{t("editor.figure.alt")}</Label>
+                <Input
+                  id="figure-alt"
+                  value={figureAlt}
+                  onChange={(event) => setFigureAlt(event.target.value)}
+                  placeholder={t("editor.figure.altPlaceholder")}
+                />
+                <p className="text-2xs leading-relaxed text-muted-foreground">
+                  {t("editor.figure.altHint")}
+                </p>
+              </div>
+
+              {figureSelection?.note ? (
+                <div className="rounded-md border border-border/60 bg-background/50 p-2.5">
+                  <p className="text-2xs font-medium text-muted-foreground">
+                    {t("editor.figure.source")}
+                  </p>
+                  <p className="mt-0.5 whitespace-pre-wrap break-words text-xs leading-relaxed">
+                    {figureSelection.note}
+                  </p>
+                </div>
+              ) : null}
+
+              <p className="text-2xs leading-relaxed text-muted-foreground">
+                {t("editor.figure.note")}
+              </p>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setFigureOpen(false)}>
+                {tCommon("actions.cancel")}
+              </Button>
+              <Button type="submit">{t("editor.figure.apply")}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

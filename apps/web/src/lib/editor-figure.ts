@@ -1,5 +1,7 @@
 import { Node } from "@tiptap/core";
-import type { DOMOutputSpec } from "@tiptap/pm/model";
+import type { DOMOutputSpec, Node as PMNode } from "@tiptap/pm/model";
+import { NodeSelection } from "@tiptap/pm/state";
+import type { EditorState } from "@tiptap/pm/state";
 
 import type { JSONContent } from "@docurebuild/shared-types";
 
@@ -10,6 +12,47 @@ export interface FigureContent {
   note: string | null;
   width: number | null;
   height: number | null;
+}
+
+/** A figure the cursor has selected, with the position needed to edit it. */
+export interface SelectedFigure {
+  pos: number;
+  caption: string;
+  alt: string;
+  note: string | null;
+}
+
+function readFigure(node: PMNode, pos: number): SelectedFigure {
+  return {
+    pos,
+    caption: String(node.attrs.caption ?? ""),
+    alt: String(node.attrs.alt ?? ""),
+    note: node.attrs.note ? String(node.attrs.note) : null,
+  };
+}
+
+/**
+ * Read the selected figure, if any. Only a real node selection counts, so a
+ * collapsed cursor near a figure can never rewrite its caption.
+ */
+export function selectedFigure(state: EditorState): SelectedFigure | null {
+  const { selection } = state;
+  if (!(selection instanceof NodeSelection) || selection.node.type.name !== "figure") {
+    return null;
+  }
+  return readFigure(selection.node, selection.from);
+}
+
+/**
+ * Read the figure stored at a position. Returns null when the document changed
+ * since the position was captured, so a dialog cannot edit a different node.
+ */
+export function figureAt(state: EditorState, pos: number): SelectedFigure | null {
+  // `nodeAt` throws for positions outside the document, so bound it first.
+  if (!Number.isInteger(pos) || pos < 0 || pos >= state.doc.content.size) return null;
+  const node = state.doc.nodeAt(pos);
+  if (!node || node.type.name !== "figure") return null;
+  return readFigure(node, pos);
 }
 
 function numberAttribute(element: Element, name: string): number | null {

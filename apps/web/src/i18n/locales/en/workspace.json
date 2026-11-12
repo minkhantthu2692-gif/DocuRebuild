@@ -117,6 +117,21 @@
       "sizeHint": "Choose {{min}} to {{max}} rows and columns.",
       "insertAction": "Insert table"
     },
+    "figure": {
+      "edit": "Edit figure caption",
+      "title": "Figure caption",
+      "description": "Correct the caption or alt text of the selected figure. The image, its source note and its position stay unchanged.",
+      "caption": "Caption",
+      "captionPlaceholder": "Figure 1. Caption from the source page",
+      "captionHint": "The caption is saved with the document and is used in Markdown and plain-text export.",
+      "alt": "Alternative text",
+      "altPlaceholder": "Short description of the image",
+      "altHint": "Used when the image cannot be shown, for example by a screen reader.",
+      "source": "Source note",
+      "note": "The source note is kept exactly as recorded, so the figure still shows where its pixels came from.",
+      "gone": "This figure is no longer in the document.",
+      "apply": "Save caption"
+    },
     "paragraph": "Paragraph",
     "heading1": "Heading 1",
     "heading2": "Heading 2",
