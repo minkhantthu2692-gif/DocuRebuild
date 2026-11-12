@@ -12,6 +12,7 @@ class AppCapabilities(BaseModel):
     ocr: bool
     ai: bool
     export: bool
+    backup: bool
 
 
 class AppMeta(BaseModel):
@@ -20,6 +21,7 @@ class AppMeta(BaseModel):
     capabilities: AppCapabilities
     max_import_mb: int
     max_upload_batch: int
+    max_backup_mb: int = 2048
     repository_url: str | None = None
 
 

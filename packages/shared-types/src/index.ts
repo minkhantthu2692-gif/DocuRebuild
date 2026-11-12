@@ -499,6 +499,8 @@ export interface AppCapabilities {
   ocr: boolean;
   ai: boolean;
   export: boolean;
+  /** Local project backup download and restore. */
+  backup: boolean;
 }
 
 export interface AppMeta {
@@ -509,6 +511,8 @@ export interface AppMeta {
   max_import_mb: number;
   /** Maximum number of files in one import batch. */
   max_upload_batch: number;
+  /** Maximum size of a project backup archive, in megabytes. */
+  max_backup_mb: number;
   /** Configured source repository URL, if any. */
   repository_url: string | null;
 }

@@ -26,9 +26,11 @@ const meta: AppMeta = {
     ocr: false,
     ai: false,
     export: false,
+    backup: true,
   },
   max_import_mb: 200,
   max_upload_batch: 50,
+  max_backup_mb: 2048,
   repository_url: null,
 };
 

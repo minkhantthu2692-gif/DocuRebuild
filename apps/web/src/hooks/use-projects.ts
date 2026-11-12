@@ -60,6 +60,23 @@ export function useDeleteProject() {
   });
 }
 
+export function useDownloadProjectBackup() {
+  return useMutation({
+    mutationFn: (projectId: string) => api.downloadProjectBackup(projectId),
+  });
+}
+
+export function useRestoreProjectBackup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => api.restoreProjectBackup(file),
+    onSuccess: (project) => {
+      queryClient.setQueryData(["project", project.id], project);
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
 export function useOpenProject(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({

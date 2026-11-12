@@ -87,12 +87,14 @@ projects/<project-id>/
   processed/    browser-safe display copies
   thumbnails/   WebP thumbnails
   exports/      future exports
-  backups/      future backups
+  backups/      reserved; backup archives are streamed, not kept here
   trash/        per-project runtime trash
 ```
 
-Relative asset references are stored in SQLite so a project folder can be moved
-without rewriting paths. `resolve_within` rejects path traversal.
+The data directory also holds `app.db`, a shared `trash/` for deleted projects and a
+short-lived `tmp/` folder used only while building or restoring a backup. Relative
+asset references are stored in SQLite so a project folder can be moved without
+rewriting paths. `resolve_within` rejects path traversal.
 
 ### Import rules
 
@@ -161,6 +163,8 @@ GET    /api/projects/{id}
 PATCH  /api/projects/{id}
 DELETE /api/projects/{id}
 POST   /api/projects/{id}/open
+GET    /api/projects/{id}/backup
+POST   /api/projects/restore
 GET    /api/projects/{id}/document
 PUT    /api/projects/{id}/document
 GET    /api/projects/{id}/document/export?format=markdown|txt
@@ -445,6 +449,42 @@ src/
   the editor marks it saved; editor undo history restarts, while both states remain
   available as versions.
 
+### Project backup and restore
+
+- A backup is one zip archive built in `tmp/` and streamed to the browser as
+  `application/zip`; it is deleted after the response. It contains `manifest.json`,
+  `backup.json`, `project.db`, and every regular file under `source/`, `processed/`,
+  `thumbnails/` and `exports/`. `backups/` and `trash/` are never included, so an old
+  archive inside the project cannot nest itself into the next backup.
+- `project.db` is copied through SQLite's backup API, not by file copy, so the
+  snapshot is consistent even if a save is in progress, and WAL content is included.
+- Creation is refused while an import job is queued, running or cancelling.
+  After writing, the archive is reopened, `testzip()` is checked, required entries are
+  verified, and every `assets.relative_path` in the snapshot must exist in the
+  archive. A mismatch means files changed mid-write, so the download fails with
+  `backup_incomplete` instead of shipping an incomplete archive.
+- Restore is additive by design. The upload is streamed to `tmp/` while enforcing
+  `max_backup_mb` (upload bytes and total expanded bytes), then handled in a
+  threadpool: required entries, optional `testzip()`, per-member safety (rejects
+  absolute paths, `..`, backslashes, drive letters, NUL bytes, symlinks and any root
+  outside `manifest.json`, `backup.json`, `project.db`, `source|processed|thumbnails|exports`),
+  extraction into a fresh staging folder, manifest/backup format versions, SQLite
+  `integrity_check`, required tables and a migration version no newer than
+  `MAX_MIGRATION_VERSION`.
+- Finalization moves the staging folder to a new UUID project folder, creates the
+  standard subfolders, rewrites `manifest.json` with the new id/name, ensures the
+  document row, records a `project_restored` history event, inserts the registry row
+  and deletes the staging copy of `backup.json`. On any failure the folder and the
+  registry transaction are rolled back, so a bad archive never leaves a partial
+  project behind.
+- The restored name collides case-insensitively with existing names, so it becomes
+  `<name> (restored)`, then `(restored) 2`, and so on. An existing project is never
+  opened, renamed, replaced or deleted by a restore.
+- The frontend downloads through `fetch` (so error codes can be shown) and saves the
+  blob; the Unicode name comes from RFC 5987 `filename*`, with the ASCII `filename`
+  as fallback. The restore dialog checks `.zip` and `max_backup_mb` before uploading
+  and explains that a new project will be created.
+
 ### Local AI cleanup
 
 - Phase 6 starts with the smallest useful AI workflow: correcting one OCR text
@@ -579,6 +619,12 @@ src/
 - Document versions are stored in the project database. Saving, listing and
   restoring them never contacts a provider or the network: no AI call is made and
   no text leaves the machine. Versions are not a substitute for an external backup.
+- Project backups are created and validated entirely on the local machine. The
+  archive is written under the local data directory, streamed to the browser and
+  deleted; restore files are staged there and removed after validation or failure.
+  No backup content is uploaded, and the app does not sync archives to GitHub. An
+  archive contains the original documents and extracted text, so it must be stored
+  like the project folder itself; it is not encrypted by the app.
 - Document links are validated to `http`, `https` or `mailto` before they enter the
   document, and Markdown export repeats that check. A stored `javascript:` or
   `data:` target is never emitted as a link; only its text is kept.

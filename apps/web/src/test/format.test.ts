@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDateTime, formatNumber, formatRelativeDate, parseTimestamp, pluralize, resolveLocale } from "@/lib/format";
+import {
+  formatDateTime,
+  formatFileSize,
+  formatNumber,
+  formatRelativeDate,
+  parseTimestamp,
+  pluralize,
+  resolveLocale,
+} from "@/lib/format";
 
 describe("formatting", () => {
   it("maps application languages to BCP 47 locales", () => {
@@ -18,6 +26,14 @@ describe("formatting", () => {
   it("formats relative dates and numbers", () => {
     expect(formatRelativeDate(null, "en-US")).toBe("");
     expect(formatNumber(1200, "en-US")).toBe("1,200");
+  });
+
+  it("formats file sizes with locale-aware digits", () => {
+    expect(formatFileSize(0, "en-US")).toBe("0 B");
+    expect(formatFileSize(512, "en-US")).toBe("512 B");
+    expect(formatFileSize(1536, "en-US")).toBe("1.5 KB");
+    expect(formatFileSize(12 * 1024 * 1024, "en-US")).toBe("12 MB");
+    expect(formatFileSize(Number.NaN, "en-US")).toBe("0 B");
   });
 
   it("treats zone-less backend timestamps as UTC", () => {

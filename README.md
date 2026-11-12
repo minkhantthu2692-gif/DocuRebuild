@@ -106,6 +106,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   versions are captured when the document changes, a manual checkpoint can be saved
   at any time, and restoring a version always keeps the state it replaces, so a
   restore is itself reversible.
+- **Project backup and restore** — download a verified `.zip` of a whole project
+  (manifest, a consistent database snapshot, source and processed images,
+  thumbnails, exports) from the dashboard or the workspace. Restoring a backup
+  always creates a new project and never overwrites existing work. Everything is
+  written and read on this device; nothing is uploaded.
 - **Appearance and language** — light/dark/system themes, accent colours, radius,
   blur, density, text size, reduced motion, and live English/Burmese switching.
 - **Local-only defaults** — no account, no cloud database, no telemetry, and no
@@ -116,8 +121,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 Structured element reconstruction (table cells, equation transcription, generative
 figure detection), cloud/free-tier AI providers, image-generation profiles,
-DOCX export, project backup/restore, desktop packaging
-and PWA install support are planned but not implemented. OCR extracts text blocks,
+DOCX export, desktop packaging and PWA install support are planned but not
+implemented. OCR extracts text blocks,
 reading order and conservative layout hints; it does not build table structure or
 transcribe equations. Region extraction produces exact pixel crops and can read
 their plain text locally; it does not build structured table cells or equation
@@ -368,8 +373,48 @@ The editor header also opens the local version history:
   the exact stored Tiptap document, never a re-typed summary. Nothing is uploaded.
 - Editor undo/redo is separate from version history; a restore starts a fresh
   editor undo stack but leaves both states available as versions.
-- Comparing two versions side by side and project backup/restore are not
-  implemented yet.
+- Comparing two versions side by side is not implemented yet. Version history is a
+  recovery aid for the same project database; it is not a backup.
+
+### Project backup and restore
+
+Backups are local files, not a cloud service and not a GitHub upload:
+
+- **Download backup** is available from the project card menu on the dashboard and
+  from the project menu inside the workspace.
+- The archive contains `manifest.json`, a transaction-consistent snapshot of
+  `project.db`, every file under `source/`, `processed/`, `thumbnails/` and
+  `exports/`, plus a small `backup.json` describing the archive format and the
+  original project. Runtime trash and previous backup folders are excluded.
+- Before the download starts, the backend re-opens the finished zip, tests its
+  integrity, and confirms every asset path referenced by the database snapshot is
+  present in the archive. A backup that changed mid-write is refused
+  (`backup_incomplete`) rather than silently saved incomplete. Backup is also
+  refused while an import job is queued or running.
+- **Restore backup** on the dashboard accepts a `.zip` produced this way. The
+  archive is validated before anything is registered: safe paths only (no absolute
+  paths, `..`, drive letters or symlinks), a bounded total expanded size, required
+  entries, project/backup format versions, SQLite integrity, required tables and a
+  database migration version no newer than this build.
+- A restore always creates a **new** project with a new id and a unique name
+  (`<name> (restored)`, numbered on further conflicts). Existing projects are never
+  replaced or modified, so a restore can be reviewed and the new copy deleted if it
+  is unwanted.
+- The archive size limit is `DOCUREBUILD_MAX_BACKUP_MB` (default 2048 MB, both
+  upload and expanded size) and is reported to the UI through `/api/meta`.
+- Archive reading, extraction and database checks run in a temporary folder under
+  the local data directory and are cleaned up afterwards. Nothing leaves the device.
+
+```text
+GET  /api/projects/{project_id}/backup      # application/zip attachment
+POST /api/projects/restore                  # multipart field: file → 201 ProjectDetail
+```
+
+Restore error codes: `backup_invalid`, `backup_missing_files`,
+`backup_unsafe_path`, `backup_database_invalid`, `backup_incompatible`,
+`backup_too_large`, `backup_import_running`, `backup_incomplete`,
+`backup_verification_failed`, `backup_restore_failed` and
+`project_storage_incomplete`.
 
 ### PDF import
 
@@ -453,9 +498,10 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
     processed/           non-destructive display copies (rotations, PDF page renders)
     thumbnails/          cached WebP thumbnails
     exports/             reserved for server-side export output (current exports stream)
-    backups/             future project backups
+    backups/             reserved; downloaded archives are not kept here
     trash/               per-project runtime trash
   trash/                 deleted project folders
+  tmp/                   short-lived backup archives and restore staging
 ```
 
 - API keys and user documents are never committed or uploaded by the application.
@@ -472,6 +518,10 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 - AI usage history lives in the application database and contains only provider,
   model, task, outcome, error code and timestamps. It never stores the selected
   document text, page images, model output or the full server response.
+- Project backups are ordinary files that you download and store yourself. They are
+  built and verified locally, are never uploaded by the app, and are not synced to
+  GitHub. Treat them like the project folder itself, because they contain the source
+  documents and extracted text.
 - GitHub is used only for source code and documentation. User data is **not** a
   GitHub backup category. See [`AGENTS.md`](AGENTS.md).
 
@@ -497,8 +547,13 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   supported as block image nodes from the region library.
 - Autosave is debounced and best-effort when leaving the page. Document versions
   protect the saved document, but they live in the same project database and are
-  not a backup, so destructive edits outside the version window and disk failures
-  are still not recoverable.
+  not a backup. Use **Download backup** for a complete copy; backups are manual,
+  scheduled or automatic backups are not implemented, and an archive is not
+  encrypted, so it is only as safe as the folder you store it in.
+- A backup can only be restored by the same or a newer DocuRebuild build that
+  understands its format; a backup created by a newer build is rejected as
+  `backup_incompatible`. Restore is whole-project only: individual pages, assets or
+  versions cannot be merged from an archive into an existing project.
 - `npm audit` reports moderate findings in the ESLint/TypeScript-ESLint toolchain
   (via `minimatch`). They are development-only and do not ship in the client
   bundle; no fixed upstream release is available yet.
@@ -566,7 +621,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | Planned |
 | 8. Document editor and export | In progress: rich-text editor plus local Markdown and TXT export; tables, equations, DOCX and page layout pending |
-| 9. History, backup and recovery | In progress: local document versions with manual checkpoints and restore; processing/AI/export history and project backup pending |
+| 9. History, backup and recovery | In progress: local document versions with manual checkpoints and restore, plus verified project backup download and additive restore; processing/AI/export history views and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
 

@@ -39,6 +39,9 @@ class Settings(BaseSettings):
 
     max_import_mb: int = 200
     max_upload_batch: int = 50
+    # Project backups contain every source image, so they can be much larger than
+    # a single import. They are read locally and never uploaded anywhere.
+    max_backup_mb: int = 2048
     repository_url: str = "https://github.com/minkhantthu2692-gif/DocuRebuild"
 
     # Local PDF rendering. Pages are rendered one at a time on the backend.

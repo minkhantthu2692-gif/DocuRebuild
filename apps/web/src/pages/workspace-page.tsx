@@ -17,6 +17,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { DeleteProjectDialog } from "@/components/projects/delete-project-dialog";
 import { RenameProjectDialog } from "@/components/projects/rename-project-dialog";
+import { DownloadBackupMenuItem } from "@/components/projects/backup-actions";
 import { EditorPanel } from "@/components/workspace/editor-panel";
 import { SourcePanel } from "@/components/workspace/source-panel";
 import { WorkspaceActionsProvider } from "@/components/workspace/workspace-actions";
@@ -223,6 +224,8 @@ export function WorkspacePage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DownloadBackupMenuItem projectId={projectId} />
+              <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
                 <Pencil />
                 <span>{t("projectMenu.rename")}</span>

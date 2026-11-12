@@ -32,6 +32,8 @@ import type {
   RegionProposals,
 } from "@docurebuild/shared-types";
 
+import { filenameFromDisposition } from "@/lib/download";
+
 const API_BASE = "/api";
 
 export class ApiError extends Error {
@@ -44,6 +46,21 @@ export class ApiError extends Error {
     this.code = code;
     this.status = status;
   }
+}
+
+async function errorFromResponse(response: Response): Promise<ApiError> {
+  let code = "request_failed";
+  let message = `Request failed with status ${response.status}.`;
+  try {
+    const body = await response.json();
+    if (body?.detail?.code) {
+      code = body.detail.code;
+      message = body.detail.message ?? message;
+    }
+  } catch {
+    /* Non-JSON error response. */
+  }
+  return new ApiError(code, message, response.status);
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -62,24 +79,31 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
-    let code = "request_failed";
-    let message = `Request failed with status ${response.status}.`;
-    try {
-      const body = await response.json();
-      if (body?.detail?.code) {
-        code = body.detail.code;
-        message = body.detail.message ?? message;
-      }
-    } catch {
-      /* Non-JSON error response. */
-    }
-    throw new ApiError(code, message, response.status);
+    throw await errorFromResponse(response);
   }
 
   if (response.status === 204) {
     return undefined as T;
   }
   return (await response.json()) as T;
+}
+
+async function download(path: string): Promise<{ blob: Blob; filename: string }> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`);
+  } catch {
+    throw new ApiError("network_unreachable", "The local backend is not reachable.", 0);
+  }
+  if (!response.ok) {
+    throw await errorFromResponse(response);
+  }
+  return {
+    blob: await response.blob(),
+    filename:
+      filenameFromDisposition(response.headers.get("Content-Disposition")) ??
+      "project-backup.zip",
+  };
 }
 
 export interface SettingsPatch {
@@ -115,6 +139,12 @@ export const api = {
     request<ProjectDetail>(`/projects/${projectId}/open`, { method: "POST" }),
   deleteProject: (projectId: string) =>
     request<{ ok: boolean; trash_path: string }>(`/projects/${projectId}`, { method: "DELETE" }),
+  downloadProjectBackup: (projectId: string) => download(`/projects/${projectId}/backup`),
+  restoreProjectBackup: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<ProjectDetail>("/projects/restore", { method: "POST", body: form });
+  },
 
   getDocument: (projectId: string) =>
     request<DocumentRecord>(`/projects/${projectId}/document`),
@@ -331,4 +361,5 @@ export const DEFAULT_CAPABILITIES: AppCapabilities = {
   ocr: false,
   ai: true,
   export: false,
+  backup: false,
 };

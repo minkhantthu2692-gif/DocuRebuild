@@ -31,7 +31,7 @@ def _utc_iso(value: datetime | None) -> str | None:
     return value.astimezone(timezone.utc).isoformat()
 
 
-def _write_manifest(project: Project) -> None:
+def write_manifest(project: Project) -> None:
     atomic_write_json(
         Path(project.directory) / "manifest.json",
         {
@@ -122,7 +122,7 @@ def create_project(session: Session, payload: ProjectCreate) -> Project:
         directory.mkdir(parents=True, exist_ok=False)
         for subdir in PROJECT_SUBDIRS:
             (directory / subdir).mkdir(parents=True, exist_ok=True)
-        _write_manifest(project)
+        write_manifest(project)
         with project_db(directory) as conn:
             ensure_document_row(conn)
             conn.execute(
@@ -153,7 +153,7 @@ def update_project(
     session.commit()
     session.refresh(project)
     try:
-        _write_manifest(project)
+        write_manifest(project)
     except OSError:
         logger.warning("Could not update project manifest for %s", project.id, exc_info=True)
     return project

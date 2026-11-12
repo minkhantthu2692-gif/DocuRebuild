@@ -49,8 +49,10 @@ def meta() -> AppMeta:
             # configure and test a local server and model before using it.
             ai=True,
             export=True,
+            backup=True,
         ),
         max_import_mb=settings.max_import_mb,
         max_upload_batch=settings.max_upload_batch,
+        max_backup_mb=settings.max_backup_mb,
         repository_url=settings.repository_url or None,
     )

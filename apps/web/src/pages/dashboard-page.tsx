@@ -1,6 +1,7 @@
-import { Plus, Search, TriangleAlert, FolderLock } from "lucide-react";
+import { Plus, Search, TriangleAlert, FolderLock, ArchiveRestore } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 
 import type { ProjectSummary } from "@docurebuild/shared-types";
 
@@ -8,6 +9,7 @@ import { CreateProjectDialog } from "@/components/projects/create-project-dialog
 import { DeleteProjectDialog } from "@/components/projects/delete-project-dialog";
 import { ProjectCard } from "@/components/projects/project-card";
 import { RenameProjectDialog } from "@/components/projects/rename-project-dialog";
+import { RestoreBackupDialog } from "@/components/projects/restore-backup-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -39,8 +41,10 @@ export function DashboardPage() {
   const { t } = useTranslation("dashboard");
   const { t: tCommon } = useTranslation("common");
   const projectsQuery = useProjects();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<ProjectSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
 
@@ -84,6 +88,10 @@ export function DashboardPage() {
                   aria-label={t("searchPlaceholder")}
                 />
               </div>
+              <Button variant="outline" onClick={() => setRestoreOpen(true)} className="shrink-0">
+                <ArchiveRestore />
+                {t("backup.restoreAction")}
+              </Button>
               <Button onClick={() => setCreateOpen(true)} className="shrink-0">
                 <Plus />
                 {tCommon("actions.newProject")}
@@ -183,6 +191,11 @@ export function DashboardPage() {
       </div>
 
       <CreateProjectDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <RestoreBackupDialog
+        open={restoreOpen}
+        onOpenChange={setRestoreOpen}
+        onRestored={(project) => navigate(`/projects/${project.id}`)}
+      />
       <RenameProjectDialog
         project={renameTarget}
         open={Boolean(renameTarget)}

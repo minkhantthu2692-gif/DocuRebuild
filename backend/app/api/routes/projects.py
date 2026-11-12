@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Annotated, Any
@@ -8,6 +9,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, File, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import DbSession, ProjectDep
@@ -34,6 +36,7 @@ from app.schemas.projects import (
 from app.services import documents, projects as project_service
 from app.services import imports as import_service
 from app.services import pages as page_service
+from app.services import project_backup
 from app.services.document_export import ExportFormat, export_document, safe_filename
 from app.services.projects import touch_project
 
@@ -66,6 +69,75 @@ def update_project(
 ) -> dict[str, Any]:
     updated = project_service.update_project(session, project, payload)
     return _detail(updated)
+
+
+@router.get("/{project_id}/backup")
+def download_project_backup(project: ProjectDep) -> FileResponse:
+    """Build and download a verified local backup of the whole project."""
+    path, unicode_name, ascii_name, _size = project_backup.create_backup(project)
+    disposition = (
+        f'attachment; filename="{ascii_name}"; '
+        f"filename*=UTF-8''{quote(unicode_name, safe='')}"
+    )
+    return FileResponse(
+        path,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": disposition,
+            "Cache-Control": "private, no-store",
+        },
+        background=BackgroundTask(path.unlink, missing_ok=True),
+    )
+
+
+@router.post(
+    "/restore",
+    response_model=ProjectDetail,
+    status_code=status.HTTP_201_CREATED,
+)
+async def restore_project_backup(
+    session: DbSession,
+    file: Annotated[UploadFile, File(description="DocuRebuild backup archive")],
+) -> dict[str, Any]:
+    """Restore a backup as a new project. No existing project is overwritten."""
+    settings = get_settings()
+    if Path(file.filename or "").suffix.lower() != ".zip":
+        raise AppError(422, "backup_invalid", "Choose a .zip backup file.")
+
+    temp_dir = settings.tmp_dir
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    handle, temp_name = tempfile.mkstemp(dir=str(temp_dir), suffix=".zip")
+    temp_path = Path(temp_name)
+    limit = settings.max_backup_mb * 1024 * 1024
+    size = 0
+    try:
+        with os.fdopen(handle, "wb") as target:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > limit:
+                    raise AppError(
+                        413,
+                        "backup_too_large",
+                        f"Backups are limited to {settings.max_backup_mb} MB.",
+                    )
+                target.write(chunk)
+        if size == 0:
+            raise AppError(422, "backup_invalid", "The backup file is empty.")
+
+        candidate = await run_in_threadpool(
+            project_backup.prepare_restore, temp_path
+        )
+        try:
+            project = project_backup.finalize_restore(session, candidate)
+        except Exception:
+            shutil.rmtree(candidate.directory, ignore_errors=True)
+            raise
+    finally:
+        temp_path.unlink(missing_ok=True)
+    return _detail(project)
 
 
 @router.post("/{project_id}/open", response_model=ProjectDetail)

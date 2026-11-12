@@ -50,6 +50,21 @@ export function formatNumber(value: number, locale: string): string {
   return new Intl.NumberFormat(locale).format(value);
 }
 
+/** Human-readable file size with locale-aware digits. */
+export function formatFileSize(bytes: number, locale: string): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const exponent = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  );
+  const value = bytes / 1024 ** exponent;
+  const formatter = new Intl.NumberFormat(locale, {
+    maximumFractionDigits: exponent === 0 || value >= 10 ? 0 : 1,
+  });
+  return `${formatter.format(value)} ${units[exponent]}`;
+}
+
 export function pluralize(
   count: number,
   one: string,

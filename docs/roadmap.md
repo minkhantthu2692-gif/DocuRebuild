@@ -17,7 +17,7 @@ presented in the UI until it actually works.
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | Planned | Depends on Phase 5/6 |
 | 8. Document editor and export | In progress | Core editor plus local Markdown and TXT export; tables, equations, DOCX and page layout pending |
-| 9. History, backup and recovery | In progress | Document versions with manual checkpoints and restore; processing/AI/export history and project backup pending |
+| 9. History, backup and recovery | In progress | Document versions with manual checkpoints and restore, plus verified project backup download and additive (new-project) restore; processing/AI/export history and selective restore pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
 
@@ -376,12 +376,26 @@ page layout, headers/footers, page numbers, DOCX export and OMML validation.
 - English and Burmese strings, backend tests for coalescing, pruning, exact restore,
   validation and not-found handling, and a component test for the confirmation and
   save-guard flow.
+- Project backup download: a verified zip of `manifest.json`, a transaction-consistent
+  `project.db` snapshot, `source/`, `processed/`, `thumbnails/`, `exports/` and a
+  `backup.json` header. Nested backup/trash folders are excluded. Integrity, required
+  entries and every database asset reference are checked before the download starts;
+  an import in progress blocks backup so the snapshot cannot race the import worker.
+- Project restore: validates archive paths, symlinks, expanded size, format versions,
+  SQLite integrity, required tables and migration version, then registers the archive
+  as a **new** project with a new id and a unique `(restored)` name. Existing projects
+  are never overwritten, so the operation is additive and reversible.
+- Dashboard and workspace download entries, a restore dialog with client-side `.zip`
+  and `max_backup_mb` checks, English/Burmese strings and error codes, plus backend
+  round-trip, conflict-name, unsafe-path and invalid-archive tests and component
+  tests for the download name and restore dialog.
 
 **Pending**
 
 - Processing, AI and export history views; document version comparison.
-- Project backup/restore with verification and conflict detection, plus selective
-  restore and deletion. Editor undo/redo stays separate from revision history.
+- Selective restore (single page, asset or version from an archive), scheduled or
+  automatic backups, backup encryption and retention management. Editor undo/redo
+  stays separate from revision history.
 
 ## Phase 10 — Desktop, PWA and mobile distribution (planned)
 

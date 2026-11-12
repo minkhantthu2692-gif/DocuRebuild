@@ -29,6 +29,22 @@
     "neverOpened": "Not opened yet",
     "open": "Open project"
   },
+  "backup": {
+    "download": "Download backup",
+    "downloaded": "Backup download started.",
+    "restoreAction": "Restore backup",
+    "restoreTitle": "Restore from backup",
+    "restoreDescription": "Choose a DocuRebuild backup (.zip). It is restored as a new project, so your current projects are not changed.",
+    "choose": "Choose backup file",
+    "limit": "Up to {{limit}} MB",
+    "noFile": "No backup file selected.",
+    "note": "The archive is read by the local backend and saved on this device. Nothing is uploaded.",
+    "notZip": "Choose a .zip backup created by DocuRebuild.",
+    "tooLarge": "This backup is larger than the {{limit}} MB limit.",
+    "restoreSubmit": "Restore project",
+    "restoring": "Restoring…",
+    "success": "“{{name}}” was restored as a new project."
+  },
   "menu": {
     "open": "Open project",
     "rename": "Rename",
