@@ -73,6 +73,7 @@ class AiSuggestionCreate(BaseModel):
 class AiSuggestionOut(BaseModel):
     id: str
     page_id: str
+    page_number: int | None = None
     block_id: str
     task: AiTask
     original_text: str

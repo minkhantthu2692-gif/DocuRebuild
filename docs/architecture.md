@@ -430,6 +430,12 @@ src/
   history with status, provider, model, decision time and the preserved
   original/proposed text. History is read-only, never rewrites OCR text, and remains
   available after later manual corrections.
+- `GET /api/projects/{project_id}/ai-suggestions` returns proposals across every page
+  with the page number, newest first, using the same `status`/`limit` parameters. The
+  project-wide review dialog shows pending proposals with the current and proposed
+  text and calls the existing decision endpoint, so per-block stale/run checks still
+  apply. The queue reads from the project database and never changes OCR text on its
+  own.
 - The OCR dialog shows the current text and the proposal side by side with provider
   and model badges. It disables **Accept** when the block changed after the proposal
   and shows a Settings link when no model is configured.

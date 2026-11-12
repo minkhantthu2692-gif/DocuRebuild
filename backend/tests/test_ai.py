@@ -640,6 +640,33 @@ def test_page_suggestions_can_be_listed_and_filtered(
     assert missing.status_code == 404
     assert missing.json()["detail"]["code"] == "page_not_found"
 
+    # The project-wide queue spans pages and reports the page number for each row.
+    project_all = client.get(
+        f"/api/projects/{project['id']}/ai-suggestions"
+    ).json()["suggestions"]
+    assert {item["id"] for item in project_all} == {first["id"], second["id"], third["id"]}
+    by_id = {item["id"]: item for item in project_all}
+    assert by_id[first["id"]]["page_number"] == page_a["page_number"]
+    assert by_id[third["id"]]["page_number"] == page_b["page_number"]
+
+    project_pending = client.get(
+        f"/api/projects/{project['id']}/ai-suggestions",
+        params={"status": "pending"},
+    ).json()["suggestions"]
+    assert {item["id"] for item in project_pending} == {second["id"], third["id"]}
+
+    project_limited = client.get(
+        f"/api/projects/{project['id']}/ai-suggestions",
+        params={"limit": 1},
+    ).json()["suggestions"]
+    assert [item["id"] for item in project_limited] == [third["id"]]
+
+    invalid_project = client.get(
+        f"/api/projects/{project['id']}/ai-suggestions",
+        params={"status": "unknown"},
+    )
+    assert invalid_project.status_code == 422
+
 
 def test_cleanup_suggestion_is_reviewable_and_accepting_updates_text(
     client: TestClient, project: dict, monkeypatch, stub_ai

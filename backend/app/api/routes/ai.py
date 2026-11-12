@@ -134,6 +134,25 @@ def list_ai_suggestions(
     }
 
 
+@router.get(
+    "/projects/{project_id}/ai-suggestions",
+    response_model=AiSuggestionsOut,
+)
+def list_project_ai_suggestions(
+    project: ProjectDep,
+    suggestion_status: AiSuggestionStatus | None = Query(default=None, alias="status"),
+    limit: int = Query(default=200, ge=1, le=500),
+) -> dict[str, Any]:
+    directory = project_service.ensure_project_storage(project)
+    return {
+        "suggestions": ai_service.list_project_suggestions(
+            directory,
+            suggestion_status,
+            limit,
+        )
+    }
+
+
 @router.post(
     "/projects/{project_id}/pages/{page_id}/ocr/blocks/{block_id}/ai-suggestions",
     response_model=AiSuggestionDecisionOut,

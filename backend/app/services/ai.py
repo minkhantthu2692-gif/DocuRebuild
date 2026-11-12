@@ -663,9 +663,11 @@ def _load_block(conn, page_id: str, block_id: str):
 
 
 def _suggestion_payload(row) -> dict[str, Any]:
+    page_number = row["page_number"] if "page_number" in row.keys() else None
     return {
         "id": row["id"],
         "page_id": row["page_id"],
+        "page_number": page_number,
         "block_id": row["block_id"],
         "task": row["task"],
         "original_text": row["original_text"],
@@ -679,22 +681,28 @@ def _suggestion_payload(row) -> dict[str, Any]:
     }
 
 
+def _check_suggestion_status(status: AiSuggestionStatus | None) -> None:
+    if status is not None and status not in {"pending", "accepted", "rejected"}:
+        raise AppError(422, "invalid_ai_suggestion_status", "Unknown proposal status.")
+
+
 def list_page_suggestions(
     project_dir: Path,
     page_id: str,
     status: AiSuggestionStatus | None = None,
     limit: int = 200,
 ) -> list[dict[str, Any]]:
-    if status is not None and status not in {"pending", "accepted", "rejected"}:
-        raise AppError(422, "invalid_ai_suggestion_status", "Unknown proposal status.")
+    _check_suggestion_status(status)
     with project_db(project_dir) as conn:
         _get_page(conn, page_id)
         if status is None:
             rows = conn.execute(
                 """
-                SELECT * FROM ai_suggestions
-                WHERE page_id = ?
-                ORDER BY created_at DESC
+                SELECT s.*, p.page_number AS page_number
+                FROM ai_suggestions s
+                JOIN pages p ON p.id = s.page_id
+                WHERE s.page_id = ?
+                ORDER BY s.created_at DESC, s.id DESC
                 LIMIT ?
                 """,
                 (page_id, limit),
@@ -702,12 +710,48 @@ def list_page_suggestions(
         else:
             rows = conn.execute(
                 """
-                SELECT * FROM ai_suggestions
-                WHERE page_id = ? AND status = ?
-                ORDER BY created_at DESC
+                SELECT s.*, p.page_number AS page_number
+                FROM ai_suggestions s
+                JOIN pages p ON p.id = s.page_id
+                WHERE s.page_id = ? AND s.status = ?
+                ORDER BY s.created_at DESC, s.id DESC
                 LIMIT ?
                 """,
                 (page_id, status, limit),
+            ).fetchall()
+    return [_suggestion_payload(row) for row in rows]
+
+
+def list_project_suggestions(
+    project_dir: Path,
+    status: AiSuggestionStatus | None = None,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    """List proposals across every page for the project-wide review queue."""
+    _check_suggestion_status(status)
+    with project_db(project_dir) as conn:
+        if status is None:
+            rows = conn.execute(
+                """
+                SELECT s.*, p.page_number AS page_number
+                FROM ai_suggestions s
+                JOIN pages p ON p.id = s.page_id
+                ORDER BY s.created_at DESC, s.id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT s.*, p.page_number AS page_number
+                FROM ai_suggestions s
+                JOIN pages p ON p.id = s.page_id
+                WHERE s.status = ?
+                ORDER BY s.created_at DESC, s.id DESC
+                LIMIT ?
+                """,
+                (status, limit),
             ).fetchall()
     return [_suggestion_payload(row) for row in rows]
 

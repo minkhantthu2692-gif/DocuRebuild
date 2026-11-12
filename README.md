@@ -292,7 +292,9 @@ Pending proposals are read back from the project database when the dialog opens,
 closing and reopening it does not discard an unreviewed proposal. Accepted and
 rejected proposals remain available in the block's read-only **Proposal history**,
 including the original and proposed text, provider, model and decision time. That
-record is kept even if the block is corrected again later.
+record is kept even if the block is corrected again later. The source toolbar's
+**Review AI proposals** dialog lists pending proposals from every page so they can
+be accepted or rejected without reopening each OCR dialog.
 
 Region proposals use the same saved connection and the optional vision model. Only
 the current page image is resized locally and sent; the reply is shown as

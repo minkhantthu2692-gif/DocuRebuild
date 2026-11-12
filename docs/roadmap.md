@@ -235,6 +235,13 @@ described as universally free or universally accurate.
   influence stays auditable after later manual corrections. History is read-only and
   does not change OCR text. The page list endpoint accepts `status` and `limit`
   (default 200, maximum 500).
+- Project-wide review queue for pending cleanup proposals.
+  `GET /api/projects/{project_id}/ai-suggestions` returns proposals across every page
+  with `page_number`, newest first, and accepts the same `status`/`limit` filters.
+  The source toolbar opens a "Review AI proposals" dialog that shows the current and
+  proposed text side by side, with page, provider, model and time, and accept/reject
+  actions that reuse the existing decision endpoint. Accepting still revalidates the
+  block, so a proposal made stale by a later edit is refused rather than applied.
 - Local AI usage ledger in the application database. Every cleanup request that
   actually contacts a provider is recorded with provider, model, task, outcome,
   error code, project/page/block ids and a timestamp. Document text and model output
@@ -287,8 +294,8 @@ described as universally free or universally accurate.
   providers, plus provider fallbacks. No paid call may run without approval.
 - API-key storage outside the frontend and a secure secret store for future remote
   providers. Current local providers need no key.
-- AI history, comparison across pages and bulk review; the current UI reviews one
-  block at a time and shows per-block history in the project database.
+- AI usage history browsing across pages and bulk accept/reject; the current queue
+  reviews pending proposals one at a time.
 
 **Current limitation** — only an Ollama or OpenAI-compatible server that the user
 configures is supported; loopback is the default and a non-loopback endpoint requires

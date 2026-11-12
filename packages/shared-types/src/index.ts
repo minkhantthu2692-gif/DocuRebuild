@@ -288,6 +288,8 @@ export interface AiSuggestionCreate {
 export interface AiSuggestion {
   id: string;
   page_id: string;
+  /** Page number within the project, for cross-page review. */
+  page_number: number | null;
   block_id: string;
   task: AiTask;
   original_text: string;

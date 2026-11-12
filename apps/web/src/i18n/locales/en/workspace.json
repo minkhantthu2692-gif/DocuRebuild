@@ -372,6 +372,27 @@
       "tooSmall": "The selected area is too small. Move the corners further apart."
     }
   },
+  "aiReview": {
+    "title": "Pending AI proposals",
+    "open": "Review AI proposals",
+    "description": "Review OCR cleanup proposals from every page in this project. Accepting replaces that block’s OCR text; it never marks the block verified.",
+    "loading": "Loading pending proposals…",
+    "error": "Pending AI proposals could not be loaded.",
+    "retry": "Try again",
+    "emptyTitle": "Nothing to review",
+    "empty": "There are no pending AI proposals in this project.",
+    "page": "Page {{page}}",
+    "unknownPage": "Unknown page",
+    "unverified": "Unverified",
+    "original": "Current OCR text",
+    "proposed": "AI proposal",
+    "accept": "Accept",
+    "reject": "Reject",
+    "working": "Saving…",
+    "accepted": "Proposal accepted. Review the block against the source page.",
+    "rejected": "Proposal rejected. The OCR text is unchanged.",
+    "note": "Nothing changes until you accept. Rejecting keeps the original OCR text, and an accepted block stays unverified until you review it."
+  },
   "tools": {
     "title": "Reconstruction tools",
     "ocr": "Extract text (OCR)",

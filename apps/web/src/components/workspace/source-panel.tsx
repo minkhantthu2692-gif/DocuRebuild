@@ -6,6 +6,7 @@ import {
   Image as ImageIcon,
   Images,
   Layers,
+  ListChecks,
   Maximize2,
   MoreHorizontal,
   RotateCcw,
@@ -87,6 +88,7 @@ import { cn } from "@/lib/utils";
 import { OcrDialog } from "./ocr-dialog";
 import { EditsDialog } from "./edits-dialog";
 import { ElementsDialog } from "./elements-dialog";
+import { AiReviewDialog } from "./ai-review-dialog";
 
 interface SourcePanelProps {
   projectId: string;
@@ -303,6 +305,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   const [dragging, setDragging] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PageSummary | null>(null);
   const [ocrOpen, setOcrOpen] = useState(false);
+  const [aiReviewOpen, setAiReviewOpen] = useState(false);
   const [editsOpen, setEditsOpen] = useState(false);
   const [elementsOpen, setElementsOpen] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
@@ -1082,6 +1085,16 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
             />
 
             <ToolButton
+              label={t("aiReview.open")}
+              icon={ListChecks}
+              active={aiReviewOpen}
+              onClick={() => {
+                cancelRegionSelect();
+                setAiReviewOpen(true);
+              }}
+            />
+
+            <ToolButton
               label={
                 elementCount > 0
                   ? t("elements.openCount", { count: elementCount })
@@ -1434,6 +1447,12 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
         page={currentPage}
         open={editsOpen}
         onOpenChange={setEditsOpen}
+      />
+
+      <AiReviewDialog
+        projectId={projectId}
+        open={aiReviewOpen}
+        onOpenChange={setAiReviewOpen}
       />
 
       <Dialog

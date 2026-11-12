@@ -273,6 +273,16 @@ export const api = {
         status ? `?status=${encodeURIComponent(status)}` : ""
       }`,
     ),
+  listProjectAiSuggestions: (
+    projectId: string,
+    status?: "pending" | "accepted" | "rejected",
+    limit = 200,
+  ) =>
+    request<AiSuggestionsResponse>(
+      `/projects/${projectId}/ai-suggestions?limit=${limit}${
+        status ? `&status=${encodeURIComponent(status)}` : ""
+      }`,
+    ),
   decideAiSuggestion: (
     projectId: string,
     suggestionId: string,

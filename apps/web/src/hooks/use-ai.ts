@@ -24,6 +24,33 @@ export function pageAiSuggestionsKey(
   return ["ai", "suggestions", projectId, pageId, status] as const;
 }
 
+export function projectAiSuggestionsKey(
+  projectId: string,
+  status: "pending" | "accepted" | "rejected" | "all" = "pending",
+) {
+  return ["ai", "suggestions", projectId, "project", status] as const;
+}
+
+/** Pending proposals across every page, for the project-wide review queue. */
+export function useProjectAiSuggestions(
+  projectId: string,
+  status: "pending" | "all" = "pending",
+  enabled = true,
+) {
+  return useQuery<AiSuggestionsResponse>({
+    queryKey: projectAiSuggestionsKey(projectId, status),
+    queryFn: () =>
+      api.listProjectAiSuggestions(
+        projectId,
+        status === "all" ? undefined : status,
+      ),
+    enabled,
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: 1,
+  });
+}
+
 export function useAiProviders() {
   return useQuery<AiProvidersResponse>({
     queryKey: ["ai", "providers"],
@@ -139,6 +166,9 @@ export function useCreateAiSuggestion(projectId: string) {
         return { suggestions: [response.suggestion, ...current.suggestions] };
       });
       void queryClient.invalidateQueries({ queryKey: ["ai", "usage"] });
+      void queryClient.invalidateQueries({
+        queryKey: projectAiSuggestionsKey(projectId, "pending"),
+      });
     },
     onError: () => {
       // Failed requests are still counted when the provider was contacted.
@@ -186,6 +216,10 @@ export function useDecideAiSuggestion(projectId: string) {
             item.id === response.suggestion.id ? response.suggestion : item,
           ),
         };
+      });
+      // The project-wide queue lists pending proposals only.
+      void queryClient.invalidateQueries({
+        queryKey: projectAiSuggestionsKey(projectId, "pending"),
       });
     },
   });
