@@ -83,7 +83,10 @@ const restored: DocumentRecord = {
   updated_at: "2026-11-10T10:05:00Z",
 };
 
-function renderDialog(ensureSaved = vi.fn().mockResolvedValue(true)) {
+function renderDialog(
+  ensureSaved = vi.fn().mockResolvedValue(true),
+  currentText = revisionDetail.plain_text,
+) {
   const onRestored = vi.fn();
   const onOpenChange = vi.fn();
   render(
@@ -91,6 +94,7 @@ function renderDialog(ensureSaved = vi.fn().mockResolvedValue(true)) {
       projectId="project-1"
       open
       onOpenChange={onOpenChange}
+      currentText={currentText}
       ensureSaved={ensureSaved}
       onRestored={onRestored}
     />,
@@ -159,6 +163,40 @@ describe("RevisionDialog", () => {
     await waitFor(() => expect(mocks.toast.error).toHaveBeenCalled());
     expect(mocks.restore).not.toHaveBeenCalled();
     expect(onRestored).not.toHaveBeenCalled();
+  });
+
+  it("compares a version with the on-screen text without saving or restoring", () => {
+    const { ensureSaved } = renderDialog(
+      undefined,
+      "Earlier chapter text\n\nRewritten paragraph\n\nA new line",
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Compare" })[0]);
+
+    expect(screen.getByText("Compared with the current document")).toBeInTheDocument();
+    expect(screen.getByText("1 line removed")).toBeInTheDocument();
+    expect(screen.getByText("3 lines added")).toBeInTheDocument();
+    expect(screen.getByText("Uncertain table cell kept as typed")).toBeInTheDocument();
+    expect(screen.getByText("Rewritten paragraph")).toBeInTheDocument();
+    expect(screen.getByText("A new line")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Close comparison" }),
+    ).toBeInTheDocument();
+
+    // Comparison is read-only: no save flush and no restore request.
+    expect(ensureSaved).not.toHaveBeenCalled();
+    expect(mocks.restore).not.toHaveBeenCalled();
+  });
+
+  it("reports when a version matches the current document", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Compare" })[0]);
+
+    expect(
+      screen.getByText("No differences. This version matches the current document."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/lines? added/)).not.toBeInTheDocument();
   });
 
   it("saves a checkpoint of the visible document", async () => {

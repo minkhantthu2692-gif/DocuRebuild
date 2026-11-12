@@ -104,8 +104,9 @@ data on your device, and treats every AI result as a reviewable proposal.
   the project instead of being copied into the file.
 - **Document versions** — the editor header keeps a local version history. Automatic
   versions are captured when the document changes, a manual checkpoint can be saved
-  at any time, and restoring a version always keeps the state it replaces, so a
-  restore is itself reversible.
+  at any time, restoring a version always keeps the state it replaces, so a restore
+  is itself reversible, and a read-only line comparison shows what differs from the
+  text on screen.
 - **Project backup and restore** — download a verified `.zip` of a whole project
   (manifest, a consistent database snapshot, source and processed images,
   thumbnails, exports) from the dashboard or the workspace. Restoring a backup
@@ -404,14 +405,21 @@ The editor header also opens the local version history:
   replaced is stored first, even inside the coalescing window, so a restore can be
   undone from the same list. Before confirming, the dialog loads and shows the full
   stored text of that version, so the choice is not based on a short preview alone.
+- **Compare** shows a read-only line diff between that version and the text
+  currently on screen, including unsaved typing. Added and removed lines are
+  labelled and counted, long unchanged stretches are collapsed, and nothing is
+  saved or replaced by looking at the comparison.
 - Before either action, unsaved editor changes are saved. If that save fails, the
   version history is left unchanged and the usual save error is shown.
 - Each project keeps up to 100 versions in its own `project.db`. Version content is
   the exact stored Tiptap document, never a re-typed summary. Nothing is uploaded.
 - Editor undo/redo is separate from version history; a restore starts a fresh
   editor undo stack but leaves both states available as versions.
-- Comparing two versions side by side is not implemented yet. Version history is a
-  recovery aid for the same project database; it is not a backup.
+- Comparison is line by line and text only: it does not show formatting, images or
+  table structure changes, and it is not a side-by-side editor. A very large change
+  reports that it is too large to compare instead of building an unbounded diff.
+  Version history is a recovery aid for the same project database; it is not a
+  backup.
 
 ### Project activity
 
@@ -688,7 +696,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split and faithful table export done; automatic table extraction, equations and figure structure pending |
 | 8. Document editor and export | In progress: rich-text editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
-| 9. History, backup and recovery | In progress: local document versions with manual checkpoints and restore, a project activity log covering imports, processing, OCR, exports and backups, plus verified project backup download and additive restore; version comparison, log filtering and scheduled backups pending |
+| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a project activity log covering imports, processing, OCR, exports and backups, plus verified project backup download and additive restore; activity-log filtering and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
 

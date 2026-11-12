@@ -1007,6 +1007,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
         projectId={projectId}
         open={historyOpen}
         onOpenChange={setHistoryOpen}
+        currentText={plainText}
         ensureSaved={saveSnapshot}
         onRestored={applyRestoredDocument}
       />

@@ -17,7 +17,7 @@ presented in the UI until it actually works.
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, plus faithful Markdown/TXT table export; automatic table extraction, equations and figure structure pending |
 | 8. Document editor and export | In progress | Core editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
-| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints and restore, a local project activity log for imports, processing, OCR, exports and backups, plus verified project backup download and additive (new-project) restore; version comparison, selective restore and scheduled backups pending |
+| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a local project activity log for imports, processing, OCR, exports and backups, plus verified project backup download and additive (new-project) restore; activity-log filtering, selective restore and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
 
@@ -402,9 +402,13 @@ validation.
   explicit confirmation before restoring, loads the full stored text of the
   selected version for review, and flushes unsaved editor state first. If that save
   fails, nothing is restored.
+- Read-only line comparison between a version and the text on screen, including
+  unsaved changes. Added and removed lines are labelled and counted, long unchanged
+  runs collapse around two context lines, and very large changes are refused rather
+  than building an unbounded diff. Nothing is saved by comparing.
 - English and Burmese strings, backend tests for coalescing, pruning, exact restore,
-  validation and not-found handling, and a component test for the confirmation and
-  save-guard flow.
+  validation and not-found handling, unit tests for the diff, and component tests for
+  the confirmation, save-guard and comparison flows.
 - Project backup download: a verified zip of `manifest.json`, a transaction-consistent
   `project.db` snapshot, `source/`, `processed/`, `thumbnails/`, `exports/` and a
   `backup.json` header. Nested backup/trash folders are excluded. Integrity, required
@@ -430,7 +434,7 @@ validation.
 
 **Pending**
 
-- Document version comparison and activity-log filtering or export.
+- Activity-log filtering or export.
 - Selective restore (single page, asset or version from an archive), scheduled or
   automatic backups, backup encryption and retention management. Editor undo/redo
   stays separate from revision history.

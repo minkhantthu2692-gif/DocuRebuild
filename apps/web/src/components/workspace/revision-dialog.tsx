@@ -1,4 +1,4 @@
-import { CircleAlert, History, RotateCcw, Save } from "lucide-react";
+import { CircleAlert, Diff, History, RotateCcw, Save } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -26,10 +26,14 @@ import {
 } from "@/hooks/use-document";
 import { formatDateTime, resolveLocale } from "@/lib/format";
 
+import { RevisionCompare } from "./revision-compare";
+
 interface RevisionDialogProps {
   projectId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Text currently shown in the editor, including unsaved changes. */
+  currentText: string;
   /**
    * Persist unsaved editor state first, so the version history protects what is
    * currently on screen instead of silently replacing it.
@@ -77,6 +81,7 @@ export function RevisionDialog({
   projectId,
   open,
   onOpenChange,
+  currentText,
   ensureSaved,
   onRestored,
 }: RevisionDialogProps) {
@@ -89,8 +94,19 @@ export function RevisionDialog({
   const createRevision = useCreateDocumentRevision(projectId);
   const restoreRevision = useRestoreDocumentRevision(projectId);
   const [pending, setPending] = useState<DocumentRevisionSummary | null>(null);
+  const [comparingId, setComparingId] = useState<string | null>(null);
 
   const revisions = query.data ?? [];
+
+  const toggleCompare = (revision: DocumentRevisionSummary) => {
+    setPending(null);
+    setComparingId((current) => (current === revision.id ? null : revision.id));
+  };
+
+  const toggleRestore = (revision: DocumentRevisionSummary) => {
+    setComparingId(null);
+    setPending((current) => (current?.id === revision.id ? null : revision));
+  };
 
   const saveVersion = async () => {
     const saved = await ensureSaved();
@@ -128,7 +144,10 @@ export function RevisionDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) setPending(null);
+        if (!next) {
+          setPending(null);
+          setComparingId(null);
+        }
         onOpenChange(next);
       }}
     >
@@ -191,6 +210,7 @@ export function RevisionDialog({
             <ul className="space-y-2">
               {revisions.map((revision) => {
                 const confirming = pending?.id === revision.id;
+                const comparing = comparingId === revision.id;
                 return (
                   <li
                     key={revision.id}
@@ -206,21 +226,39 @@ export function RevisionDialog({
                       <span className="text-2xs text-muted-foreground">
                         {tCommon("units.characters", { count: revision.character_count })}
                       </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="ml-auto"
-                        aria-expanded={confirming}
-                        onClick={() => setPending(confirming ? null : revision)}
-                      >
-                        <RotateCcw />
-                        {t("revisions.restore")}
-                      </Button>
+                      <div className="ml-auto flex flex-wrap items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-expanded={comparing}
+                          onClick={() => toggleCompare(revision)}
+                        >
+                          <Diff />
+                          {comparing ? t("revisions.compareClose") : t("revisions.compare")}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-expanded={confirming}
+                          onClick={() => toggleRestore(revision)}
+                        >
+                          <RotateCcw />
+                          {t("revisions.restore")}
+                        </Button>
+                      </div>
                     </div>
 
                     <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">
                       {revision.preview || t("revisions.noText")}
                     </p>
+
+                    {comparing ? (
+                      <RevisionCompare
+                        projectId={projectId}
+                        revisionId={revision.id}
+                        currentText={currentText}
+                      />
+                    ) : null}
 
                     {confirming ? (
                       <div className="mt-2 rounded-md border border-warning/40 bg-warning/5 p-2.5">

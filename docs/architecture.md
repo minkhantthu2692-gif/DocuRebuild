@@ -487,6 +487,13 @@ src/
   deduplicates against the newest revision. `POST .../revisions/{id}/restore`
   validates the id, writes the revision content and plain text through the same
   document update path with a forced snapshot.
+- Comparison runs entirely in the browser and is read-only. `lib/text-diff.ts`
+  compares the stored revision `plain_text` with the live editor text (so unsaved
+  typing is included) using a longest-common-subsequence line diff. Common prefix and
+  suffix lines are trimmed before the table is built, long unchanged runs collapse to
+  a gap around two context lines, and changes above a fixed line/cell budget report
+  `tooLarge` instead of allocating an unbounded table. Nothing is saved, sent or
+  replaced until the user chooses restore.
 - The editor flushes unsaved changes before saving a checkpoint or restoring. If the
   save fails, neither request is sent. On restore the returned document is applied
   with `setContent(..., { emitUpdate: true })`, the document cache is updated and
