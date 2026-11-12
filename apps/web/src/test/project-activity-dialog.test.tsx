@@ -100,6 +100,62 @@ describe("ProjectActivityDialog", () => {
     expect(screen.getByText("Project created")).toBeInTheDocument();
   });
 
+  it("filters by localized search text and clears the filter", () => {
+    mocks.events = [
+      event({
+        id: "export",
+        event_type: "document_exported",
+        payload: { format: "markdown", byte_size: 2048 },
+      }),
+      event({
+        id: "ocr",
+        event_type: "ocr_succeeded",
+        payload: { languages: "eng", mean_confidence: 91.5, blocks: 2 },
+      }),
+      event({
+        id: "import",
+        event_type: "pages_imported",
+        payload: { count: 2, cancelled: false },
+      }),
+    ];
+    renderDialog();
+
+    expect(screen.getByRole("combobox", { name: "Event type" })).toBeInTheDocument();
+    const search = screen.getByRole("searchbox", { name: "Search activity" });
+    fireEvent.change(search, { target: { value: "Text extraction" } });
+
+    expect(screen.getByText("Text extraction completed")).toBeInTheDocument();
+    expect(screen.queryByText("Document exported")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pages imported")).not.toBeInTheDocument();
+    expect(screen.getByText("1 of 3 events")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+
+    expect(screen.getByText("3 events")).toBeInTheDocument();
+    expect(screen.getByText("Document exported")).toBeInTheDocument();
+    expect(screen.getByText("Pages imported")).toBeInTheDocument();
+  });
+
+  it("shows a filter-specific empty state with a way back", () => {
+    mocks.events = [
+      event({ id: "export", event_type: "document_exported", payload: { format: "txt" } }),
+      event({ id: "import", event_type: "pages_imported", payload: { count: 1 } }),
+    ];
+    renderDialog();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search activity" }), {
+      target: { value: "no such event" },
+    });
+
+    expect(screen.getByText("No matching events")).toBeInTheDocument();
+    expect(screen.getByText("0 of 2 events")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show all events" }));
+
+    expect(screen.getByText("2 events")).toBeInTheDocument();
+    expect(screen.getByText("Document exported")).toBeInTheDocument();
+  });
+
   it("keeps unknown events visible with their recorded summary", () => {
     mocks.events = [
       event({

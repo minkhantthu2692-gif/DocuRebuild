@@ -435,6 +435,11 @@ in this project:
 - Only metadata is stored in the project's own database. Page images, document
   text and OCR output are not duplicated into the activity log, and nothing is
   uploaded.
+- Filter the list by event category (project and backups, imports, pages, regions,
+  text extraction, exports, or other events) and search the localized labels,
+  formats, codes and metadata values. Filtering is local and read-only; clearing
+  the filters restores the newest 100 entries. Unknown event types remain visible
+  under **Other events** instead of disappearing.
 - The newest 100 entries are shown. The log is a local record, not a backup, and it
   can be refreshed while the dialog is open. Unknown event types from a newer build
   still appear with their recorded summary instead of being hidden.
@@ -626,9 +631,10 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   understands its format; a backup created by a newer build is rejected as
   `backup_incompatible`. Restore is whole-project only: individual pages, assets or
   versions cannot be merged from an archive into an existing project.
-- The activity log shows the newest 100 events and cannot be filtered, exported or
-  pruned yet. Event labels are localized for known event types; an event written by
-  a newer build falls back to its stored summary, which may be English.
+- The activity log shows the newest 100 events. It can be filtered and searched in
+  the dialog but cannot be exported or pruned yet. Event labels are localized for
+  known event types; an event written by a newer build falls back to its stored
+  summary, which may be English.
 - `npm audit` reports moderate findings in the ESLint/TypeScript-ESLint toolchain
   (via `minimatch`). They are development-only and do not ship in the client
   bundle; no fixed upstream release is available yet.
@@ -696,7 +702,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split and faithful table export done; automatic table extraction, equations and figure structure pending |
 | 8. Document editor and export | In progress: rich-text editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
-| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a project activity log covering imports, processing, OCR, exports and backups, plus verified project backup download and additive restore; activity-log filtering and scheduled backups pending |
+| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable project activity log covering imports, processing, OCR, exports and backups, plus verified project backup download and additive restore; activity-log export and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
 

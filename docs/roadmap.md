@@ -17,7 +17,7 @@ presented in the UI until it actually works.
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, plus faithful Markdown/TXT table export; automatic table extraction, equations and figure structure pending |
 | 8. Document editor and export | In progress | Core editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
-| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a local project activity log for imports, processing, OCR, exports and backups, plus verified project backup download and additive (new-project) restore; activity-log filtering, selective restore and scheduled backups pending |
+| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable local project activity log for imports, processing, OCR, exports and backups, plus verified project backup download and additive (new-project) restore; activity-log export, selective restore and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
 
@@ -428,13 +428,20 @@ validation.
   events; the workspace dialog labels known types in English and Burmese, formats
   counts, sizes and confidence values, and falls back to the stored summary for an
   unknown future event type.
+- Client-side activity filtering and search: one category selector (project and
+  backups, imports, pages, regions, text extraction, exports, other) plus a search
+  box that matches localized labels, detail values, event types, summaries and scalar
+  metadata. Unknown event types stay visible under **Other events**, the footer shows
+  how many events match, and filters reset on close. No request, export or stored
+  state is added.
 - Backend tests for ordering, per-project scoping, limit validation, missing projects,
-  import/export payloads and the absence of document text in the log, plus a
-  component test for labels, details, empty, error and unknown-event states.
+  import/export payloads and the absence of document text in the log, plus unit tests
+  for the filter mapping/search and component tests for labels, details, empty, error,
+  unknown-event, filtered and no-match states.
 
 **Pending**
 
-- Activity-log filtering or export.
+- Activity-log export.
 - Selective restore (single page, asset or version from an archive), scheduled or
   automatic backups, backup encryption and retention management. Editor undo/redo
   stays separate from revision history.

@@ -516,6 +516,14 @@ src/
   formats details with locale-aware date, number and file-size helpers. An event type
   written by a newer build is still listed, using its stored English summary as the
   fallback label.
+- Filtering and search run entirely in the browser over the already-fetched newest
+  events; they add no request and no stored state. `lib/activity-filter.ts` maps each
+  event type to one category (`project`, `imports`, `pages`, `regions`, `text`,
+  `export` or `other`) and unknown types fall into `other`, so a newer event never
+  becomes invisible behind a filter. Search matches the localized label and computed
+  detail text, the event type, the stored summary and scalar metadata payload values,
+  case-insensitively; document text and OCR output are not available to search
+  because they are never logged. Filters reset when the dialog closes.
 - Writing a history event is best-effort: a logging failure is logged and never
   fails the import, export, OCR run or backup that produced it.
 

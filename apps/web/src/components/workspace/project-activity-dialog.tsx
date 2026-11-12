@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next";
-import { Activity, CircleAlert } from "lucide-react";
+import { Activity, CircleAlert, Search } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { HistoryEvent } from "@docurebuild/shared-types";
@@ -14,8 +15,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { CenteredSpinner } from "@/components/ui/spinner";
 import { useProjectHistory } from "@/hooks/use-projects";
+import {
+  ACTIVITY_CATEGORIES,
+  activitySearchText,
+  filterActivityEvents,
+  type ActivityCategory,
+} from "@/lib/activity-filter";
 import {
   formatDateTime,
   formatFileSize,
@@ -122,10 +137,34 @@ export function ProjectActivityDialog({
   const { t: tCommon } = useTranslation("common");
   const locale = resolveLocale(i18n.language);
   const query = useProjectHistory(projectId, open);
-  const events = query.data ?? [];
+  const events = useMemo(() => query.data ?? [], [query.data]);
+  const [category, setCategory] = useState<ActivityCategory>("all");
+  const [search, setSearch] = useState("");
+
+  const filtersActive = category !== "all" || search.trim() !== "";
+  const clearFilters = () => {
+    setCategory("all");
+    setSearch("");
+  };
+
+  const filteredEvents = useMemo(() => {
+    const textFor = (event: HistoryEvent) => {
+      const label = KNOWN_EVENTS.has(event.event_type)
+        ? t(`activity.events.${event.event_type}`)
+        : t("activity.unknown");
+      return [label, ...eventDetails(event, t, locale), activitySearchText(event)].join(" ");
+    };
+    return filterActivityEvents(events, category, search, textFor);
+  }, [events, category, search, t, locale]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) clearFilters();
+        onOpenChange(next);
+      }}
+    >
       <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-2xl flex-col gap-4 overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -144,9 +183,62 @@ export function ProjectActivityDialog({
           >
             {t("activity.refresh")}
           </Button>
+          {filtersActive ? (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              {t("activity.filters.clear")}
+            </Button>
+          ) : null}
           <span className="ml-auto text-2xs text-muted-foreground" role="status">
-            {t("activity.count", { count: events.length })}
+            {filtersActive
+              ? t("activity.filters.filteredCount", {
+                  shown: filteredEvents.length,
+                  total: events.length,
+                })
+              : t("activity.count", { count: events.length })}
           </span>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="space-y-1">
+            <label className="text-2xs font-medium text-muted-foreground">
+              {t("activity.filters.category")}
+            </label>
+            <Select
+              value={category}
+              onValueChange={(value) => setCategory(value as ActivityCategory)}
+            >
+              <SelectTrigger aria-label={t("activity.filters.category")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ACTIVITY_CATEGORIES.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {t(`activity.filters.${value}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label
+              htmlFor="activity-search"
+              className="text-2xs font-medium text-muted-foreground"
+            >
+              {t("activity.filters.search")}
+            </label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-icon-sm -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="activity-search"
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder={t("activity.filters.searchPlaceholder")}
+                className="pl-9"
+                aria-label={t("activity.filters.search")}
+              />
+            </div>
+          </div>
         </div>
 
         <div className="scrollbar-thin -mx-1 min-h-0 flex-1 overflow-y-auto px-1">
@@ -172,9 +264,21 @@ export function ProjectActivityDialog({
               description={t("activity.empty")}
               compact
             />
+          ) : filteredEvents.length === 0 ? (
+            <EmptyState
+              icon={Search}
+              title={t("activity.filters.noMatchesTitle")}
+              description={t("activity.filters.noMatches")}
+              action={
+                <Button variant="outline" size="sm" onClick={clearFilters}>
+                  {t("activity.filters.showAll")}
+                </Button>
+              }
+              compact
+            />
           ) : (
             <ul className="space-y-2">
-              {events.map((event) => {
+              {filteredEvents.map((event) => {
                 const known = KNOWN_EVENTS.has(event.event_type);
                 const details = eventDetails(event, t, locale);
                 return (
