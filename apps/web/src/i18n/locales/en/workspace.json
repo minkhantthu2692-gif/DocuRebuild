@@ -120,6 +120,18 @@
       "replaced": "Replaced matches: {{count}}.",
       "close": "Close find"
     },
+    "link": {
+      "open": "Add link",
+      "edit": "Edit link",
+      "title": "Link",
+      "description": "Link the selected text. Only web and email addresses are accepted.",
+      "url": "Address",
+      "placeholder": "https://example.com",
+      "note": "Links open in a new tab. The address is part of the document and is included in Markdown export.",
+      "invalid": "Enter an https:// address, a mailto: address or a domain such as example.com.",
+      "apply": "Apply link",
+      "remove": "Remove link"
+    },
     "loadError": {
       "title": "The document couldn’t be loaded",
       "description": "Editing is paused until the local document is available. Nothing has been overwritten."

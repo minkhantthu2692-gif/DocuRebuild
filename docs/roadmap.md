@@ -325,6 +325,12 @@ the user must review every region before extracting it.
   available, and replacements keep the formatting of the matched text.
   Editor undo/redo still covers the change, and find state is not part of the
   document.
+- Link editing (`Ctrl/Cmd+K`). A selected range can be linked to an `https://`,
+  `http://` or `mailto:` target; a bare domain is upgraded to `https://`, and
+  `javascript:`, `data:`, `file:`, protocol-relative and whitespace-containing
+  targets are rejected. The same policy applies to auto-detected and pasted links.
+  Existing links can be edited or removed, and links are included in Markdown
+  export (other export formats keep their text).
 - Local Markdown and plain-text export from the editor header. Both formats are
   rendered by the backend from the saved Tiptap document, so export works without
   an internet connection, AI provider or extra dependency.
@@ -348,8 +354,7 @@ footnotes and page layout are not part of the editor model yet, so they cannot b
 exported. DOCX, PDF and OMML export remain unimplemented.
 
 **Pending** — tables, images inline in text, captions, equations, footnotes,
-links editing, page layout, headers/footers, page numbers, DOCX export and OMML
-validation.
+page layout, headers/footers, page numbers, DOCX export and OMML validation.
 
 ## Phase 9 — History, backup and recovery (planned)
 

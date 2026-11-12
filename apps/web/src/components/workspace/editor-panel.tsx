@@ -20,6 +20,7 @@ import {
   Italic,
   List,
   ListOrdered,
+  Link2,
   Quote,
   Redo2,
   Search,
@@ -44,7 +45,16 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -57,6 +67,7 @@ import { api } from "@/lib/api";
 import { FigureNode, figureInsertionContent } from "@/lib/editor-figure";
 import { findMatches } from "@/lib/editor-search";
 import { resolveLocale } from "@/lib/format";
+import { normalizeLinkUrl } from "@/lib/link";
 import { ocrInsertionContent } from "@/lib/ocr-insertion";
 import { countCharacters, countWords } from "@/lib/text";
 import { cn } from "@/lib/utils";
@@ -133,6 +144,9 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [matchCase, setMatchCase] = useState(false);
   const [activeMatch, setActiveMatch] = useState(0);
   const findInputRef = useRef<HTMLInputElement>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
@@ -151,7 +165,18 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
         underline: {},
-        link: false,
+        link: {
+          openOnClick: false,
+          autolink: true,
+          linkOnPaste: true,
+          HTMLAttributes: {
+            rel: "noopener noreferrer nofollow",
+            target: "_blank",
+          },
+          // Pasted and auto-detected links must follow the same policy as the
+          // dialog, otherwise a non-http target could enter around it.
+          isAllowedUri: (url) => normalizeLinkUrl(url) !== null,
+        },
       }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       FigureNode,
@@ -341,6 +366,42 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     toast.success(t("editor.find.replaced", { count: matches.length }));
   }, [editor, matches, replaceQuery, t]);
 
+  const openLinkDialog = useCallback(() => {
+    if (!editor) return;
+    const active = editor.isActive("link");
+    const { from, to } = editor.state.selection;
+    if (!active && from === to) return;
+    const href = editor.getAttributes("link").href;
+    const selected =
+      from !== to ? editor.state.doc.textBetween(from, to, " ", " ").trim() : "";
+    setLinkUrl(
+      typeof href === "string" && href
+        ? href
+        : normalizeLinkUrl(selected)
+          ? selected
+          : "",
+    );
+    setLinkError(null);
+    setLinkOpen(true);
+  }, [editor]);
+
+  const applyLink = useCallback(() => {
+    if (!editor) return;
+    const url = normalizeLinkUrl(linkUrl);
+    if (!url) {
+      setLinkError(t("editor.link.invalid"));
+      return;
+    }
+    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+    setLinkOpen(false);
+  }, [editor, linkUrl, t]);
+
+  const removeLink = useCallback(() => {
+    if (!editor) return;
+    editor.chain().focus().extendMarkRange("link").unsetLink().run();
+    setLinkOpen(false);
+  }, [editor]);
+
   useEffect(() => {
     if (!findOpen) return;
     findInputRef.current?.focus();
@@ -365,6 +426,18 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     window.addEventListener("keydown", handleFindKeyDown);
     return () => window.removeEventListener("keydown", handleFindKeyDown);
   }, [findOpen, openFind]);
+
+  useEffect(() => {
+    const handleLinkKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k") return;
+      // Never reopen (and reset) the dialog while it is already being edited.
+      if (linkOpen || !editor?.isEditable) return;
+      event.preventDefault();
+      openLinkDialog();
+    };
+    window.addEventListener("keydown", handleLinkKeyDown);
+    return () => window.removeEventListener("keydown", handleLinkKeyDown);
+  }, [editor, linkOpen, openLinkDialog]);
 
   useEffect(() => {
     if (!editor || !initialized || revision === savedRevision) return;
@@ -417,6 +490,10 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const dirty = revision !== savedRevision;
 
   const formattedBlock = editor ? blockValue(editor) : "p";
+  const linkEnabled = Boolean(
+    editor?.isEditable &&
+      (editor.isActive("link") || !editor.state.selection.empty),
+  );
 
   return (
     <section className={cn("flex h-full min-h-0 flex-col bg-background/20", className)}>
@@ -601,6 +678,13 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           active={editor?.isActive("strike")}
           disabled={!editor?.isEditable}
           onClick={() => editor?.chain().focus().toggleStrike().run()}
+        />
+        <ToolbarButton
+          label={editor?.isActive("link") ? t("editor.link.edit") : t("editor.link.open")}
+          icon={Link2}
+          active={editor?.isActive("link")}
+          disabled={!linkEnabled}
+          onClick={openLinkDialog}
         />
 
         <Separator orientation="vertical" className="mx-1 h-5" />
@@ -842,6 +926,68 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
         <span>{tCommon("units.characters", { count: characterCount })}</span>
         <span className="ml-auto hidden sm:inline">{t("autosave")}</span>
       </footer>
+
+      <Dialog
+        open={linkOpen}
+        onOpenChange={(open) => {
+          setLinkOpen(open);
+          if (!open) setLinkError(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("editor.link.title")}</DialogTitle>
+            <DialogDescription>{t("editor.link.description")}</DialogDescription>
+          </DialogHeader>
+          <form
+            className="mt-5 space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              applyLink();
+            }}
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="editor-link-url">{t("editor.link.url")}</Label>
+              <Input
+                id="editor-link-url"
+                autoFocus
+                value={linkUrl}
+                placeholder={t("editor.link.placeholder")}
+                aria-invalid={Boolean(linkError)}
+                aria-describedby={linkError ? "editor-link-error" : undefined}
+                onChange={(event) => {
+                  setLinkUrl(event.target.value);
+                  setLinkError(null);
+                }}
+              />
+              {linkError ? (
+                <p id="editor-link-error" role="alert" className="text-2xs text-destructive">
+                  {linkError}
+                </p>
+              ) : null}
+            </div>
+            <p className="text-2xs leading-relaxed text-muted-foreground">
+              {t("editor.link.note")}
+            </p>
+            <DialogFooter>
+              {editor?.isActive("link") ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="mr-auto"
+                  onClick={removeLink}
+                >
+                  {t("editor.link.remove")}
+                </Button>
+              ) : null}
+              <Button type="button" variant="outline" onClick={() => setLinkOpen(false)}>
+                {tCommon("actions.cancel")}
+              </Button>
+              <Button type="submit">{t("editor.link.apply")}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

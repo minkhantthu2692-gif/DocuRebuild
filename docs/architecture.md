@@ -230,6 +230,14 @@ src/
   replace-all applies from the end of the match list so earlier positions stay
   valid. Both stay in the editor undo history. `Ctrl/Cmd+F` opens the bar and
   preselects the current single-line selection when there is one.
+- Links use the StarterKit link mark with `openOnClick: false` so clicking a link
+  does not leave the app while editing. `lib/link.ts` normalises the address before
+  the mark is set: only `http`, `https` and `mailto` are accepted, a bare domain
+  gains `https://`, and unsafe or ambiguous values are rejected with an inline
+  error. The same validator is passed to the extension as `isAllowedUri`, so
+  auto-detected and pasted links cannot bypass the dialog. The link dialog can
+  edit or remove an existing link, and `Ctrl/Cmd+K` opens it; the shortcut is
+  ignored while the dialog is open or the editor is read-only.
 - A best-effort flush runs when leaving the workspace; it is not a substitute for
   revision history.
 - Imports start a job and poll it every 500 ms while active. The progress panel
@@ -533,6 +541,9 @@ src/
 - Markdown and TXT export run in the local backend from the project database. The
   generated file contains no asset URLs, credentials or provider metadata and is
   only sent to the browser that requested it.
+- Document links are validated to `http`, `https` or `mailto` before they enter the
+  document, and Markdown export repeats that check. A stored `javascript:` or
+  `data:` target is never emitted as a link; only its text is kept.
 - AI requests are sent only when the user tests a connection, asks for a cleanup or
   asks for region proposals, and only to the URL saved or entered in Settings. A
   cleanup sends one OCR text block; a region request sends the current page image
