@@ -17,6 +17,7 @@ import {
   Trash2,
   Undo2,
   Upload,
+  WandSparkles,
   X,
   ZoomIn,
   ZoomOut,
@@ -55,6 +56,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
+import { useAiRegionProposals } from "@/hooks/use-ai";
 import { useAppMeta } from "@/hooks/use-app";
 import { useElements, useRegionProposals } from "@/hooks/use-elements";
 import { useLatestOcr } from "@/hooks/use-ocr";
@@ -364,6 +366,11 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   const selectedIndex = pages.findIndex((page) => page.id === selectedId);
   const currentPage = selectedIndex >= 0 ? pages[selectedIndex] : (pages[0] ?? null);
 
+  // Vision proposals are never saved; this mutation only feeds the overlay.
+  const aiRegions = useAiRegionProposals(projectId, currentPage?.id ?? null);
+  const aiRegionData = aiRegions.data ?? null;
+  const resetAiRegions = aiRegions.reset;
+
   useEffect(() => {
     if (pages.length === 0) {
       if (selectedId !== null) setSelectedId(null);
@@ -388,7 +395,8 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     setProposalsOn(false);
     setPendingProposal(null);
     activeFrameRef.current = null;
-  }, [currentPage?.id]);
+    resetAiRegions();
+  }, [currentPage?.id, resetAiRegions]);
 
   const elementsQuery = useElements(projectId, currentPage?.id ?? null);
   const elementCount = elementsQuery.data?.length ?? 0;
@@ -444,12 +452,30 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     setPendingProposal(null);
   }, []);
 
+  const requestAiRegions = () => {
+    if (!currentPage || aiRegions.isPending) return;
+    cancelRegionSelect();
+    setProposalsOn(false);
+    aiRegions.mutate(
+      {},
+      {
+        onSuccess: (result) => {
+          if (result.proposals.length === 0) {
+            toast.info(t("elements.ai.empty"));
+          }
+        },
+        onError: (error) => toast.error(errorMessage(error)),
+      },
+    );
+  };
+
   const applyProposal = (proposal: RegionProposal) => {
     setSelectMode(false);
     setDragStart(null);
     setDragCurrent(null);
     setPendingSelection(null);
     setProposalsOn(false);
+    resetAiRegions();
     setPendingProposal(proposal);
     setElementsOpen(true);
   };
@@ -469,6 +495,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     if (!currentPage) return;
     setElementsOpen(false);
     setProposalsOn(false);
+    resetAiRegions();
     setSelectMode(true);
     setDragStart(null);
     setDragCurrent(null);
@@ -599,6 +626,9 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
 
   const rotate = (degrees: number) => {
     if (!currentPage) return;
+    // A rotated page image no longer matches proposals derived from the old one.
+    resetAiRegions();
+    setProposalsOn(false);
     rotatePage.mutate(
       { pageId: currentPage.id, degrees },
       { onError: (error) => toast.error(errorMessage(error)) },
@@ -696,14 +726,19 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     }));
   }, [overlayBoxes]);
 
+  const aiProposals = aiRegionData?.proposals ?? null;
   const proposalBoxes = useMemo(() => {
-    const data = proposalsQuery.data;
-    if (!proposalsOn || !imageFrame || !data || data.status !== "ready") return [];
-    return data.proposals.flatMap((proposal) => {
+    const proposals = aiProposals
+      ? aiProposals
+      : proposalsOn && proposalsQuery.data?.status === "ready"
+        ? proposalsQuery.data.proposals
+        : null;
+    if (!imageFrame || !proposals) return [];
+    return proposals.flatMap((proposal) => {
       const box = layoutRect(proposal, imageFrame);
       return box ? [{ proposal, box }] : [];
     });
-  }, [proposalsOn, imageFrame, proposalsQuery.data]);
+  }, [aiProposals, proposalsOn, imageFrame, proposalsQuery.data]);
 
   let overlayMessage: string | null = null;
   if (overlayOn) {
@@ -1029,8 +1064,21 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
               active={proposalsOn}
               onClick={() => {
                 cancelRegionSelect();
+                resetAiRegions();
                 setProposalsOn((value) => !value);
               }}
+            />
+
+            <ToolButton
+              label={
+                aiRegionData
+                  ? t("elements.ai.requestAgain")
+                  : t("elements.ai.request")
+              }
+              icon={WandSparkles}
+              active={Boolean(aiRegionData)}
+              disabled={aiRegions.isPending || !currentPage}
+              onClick={requestAiRegions}
             />
 
             <ToolButton
@@ -1150,6 +1198,43 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
             </div>
           ) : null}
 
+          {aiRegions.isPending ? (
+            <div
+              aria-live="polite"
+              className="flex shrink-0 items-center gap-2 border-b border-primary/30 bg-primary/5 px-2 py-1 text-2xs text-primary"
+            >
+              <Spinner className="size-3.5" />
+              <span>{t("elements.ai.loading")}</span>
+              <span className="truncate opacity-80">{t("elements.ai.loadingNote")}</span>
+            </div>
+          ) : aiRegionData ? (
+            <div
+              aria-live="polite"
+              className="scrollbar-thin flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border/60 bg-warning/5 px-2 py-1 text-2xs text-muted-foreground"
+            >
+              <span className="shrink-0 font-semibold uppercase tracking-wider text-warning">
+                {t("elements.ai.title", { count: aiRegionData.proposals.length })}
+              </span>
+              <span className="whitespace-nowrap">
+                {t("elements.ai.meta", {
+                  provider: aiRegionData.provider,
+                  model: aiRegionData.model,
+                })}
+              </span>
+              <span className="shrink-0 whitespace-nowrap border-l border-border/60 pl-2">
+                {t("elements.ai.lowConfidence")}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto shrink-0"
+                onClick={() => resetAiRegions()}
+              >
+                {t("elements.ai.dismiss")}
+              </Button>
+            </div>
+          ) : null}
+
           {selectMode ? (
             <div
               aria-live="polite"
@@ -1240,7 +1325,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
                         ))}
                       </div>
                     ) : null}
-                    {proposalsOn && imageFrame && proposalBoxes.length > 0 ? (
+                    {imageFrame && proposalBoxes.length > 0 ? (
                       <div
                         className="absolute animate-fade-in"
                         style={{
@@ -1258,7 +1343,12 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
                             aria-label={t("elements.proposals.use", {
                               kind: t(`elements.kind.${proposal.kind}`),
                             })}
-                            className="focus-ring absolute rounded-xs border-2 border-dashed border-primary/70 bg-primary/10 transition-colors hover:bg-primary/20"
+                            className={cn(
+                              "focus-ring absolute rounded-xs border-2 border-dashed transition-colors",
+                              proposal.reason === "ai_vision"
+                                ? "border-warning/80 bg-warning/10 hover:bg-warning/20"
+                                : "border-primary/70 bg-primary/10 hover:bg-primary/20",
+                            )}
                             style={{
                               left: box.left,
                               top: box.top,
@@ -1266,7 +1356,14 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
                               height: box.height,
                             }}
                           >
-                            <span className="pointer-events-none absolute left-1 top-1 rounded-pill bg-background/90 px-1.5 py-0.5 text-[0.625rem] font-medium leading-4 text-primary shadow-xs">
+                            <span
+                              className={cn(
+                                "pointer-events-none absolute left-1 top-1 rounded-pill bg-background/90 px-1.5 py-0.5 text-[0.625rem] font-medium leading-4 shadow-xs",
+                                proposal.reason === "ai_vision"
+                                  ? "text-warning"
+                                  : "text-primary",
+                              )}
+                            >
                               {t(`elements.kind.${proposal.kind}`)}
                             </span>
                           </button>

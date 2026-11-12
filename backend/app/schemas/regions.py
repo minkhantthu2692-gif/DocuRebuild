@@ -12,7 +12,7 @@ ProposalStatus = Literal[
     "ocr_stale",
     "no_geometry",
 ]
-ProposalReason = Literal["table_text_grid", "equation_text", "figure_caption_gap"]
+ProposalReason = Literal["table_text_grid", "equation_text", "figure_caption_gap", "ai_vision"]
 
 
 class RegionProposalOut(BaseModel):
@@ -24,7 +24,7 @@ class RegionProposalOut(BaseModel):
     height: int
     caption: str
     reason: ProposalReason
-    confidence: Literal["high", "medium"]
+    confidence: Literal["high", "medium", "low"]
     block_ids: list[str]
 
 

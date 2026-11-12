@@ -7,10 +7,13 @@ from fastapi import APIRouter, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import DbSession, ProjectDep
+from app.core.errors import AppError
 from app.schemas.ai import (
     AiProbeOut,
     AiProbeRequest,
     AiProvidersOut,
+    AiRegionProposalsOut,
+    AiRegionProposalsRequest,
     AiSuggestionCreate,
     AiSuggestionDecisionIn,
     AiSuggestionDecisionOut,
@@ -20,6 +23,7 @@ from app.schemas.ai import (
 )
 from app.services import ai as ai_service
 from app.services import ai_usage
+from app.services import ai_vision
 from app.services import projects as project_service
 from app.services.projects import touch_project
 from app.services.settings import get_app_settings
@@ -56,6 +60,57 @@ def probe_ai_provider(payload: AiProbeRequest) -> dict[str, Any]:
         payload.base_url,
         allow_remote=payload.allow_remote,
     )
+
+
+@router.post(
+    "/projects/{project_id}/pages/{page_id}/ai-region-proposals",
+    response_model=AiRegionProposalsOut,
+)
+def create_ai_region_proposals(
+    project: ProjectDep,
+    page_id: str,
+    payload: AiRegionProposalsRequest,
+    session: DbSession,
+) -> dict[str, Any]:
+    directory = project_service.ensure_project_storage(project)
+    ai_settings = get_app_settings(session).ai
+    if not ai_settings.vision_model:
+        raise AppError(
+            409,
+            "ai_vision_not_configured",
+            "Choose a vision model in Settings before analysing page images.",
+        )
+    ai_usage.ensure_within_limit(session, ai_settings.request_limit)
+
+    def record_attempt(attempt: ai_service.RequestAttempt) -> None:
+        ai_usage.record_attempt(
+            session,
+            provider=attempt.provider,
+            model=attempt.model,
+            task="region_proposals",
+            outcome="error" if attempt.error_code else "success",
+            error_code=attempt.error_code,
+            project_id=project.id,
+            page_id=page_id,
+            block_id=None,
+        )
+
+    try:
+        result = ai_vision.propose_regions(
+            directory,
+            page_id,
+            ai_settings.text,
+            ai_settings.vision_model,
+            provider=payload.provider,
+            base_url=payload.base_url,
+            model=payload.model,
+            on_attempt=record_attempt,
+        )
+    except Exception:
+        _commit_usage(session)
+        raise
+    touch_project(session, project)
+    return result
 
 
 @router.get(

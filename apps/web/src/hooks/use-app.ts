@@ -46,6 +46,7 @@ function mergeSettings(current: AppSettings | undefined, patch: SettingsPatch): 
     editor: { document_font: "serif" },
     ai: {
       text: { provider: "ollama", base_url: "", model: "", allow_remote: false },
+      vision_model: "",
       request_limit: 0,
     },
   };

@@ -152,6 +152,7 @@ export function SettingsPage() {
   const errorMessage = useApiErrorMessage();
   const [copied, setCopied] = useState(false);
   const [aiDraftOverride, setAiDraftOverride] = useState<AiProfileSettings | null>(null);
+  const [aiVisionDraft, setAiVisionDraft] = useState<string | null>(null);
   const [aiLimitDraft, setAiLimitDraft] = useState<string | null>(null);
   const [probeResult, setProbeResult] = useState<AiProbeResponse | null>(null);
 
@@ -164,8 +165,10 @@ export function SettingsPage() {
   const ocr = ocrQuery.data;
 
   const aiSaved = settings?.ai?.text ?? DEFAULT_AI_PROFILE;
+  const aiVisionSaved = settings?.ai?.vision_model ?? "";
   const aiLimitSaved = settings?.ai?.request_limit ?? 0;
   const aiDraft = aiDraftOverride ?? aiSaved;
+  const aiVisionValue = aiVisionDraft ?? aiVisionSaved;
   const aiLimitValue = aiLimitDraft ?? String(aiLimitSaved);
   const parsedAiLimit = Number(aiLimitValue);
   const aiLimitValid =
@@ -178,6 +181,7 @@ export function SettingsPage() {
     aiDraft.base_url !== aiSaved.base_url ||
     aiDraft.model !== aiSaved.model ||
     aiDraft.allow_remote !== aiSaved.allow_remote ||
+    aiVisionValue.trim() !== aiVisionSaved ||
     (aiLimitValid && parsedAiLimit !== aiLimitSaved);
   const aiUsage = aiUsageQuery.data;
   const providerDefault =
@@ -220,10 +224,17 @@ export function SettingsPage() {
   const saveAiProfile = () => {
     if (!aiLimitValid) return;
     updateSettings.mutate(
-      { ai: { text: aiDraft, request_limit: parsedAiLimit } },
+      {
+        ai: {
+          text: aiDraft,
+          vision_model: aiVisionValue.trim(),
+          request_limit: parsedAiLimit,
+        },
+      },
       {
         onSuccess: () => {
           setAiDraftOverride(null);
+          setAiVisionDraft(null);
           setAiLimitDraft(null);
           toast.success(t("ai.saved"));
         },
@@ -671,6 +682,25 @@ export function SettingsPage() {
                     ))}
                   </datalist>
                 ) : null}
+              </SettingRow>
+
+              <SettingRow
+                title={t("ai.visionModel")}
+                description={t("ai.visionModelDescription")}
+              >
+                <Input
+                  value={aiVisionValue}
+                  placeholder={t("ai.visionModelPlaceholder")}
+                  spellCheck={false}
+                  aria-label={t("ai.visionModel")}
+                  list={discoveredModels.length > 0 ? "ai-model-options" : undefined}
+                  onChange={(event) => setAiVisionDraft(event.target.value)}
+                />
+                <p className="text-2xs leading-relaxed text-muted-foreground">
+                  {aiVisionValue.trim()
+                    ? t("ai.visionModelEnabled")
+                    : t("ai.visionModelDisabled")}
+                </p>
               </SettingRow>
 
               <SettingRow

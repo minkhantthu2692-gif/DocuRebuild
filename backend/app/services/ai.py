@@ -3,6 +3,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import logging
+import math
 import socket
 import uuid
 from pathlib import Path
@@ -43,6 +44,24 @@ SYSTEM_PROMPT = (
     "If a character is genuinely unreadable, keep the original character."
 )
 
+VISION_PROMPT = (
+    "You analyse one scanned document page image for a document reconstruction tool. "
+    'Return only a JSON object and nothing else, shaped like {"regions": ['
+    '{"kind": "figure|table|equation", "x": 0.0, "y": 0.0, "width": 0.0, '
+    '"height": 0.0, "caption": ""}]}. '
+    "x, y, width and height are fractions of the page image measured from the "
+    "top-left corner and must be between 0 and 1. "
+    "Include only figures, tables and equations that are clearly visible. "
+    "Use caption for a printed caption or label that belongs to the region, "
+    "otherwise use an empty string. "
+    "Do not include ordinary text paragraphs, headers, footers or page numbers. "
+    "Do not invent regions. Return an empty regions array when nothing is visible."
+)
+
+MAX_VISION_REGIONS = 12
+MIN_VISION_REGION_SIDE = 0.02
+VISION_REGION_KINDS = frozenset({"figure", "table", "equation"})
+
 
 class _FetchFailure(Exception):
     def __init__(
@@ -73,7 +92,16 @@ class RequestAttempt(NamedTuple):
     error_code: str | None
 
 
-def _report_attempt(
+class VisionCompletion(NamedTuple):
+    """Validated, normalized regions proposed from one page image."""
+
+    regions: list[dict[str, Any]]
+    provider: AiProviderKind
+    model: str
+    base_url: str
+
+
+def report_attempt(
     callback: Callable[[RequestAttempt], None] | None,
     attempt: RequestAttempt,
 ) -> None:
@@ -277,7 +305,7 @@ def probe_provider(
     }
 
 
-def _resolve_profile(
+def resolve_profile(
     profile: AiProfileSettings,
     *,
     provider: AiProviderKind | None,
@@ -334,8 +362,6 @@ def _chat_completion(
                     "options": {"temperature": 0},
                 },
             )
-            message = body.get("message") if isinstance(body, dict) else None
-            content = message.get("content") if isinstance(message, dict) else None
         else:
             _status, body = _read_json(
                 f"{base_url}/chat/completions",
@@ -347,10 +373,6 @@ def _chat_completion(
                     "stream": False,
                 },
             )
-            choices = body.get("choices") if isinstance(body, dict) else None
-            first = choices[0] if isinstance(choices, list) and choices else None
-            message = first.get("message") if isinstance(first, dict) else None
-            content = message.get("content") if isinstance(message, dict) else None
     except _FetchFailure as exc:
         raise AppError(
             502,
@@ -358,13 +380,7 @@ def _chat_completion(
             "The configured local AI server could not complete the request.",
         ) from exc
 
-    if not isinstance(content, str):
-        raise AppError(
-            502,
-            "ai_invalid_response",
-            "The configured local AI server returned an unexpected response.",
-        )
-    cleaned = content.strip()
+    cleaned = _assistant_content(body, provider).strip()
     if not cleaned:
         raise AppError(
             502,
@@ -380,6 +396,207 @@ def _chat_completion(
     return cleaned
 
 
+def _assistant_content(body: Any, provider: AiProviderKind) -> str:
+    if provider == "ollama":
+        message = body.get("message") if isinstance(body, dict) else None
+    else:
+        choices = body.get("choices") if isinstance(body, dict) else None
+        first = choices[0] if isinstance(choices, list) and choices else None
+        message = first.get("message") if isinstance(first, dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(content, str):
+        raise AppError(
+            502,
+            "ai_invalid_response",
+            "The configured local AI server returned an unexpected response.",
+        )
+    return content
+
+
+def _vision_completion(
+    provider: AiProviderKind,
+    base_url: str,
+    model: str,
+    image_b64: str,
+) -> str:
+    # The data URL keeps the image in the same request body as the prompt, so
+    # the server never has to fetch anything on its own.
+    image_url = f"data:image/jpeg;base64,{image_b64}"
+    try:
+        if provider == "ollama":
+            _status, body = _read_json(
+                f"{base_url}/api/chat",
+                GENERATE_TIMEOUT,
+                {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": VISION_PROMPT},
+                        {
+                            "role": "user",
+                            "content": "Analyse the attached document page image.",
+                            "images": [image_b64],
+                        },
+                    ],
+                    "stream": False,
+                    "format": "json",
+                    "options": {"temperature": 0},
+                },
+            )
+        else:
+            _status, body = _read_json(
+                f"{base_url}/chat/completions",
+                GENERATE_TIMEOUT,
+                {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": VISION_PROMPT},
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "Analyse the attached document page image.",
+                                },
+                                {"type": "image_url", "image_url": {"url": image_url}},
+                            ],
+                        },
+                    ],
+                    "temperature": 0,
+                    "stream": False,
+                },
+            )
+    except _FetchFailure as exc:
+        raise AppError(
+            502,
+            exc.error_code,
+            "The configured local AI server could not analyse the page image.",
+        ) from exc
+    return _assistant_content(body, provider)
+
+
+def _strip_code_fence(value: str) -> str:
+    if not value.startswith("```"):
+        return value
+    lines = value.splitlines()
+    if len(lines) < 2:
+        return value
+    if lines[-1].strip().startswith("```"):
+        lines = lines[:-1]
+    return "\n".join(lines[1:]).strip()
+
+
+def parse_region_proposals(content: str) -> list[dict[str, Any]]:
+    """Validate the model's normalized regions and drop anything unusable.
+
+    The model is free to return extra prose, wrong kinds or out-of-page boxes;
+    only bounded, finite rectangles of a supported kind become proposals.
+    """
+    payload = _strip_code_fence(content.strip())
+    try:
+        body = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise AppError(
+            502,
+            "ai_invalid_response",
+            "The AI region proposal was not valid JSON.",
+        ) from exc
+    raw = body.get("regions") if isinstance(body, dict) else body
+    if not isinstance(raw, list):
+        raise AppError(
+            502,
+            "ai_invalid_response",
+            "The AI region proposal had an unexpected shape.",
+        )
+
+    regions: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("kind")
+        kind = kind.strip().lower() if isinstance(kind, str) else ""
+        if kind not in VISION_REGION_KINDS:
+            continue
+        values: list[float] = []
+        for key in ("x", "y", "width", "height"):
+            value = item.get(key)
+            # bool is an int subclass and would silently become 0 or 1.
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                values = []
+                break
+            number = float(value)
+            if not math.isfinite(number):
+                values = []
+                break
+            values.append(number)
+        if len(values) != 4:
+            continue
+        x, y, width, height = values
+        if x < 0 or y < 0 or x >= 1 or y >= 1 or width <= 0 or height <= 0:
+            continue
+        width = min(width, 1 - x)
+        height = min(height, 1 - y)
+        if width < MIN_VISION_REGION_SIDE or height < MIN_VISION_REGION_SIDE:
+            continue
+        caption = item.get("caption")
+        regions.append(
+            {
+                "kind": kind,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "caption": caption.strip()[:500] if isinstance(caption, str) else "",
+            }
+        )
+        if len(regions) >= MAX_VISION_REGIONS:
+            break
+    return regions
+
+
+def request_region_proposals(
+    profile: AiProfileSettings,
+    image_b64: str,
+    *,
+    vision_model: str,
+    provider: AiProviderKind | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+    on_attempt: Callable[[RequestAttempt], None] | None = None,
+) -> VisionCompletion:
+    resolved_provider, resolved_url, resolved_model = resolve_profile(
+        profile,
+        provider=provider,
+        base_url=base_url,
+        model=model if model is not None else vision_model,
+    )
+    try:
+        content = _vision_completion(
+            resolved_provider,
+            resolved_url,
+            resolved_model,
+            image_b64,
+        )
+    except AppError as exc:
+        report_attempt(
+            on_attempt,
+            RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
+        )
+        raise
+    try:
+        regions = parse_region_proposals(content)
+    except AppError as exc:
+        report_attempt(
+            on_attempt,
+            RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
+        )
+        raise
+    report_attempt(
+        on_attempt,
+        RequestAttempt(resolved_provider, resolved_model, resolved_url, None),
+    )
+    return VisionCompletion(regions, resolved_provider, resolved_model, resolved_url)
+
+
 def request_cleanup(
     profile: AiProfileSettings,
     text: str,
@@ -393,7 +610,7 @@ def request_cleanup(
         raise AppError(422, "ocr_block_empty", "This OCR block has no text to review.")
     if len(text) > MAX_TEXT_LENGTH:
         raise AppError(422, "ai_text_too_long", "This OCR block is too long for one AI request.")
-    resolved_provider, resolved_url, resolved_model = _resolve_profile(
+    resolved_provider, resolved_url, resolved_model = resolve_profile(
         profile,
         provider=provider,
         base_url=base_url,
@@ -402,12 +619,12 @@ def request_cleanup(
     try:
         cleaned = _chat_completion(resolved_provider, resolved_url, resolved_model, text)
     except AppError as exc:
-        _report_attempt(
+        report_attempt(
             on_attempt,
             RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
         )
         raise
-    _report_attempt(
+    report_attempt(
         on_attempt,
         RequestAttempt(resolved_provider, resolved_model, resolved_url, None),
     )

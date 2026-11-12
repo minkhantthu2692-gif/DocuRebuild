@@ -245,6 +245,18 @@
         "no_geometry": "The latest OCR result has no text geometry to suggest regions from."
       }
     },
+    "ai": {
+      "request": "Ask AI for regions",
+      "requestAgain": "Ask AI again",
+      "title_one": "AI region proposals ({{count}})",
+      "title_other": "AI region proposals ({{count}})",
+      "loading": "Analysing the page image…",
+      "loadingNote": "Only this page is sent to the configured vision model.",
+      "meta": "{{provider}} · {{model}} · nothing saved yet",
+      "lowConfidence": "Low-confidence proposals: review each rectangle before using it.",
+      "dismiss": "Dismiss",
+      "empty": "The vision model did not find any figure, table or equation regions on this page."
+    },
     "title": "Extracted regions · page {{page}}",
     "description": "Crop a table, figure or equation from the source page. The original page and the crop stay available; nothing is generated.",
     "newRegion": "New region",

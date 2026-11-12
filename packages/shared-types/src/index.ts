@@ -346,6 +346,8 @@ export interface AiProfileSettings {
 
 export interface AiSettings {
   text: AiProfileSettings;
+  /** Model used for page-image region proposals. Empty keeps image AI disabled. */
+  vision_model: string;
   /** Rolling 24-hour request cap. Zero means unlimited. */
   request_limit: number;
 }
@@ -396,7 +398,8 @@ export type RegionProposalStatus =
 export type RegionProposalReason =
   | "table_text_grid"
   | "equation_text"
-  | "figure_caption_gap";
+  | "figure_caption_gap"
+  | "ai_vision";
 
 export interface RegionProposal {
   /** Stable within one response, derived from kind and rectangle. */
@@ -410,7 +413,7 @@ export interface RegionProposal {
   /** Caption text taken from the OCR caption block, when available. */
   caption: string;
   reason: RegionProposalReason;
-  confidence: "high" | "medium";
+  confidence: "high" | "medium" | "low";
   block_ids: string[];
 }
 
@@ -420,6 +423,23 @@ export interface RegionProposals {
   page_height: number | null;
   ocr_run_id: string | null;
   engine: string | null;
+  proposals: RegionProposal[];
+}
+
+/** Optional per-request overrides for the saved vision connection. */
+export interface AiRegionProposalsRequest {
+  provider?: AiProviderKind;
+  base_url?: string;
+  model?: string;
+}
+
+/** Vision output is always a proposal: nothing is saved until the user accepts it. */
+export interface AiRegionProposalsResponse {
+  status: "ready";
+  page_width: number;
+  page_height: number;
+  provider: AiProviderKind;
+  model: string;
   proposals: RegionProposal[];
 }
 

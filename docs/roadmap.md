@@ -14,7 +14,7 @@ presented in the UI until it actually works.
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
-| 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history and reviewable persisted OCR text cleanup done; vision, free-tier/paid adapters and cost controls pending |
+| 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | Planned | Depends on Phase 5/6 |
 | 8. Document editor and export | Partially started | Core editor exists; full model/export pending |
 | 9. History, backup and recovery | Planned | Event table exists; no restore UI |
@@ -201,9 +201,8 @@ described as universally free or universally accurate.
 
 **Remaining**
 
-- Vision-based region proposals and AI-assisted detection paths (Phase 6).
-- Uncaptioned figure detection and artwork separated from its caption; these
-  currently require manual selection.
+- Uncaptioned figure detection and artwork separated from its caption when no AI
+  vision model is configured; these currently require manual selection.
 - Structured table cells and equation transcription, which belong to Phase 7.
 
 ## Phase 6 — AI integration and free usage first (in progress)
@@ -249,9 +248,24 @@ described as universally free or universally accurate.
   the proposal through the normal OCR correction path, marks the block corrected
   (not verified) and refuses when the block text changed after the proposal was
   created. Rejecting keeps the OCR text and still works after the page changes.
+- Optional vision region proposals. `app_settings.ai.vision_model` is separate from
+  the text model so an image model can be enabled only when the user wants it; an
+  empty value keeps image AI disabled and returns `409 ai_vision_not_configured`
+  before any request. `POST .../pages/{page_id}/ai-region-proposals` sends only the
+  current page image (resized locally to a bounded JPEG) to the same configured
+  Ollama or OpenAI-compatible server and asks for normalized figure, table and
+  equation rectangles. The backend validates and clamps the coordinates, applies
+  the same padding and dedupe rules as heuristic proposals, drops regions that
+  already have an extracted element, and returns low-confidence proposals.
+  Nothing is persisted: the source viewer overlays them for review, and choosing
+  one only prefills the normal extraction dialog. Per-request provider/base URL/model
+  overrides follow the same remote-consent rules, and each attempt is recorded in
+  the usage ledger with task `region_proposals`.
 - Per-block review UI showing the current OCR text beside the proposal, provider and
   model badges, explicit accept/reject actions, a stale-proposal warning and a link
-  to Settings when no model is configured.
+  to Settings when no model is configured. The source viewer shows the vision
+  proposal count, provider/model and a review warning, and clears the overlay when
+  the page changes or rotates.
 - SSRF guards for the configured URL: `http`/`https` only, no embedded credentials,
   and the well-known cloud metadata addresses are rejected. Requests use short
   connect/probe timeouts, bounded response size and no automatic paid fallback.
@@ -264,8 +278,8 @@ described as universally free or universally accurate.
 
 **Remaining**
 
-- Vision profile and vision tasks (figure/region proposals, table structure
-  assistance) with the same proposal and verification guarantees.
+- Table structure assistance and structured equation reconstruction on top of the
+  region proposals, with the same proposal and verification guarantees.
 - Text/reasoning profile separation beyond OCR cleanup, plus task routing.
 - Optional free-tier and paid providers behind the same adapter, with dynamic
   model metadata, verified pricing/quotas and clearly marked costs.
@@ -281,7 +295,9 @@ configures is supported; loopback is the default and a non-loopback endpoint req
 explicit remote consent. Model quality, availability, memory use and licence terms
 come from the user's installation; "free" is never assumed to be permanent. AI text
 can be wrong, so accepting a proposal does not mark it verified and manual review
-remains the source of truth.
+remains the source of truth. Vision proposals are rectangles with no extracted
+content and low confidence by design; their coordinates may still be imprecise, and
+the user must review every region before extracting it.
 
 ## Phase 7 — Tables, figures and equations (planned)
 

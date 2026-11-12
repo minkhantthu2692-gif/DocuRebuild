@@ -45,6 +45,8 @@
   "ai_http_error": "The local AI server returned an error. Check its log and the configured URL.",
   "ai_invalid_response": "The local AI server replied in an unexpected format. Check that it is Ollama or OpenAI-compatible.",
   "ai_not_configured": "Choose a local AI model in Settings before using AI assistance.",
+  "ai_vision_not_configured": "Choose a vision model in Settings before asking AI to analyse a page image.",
+  "ai_page_image_missing": "This page image is not available for AI analysis. Try reopening the page or re-importing it.",
   "ai_empty_response": "The local AI server returned no text. The OCR text was left unchanged.",
   "ai_text_too_long": "This text is too long for one AI request. Split it or review it manually.",
   "ai_remote_not_allowed": "This AI server is not on localhost. Enable remote AI consent in Settings before sending text to it.",

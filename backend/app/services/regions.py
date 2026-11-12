@@ -83,7 +83,7 @@ def _intersection(first: Rect, second: Rect) -> float:
     return (right - left) * (bottom - top)
 
 
-def _iou(first: Rect, second: Rect) -> float:
+def iou(first: Rect, second: Rect) -> float:
     intersection = _intersection(first, second)
     if intersection <= 0:
         return 0.0
@@ -127,7 +127,7 @@ def _cluster(blocks: list[dict[str, Any]], gap_ratio: float) -> list[Rect]:
     return [_union(cluster) for cluster in clusters]
 
 
-def _clamp_rect(
+def clamp_rect(
     rect: Rect, page_width: int, page_height: int
 ) -> dict[str, int] | None:
     pad_x = max(2, round(page_width * PADDING_RATIO))
@@ -212,13 +212,13 @@ def _figure_rects(
     # Several captions inside one figure band would propose the same area.
     unique: list[tuple[Rect, dict[str, Any]]] = []
     for rect, caption in sorted(results, key=lambda item: item[0]["y"]):
-        if any(_iou(rect, kept[0]) >= DEDUPE_IOU for kept in unique):
+        if any(iou(rect, kept[0]) >= DEDUPE_IOU for kept in unique):
             continue
         unique.append((rect, caption))
     return unique
 
 
-def _already_extracted(proposal: Rect, element: Rect) -> bool:
+def already_extracted(proposal: Rect, element: Rect) -> bool:
     """Treat a proposal as covered when an element holds almost all of it.
 
     The proposal is padded around the OCR geometry, so an exact user crop and
@@ -232,7 +232,7 @@ def _already_extracted(proposal: Rect, element: Rect) -> bool:
     area = element["width"] * element["height"]
     if area <= 0:
         return False
-    return intersection / area >= 0.9 and _iou(proposal, element) >= 0.5
+    return intersection / area >= 0.9 and iou(proposal, element) >= 0.5
 
 
 def _proposal(
@@ -337,7 +337,7 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
     ):
         members = [block for block in blocks if block["kind"] == kind]
         for rect in _cluster(members, gap_ratio):
-            clamped = _clamp_rect(rect, int(page_width), int(page_height))
+            clamped = clamp_rect(rect, int(page_width), int(page_height))
             if clamped is None:
                 continue
             proposals.append(
@@ -353,7 +353,7 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
             )
 
     for rect, caption in _figure_rects(blocks, int(page_width), int(page_height)):
-        clamped = _clamp_rect(rect, int(page_width), int(page_height))
+        clamped = clamp_rect(rect, int(page_width), int(page_height))
         if clamped is None:
             continue
         proposals.append(
@@ -370,9 +370,9 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
     proposals.sort(key=lambda item: (item["y"], item["x"], item["kind"]))
     filtered: list[dict[str, Any]] = []
     for proposal in proposals:
-        if any(_already_extracted(proposal, element) for element in existing):
+        if any(already_extracted(proposal, element) for element in existing):
             continue
-        if any(_iou(proposal, kept) >= DEDUPE_IOU for kept in filtered):
+        if any(iou(proposal, kept) >= DEDUPE_IOU for kept in filtered):
             continue
         filtered.append(proposal)
         if len(filtered) >= MAX_PROPOSALS:

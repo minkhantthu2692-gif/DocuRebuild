@@ -18,8 +18,23 @@ class _StubState:
     def __init__(self) -> None:
         self.ollama_content = "Chapter One (cleaned)"
         self.openai_content = "Chapter One (cleaned)"
+        self.vision_content = json.dumps(
+            {
+                "regions": [
+                    {
+                        "kind": "figure",
+                        "x": 0.1,
+                        "y": 0.2,
+                        "width": 0.3,
+                        "height": 0.4,
+                        "caption": "Figure 1",
+                    }
+                ]
+            }
+        )
         self.invalid_tags = False
         self.requests: list[tuple[str, str]] = []
+        self.last_payload: dict | None = None
 
 
 def _stub_response(handler: BaseHTTPRequestHandler, status: int, payload: dict) -> None:
@@ -83,14 +98,21 @@ def stub_ai():
                 _stub_response(self, 400, {"error": "invalid json"})
                 return
             state.requests.append(("POST", self.path))
+            state.last_payload = payload
             assert payload["messages"][0]["role"] == "system"
+            user_message = payload["messages"][-1]
+            is_vision = bool(user_message.get("images")) or isinstance(
+                user_message.get("content"), list
+            )
             if self.path == "/api/chat":
+                content = state.vision_content if is_vision else state.ollama_content
                 _stub_response(
                     self,
                     200,
-                    {"message": {"role": "assistant", "content": state.ollama_content}},
+                    {"message": {"role": "assistant", "content": content}},
                 )
             elif self.path == "/v1/chat/completions":
+                content = state.vision_content if is_vision else state.openai_content
                 _stub_response(
                     self,
                     200,
@@ -99,7 +121,7 @@ def stub_ai():
                             {
                                 "message": {
                                     "role": "assistant",
-                                    "content": state.openai_content,
+                                    "content": content,
                                 }
                             }
                         ]
@@ -210,20 +232,19 @@ def _configure_ai(
     base_url: str,
     model: str = "qwen2.5:7b",
     allow_remote: bool = False,
+    vision_model: str | None = None,
 ) -> None:
-    response = client.patch(
-        "/api/settings",
-        json={
-            "ai": {
-                "text": {
-                    "provider": provider,
-                    "base_url": base_url,
-                    "model": model,
-                    "allow_remote": allow_remote,
-                }
-            }
-        },
-    )
+    ai: dict = {
+        "text": {
+            "provider": provider,
+            "base_url": base_url,
+            "model": model,
+            "allow_remote": allow_remote,
+        }
+    }
+    if vision_model is not None:
+        ai["vision_model"] = vision_model
+    response = client.patch("/api/settings", json={"ai": ai})
     assert response.status_code == 200, response.text
 
 
@@ -781,3 +802,153 @@ def test_project_schema_contains_ai_suggestions(client: TestClient, project: dic
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
     assert "ai_suggestions" in tables
+
+
+def _vision(client: TestClient, project_id: str, page_id: str, payload: dict | None = None):
+    return client.post(
+        f"/api/projects/{project_id}/pages/{page_id}/ai-region-proposals",
+        json=payload or {},
+    )
+
+
+def test_vision_region_proposals_require_a_vision_model(
+    client: TestClient, project: dict
+) -> None:
+    page = upload_pages(client, project["id"], ["ai-vision-unconfigured.png"])[0]
+    response = _vision(client, project["id"], page["id"])
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "ai_vision_not_configured"
+    # Nothing was sent, so nothing is counted.
+    assert _usage(client)["used"] == 0
+
+
+def test_vision_region_proposals_map_coordinates_and_record_usage(
+    client: TestClient, project: dict, stub_ai
+) -> None:
+    _configure_ai(
+        client,
+        base_url=stub_ai.base_url,
+        vision_model="llava:7b",
+    )
+    page = upload_pages(client, project["id"], ["ai-vision.png"])[0]
+    response = _vision(client, project["id"], page["id"])
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["page_width"] == 1200
+    assert body["page_height"] == 800
+    assert body["provider"] == "ollama"
+    assert body["model"] == "llava:7b"
+
+    proposal = body["proposals"][0]
+    assert proposal["kind"] == "figure"
+    assert proposal["reason"] == "ai_vision"
+    assert proposal["confidence"] == "low"
+    assert proposal["caption"] == "Figure 1"
+    assert proposal["block_ids"] == []
+    # 0.1/0.2/0.3/0.4 of 1200x800, plus the same small padding as heuristic
+    # proposals (10px horizontally, 6px vertically).
+    assert (proposal["x"], proposal["y"]) == (110, 154)
+    assert (proposal["width"], proposal["height"]) == (380, 332)
+
+    payload = stub_ai.state.last_payload
+    assert payload is not None
+    assert payload["messages"][-1]["images"]
+
+    usage = _usage(client)
+    assert usage["used"] == 1
+    assert usage["recent"][0]["task"] == "region_proposals"
+    assert usage["recent"][0]["page_id"] == page["id"]
+    assert usage["recent"][0]["block_id"] is None
+
+
+def test_vision_region_proposals_support_openai_compatible_override(
+    client: TestClient, project: dict, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="llava:7b")
+    page = upload_pages(client, project["id"], ["ai-vision-openai.png"])[0]
+    response = _vision(
+        client,
+        project["id"],
+        page["id"],
+        {
+            "provider": "openai_compatible",
+            "base_url": stub_ai.base_url_v1,
+            "model": "vision-local",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["provider"] == "openai_compatible"
+    assert response.json()["model"] == "vision-local"
+
+    payload = stub_ai.state.last_payload
+    assert payload is not None
+    content = payload["messages"][-1]["content"]
+    assert isinstance(content, list)
+    image = next(item for item in content if item["type"] == "image_url")
+    assert image["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+
+def test_vision_region_proposals_drop_unusable_regions(
+    client: TestClient, project: dict, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="llava:7b")
+    page = upload_pages(client, project["id"], ["ai-vision-filter.png"])[0]
+    stub_ai.state.vision_content = json.dumps(
+        {
+            "regions": [
+                {"kind": "paragraph", "x": 0.1, "y": 0.1, "width": 0.2, "height": 0.2},
+                {"kind": "table", "x": -0.2, "y": 0.1, "width": 0.2, "height": 0.2},
+                {"kind": "figure", "x": 0.9, "y": 0.1, "width": 0.5, "height": 0.2},
+                {"kind": "equation", "x": 0.4, "y": 0.4, "width": 0.2, "height": 0.1},
+            ]
+        }
+    )
+    response = _vision(client, project["id"], page["id"])
+    assert response.status_code == 200, response.text
+    proposals = response.json()["proposals"]
+    assert [item["kind"] for item in proposals] == ["figure", "equation"]
+    assert all(item["caption"] == "" for item in proposals)
+    # A box that starts inside the page and runs past the edge is clipped.
+    figure = proposals[0]
+    assert figure["x"] + figure["width"] <= 1200
+
+
+def test_vision_region_proposals_report_invalid_output(
+    client: TestClient, project: dict, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="llava:7b")
+    page = upload_pages(client, project["id"], ["ai-vision-invalid.png"])[0]
+    stub_ai.state.vision_content = "I could not analyse the image."
+    response = _vision(client, project["id"], page["id"])
+    assert response.status_code == 502, response.text
+    assert response.json()["detail"]["code"] == "ai_invalid_response"
+    usage = _usage(client)
+    assert usage["used"] == 1
+    assert usage["recent"][0]["outcome"] == "error"
+    assert usage["recent"][0]["error_code"] == "ai_invalid_response"
+    assert usage["recent"][0]["task"] == "region_proposals"
+
+
+def test_vision_region_proposals_respect_remote_consent_and_limit(
+    client: TestClient, project: dict, stub_ai
+) -> None:
+    page = upload_pages(client, project["id"], ["ai-vision-consent.png"])[0]
+    _configure_ai(
+        client,
+        base_url="http://192.0.2.10:11434",
+        vision_model="llava:7b",
+    )
+    refused = _vision(client, project["id"], page["id"])
+    assert refused.status_code == 403, refused.text
+    assert refused.json()["detail"]["code"] == "ai_remote_not_allowed"
+    assert _usage(client)["used"] == 0
+
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="llava:7b")
+    limited = client.patch("/api/settings", json={"ai": {"request_limit": 1}})
+    assert limited.status_code == 200
+    first = _vision(client, project["id"], page["id"])
+    assert first.status_code == 200, first.text
+    blocked = _vision(client, project["id"], page["id"])
+    assert blocked.status_code == 429, blocked.text
+    assert blocked.json()["detail"]["code"] == "ai_request_limit_reached"

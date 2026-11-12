@@ -44,9 +44,10 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
-| `services.settings` | Persisted appearance, language, editor, AI profile and request-limit settings |
+| `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence, corrections, staleness |
-| `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, listing and review decisions |
+| `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, vision region requests, listing and review decisions |
+| `services.ai_vision` | Page-image encoding, normalized-to-source rectangle mapping and filtering for optional vision region proposals |
 | `services.ai_usage` | Local AI request metadata, rolling-window request counting and usage summaries |
 | `api.routes.*` | HTTP surface (`/api/...`) |
 
@@ -55,7 +56,7 @@ to the same local API; the API is not intended to be exposed publicly.
 The application database (`app.db`) contains only global state:
 
 - `projects` — id, name, description, directory, timestamps
-- `app_settings` — key/value JSON (appearance, language, editor, local AI profile and request limit)
+- `app_settings` — key/value JSON (appearance, language, editor, local AI profile, vision model and request limit)
 - `ai_usage` — local AI request metadata: provider, model, task, outcome, error code, project/page/block ids and timestamp; never document text
 - `schema_migrations` — created by Alembic
 
@@ -377,6 +378,10 @@ src/
   every AI action disabled. `allow_remote` defaults to `false` and is the user's
   explicit consent for a non-loopback endpoint. The Settings page edits a local draft
   and saves explicitly, so typing a URL does not trigger a PATCH or a network request.
+- `app_settings.ai.vision_model` is a separate optional model name that reuses the
+  same provider, base URL and remote-consent decision. An empty value keeps image AI
+  disabled and `POST .../ai-region-proposals` returns
+  `409 ai_vision_not_configured` before contacting the server or recording usage.
 - `POST /api/ai/probe` is user-triggered. It reads Ollama `/api/tags` and
   `/api/version`, or OpenAI-compatible `/models`, with a short timeout and a
   1 MB response cap. Expected failures (`unreachable`, `timeout`, `http_error`,
@@ -428,11 +433,24 @@ src/
 - The OCR dialog shows the current text and the proposal side by side with provider
   and model badges. It disables **Accept** when the block changed after the proposal
   and shows a Settings link when no model is configured.
+- Vision region proposals reuse the same provider resolution, consent boundary and
+  usage ledger. `services.ai_vision` reads the page's display (or original) asset,
+  resizes it to a bounded JPEG in memory and sends it as base64 to the configured
+  vision model. The model returns normalized 0–1 rectangles; the backend validates
+  the JSON, drops unsupported kinds, non-finite or out-of-page origins, clamps boxes
+  to the page, adds the heuristic padding and removes duplicates or regions that
+  already have an extracted element. Coordinates are mapped with the stored page
+  width/height, so the source viewer can overlay them without extra geometry.
+- `POST .../pages/{page_id}/ai-region-proposals` returns `status: ready`, page
+  dimensions, provider, model and low-confidence `ai_vision` proposals. It does not
+  insert rows in `elements` or `ai_suggestions`; choosing a rectangle only prefills
+  the extraction dialog. Each request is recorded with task `region_proposals`.
 - Tests use a loopback stub HTTP server, not a real model, and cover discovery,
   unreachable/timeout/HTTP/invalid probes, remote-consent refusal, both adapters,
   proposal listing and filtering, usage recording and rolling-limit enforcement,
-  stale runs, stale text, rejection, validation and schema migration. This verifies
-  protocol handling and review safety, not model quality.
+  stale runs, stale text, rejection, validation, vision coordinate mapping and
+  vision output filtering. This verifies protocol handling and review safety, not
+  model quality.
 
 ### Design system
 
@@ -462,19 +480,21 @@ src/
 - Security headers (`nosniff`, `DENY`, `no-referrer`, `same-origin`) are applied
   to every response.
 - No secrets are stored in the frontend. No AI provider keys exist in this phase;
-  local providers require none. The AI profile stores only a local URL and model name.
+  local providers require none. The AI profile stores only a local URL and model names.
 - AI usage history is metadata only: provider, model, task, outcome, error code,
-  project/page/block ids and timestamps. It never stores sent text or model output,
-  and a request limit is enforced before a provider is contacted.
+  project/page/block ids and timestamps. It never stores sent text, page images or
+  model output, and a request limit is enforced before a provider is contacted.
 - OCR and PDF rendering run entirely on the local machine. Page images and PDF
   files are never uploaded; the backend reads the project's own source/display
   assets and invokes local libraries. Missing engine/language packs are reported,
   never bypassed with a cloud fallback.
-- AI requests are sent only when the user tests a connection or asks for a cleanup,
-  and only to the URL saved or entered in Settings. Only one OCR text block is
-  transmitted. The backend rejects non-HTTP(S) URLs, embedded credentials and
-  well-known metadata hosts; it never switches to a remote or paid provider on
-  failure, and responses are bounded and stored as reviewable proposals.
+- AI requests are sent only when the user tests a connection, asks for a cleanup or
+  asks for region proposals, and only to the URL saved or entered in Settings. A
+  cleanup sends one OCR text block; a region request sends the current page image
+  only. The backend rejects non-HTTP(S) URLs, embedded credentials and well-known
+  metadata hosts; it never switches to a remote or paid provider on failure, and
+  responses are bounded. Cleanup replies are stored as reviewable proposals; region
+  proposals are not persisted.
 - Uploaded file names are validated and generated asset names are independent of
   user input.
 - The source repository URL is configuration (`DOCUREBUILD_REPOSITORY_URL`),
@@ -506,12 +526,12 @@ src/
   download, and are cheap to explain and test. The trade-off is that figure
   regions and table structures are not detected yet; those need a later
   engine adapter rather than more regexes.
-- **AI starts local and proposal-only** — the first AI workflow corrects one OCR
-  block through a user-configured server. Loopback is allowed by default and any
-  other host needs stored remote consent, with provider/model/URL provenance and
-  explicit accept/reject. This keeps the free-first, accuracy-first guarantees and
-  needs no secret store, at the cost of no vision tasks, remote free tiers, batch
-  review or automatic routing yet.
+- **AI starts local and proposal-only** — the AI workflows correct one OCR block
+  or propose reviewable page regions through a user-configured server. Loopback is
+  allowed by default and any other host needs stored remote consent, with
+  provider/model/URL provenance and explicit review. This keeps the free-first,
+  accuracy-first guarantees and needs no secret store, at the cost of no remote
+  free tiers, batch review or automatic routing yet.
 - **Element extraction is manual first** — a crop is an exact pixel copy of the
   page, not inferred structure. This preserves accuracy and needs no model, at the
   cost of no automatic figure/table/equation detection. A table crop stays an

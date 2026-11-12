@@ -4,6 +4,8 @@ import type {
   AiProbeRequest,
   AiProbeResponse,
   AiProvidersResponse,
+  AiRegionProposalsRequest,
+  AiRegionProposalsResponse,
   AiSuggestionCreate,
   AiSuggestionDecisionInput,
   AiSuggestionDecisionResponse,
@@ -75,6 +77,26 @@ export function usePageAiSuggestionHistory(
 export function useProbeAiProvider() {
   return useMutation<AiProbeResponse, Error, AiProbeRequest>({
     mutationFn: api.probeAiProvider,
+  });
+}
+
+/**
+ * Ask the configured vision model for region proposals. Nothing is saved, so
+ * the response only feeds the reviewable overlay on the source page.
+ */
+export function useAiRegionProposals(projectId: string, pageId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation<
+    AiRegionProposalsResponse,
+    Error,
+    { payload?: AiRegionProposalsRequest }
+  >({
+    mutationFn: ({ payload }) =>
+      api.createAiRegionProposals(projectId, pageId as string, payload ?? {}),
+    onSettled: () => {
+      // Attempts are counted even when the provider returned nothing usable.
+      void queryClient.invalidateQueries({ queryKey: ["ai", "usage"] });
+    },
   });
 }
 

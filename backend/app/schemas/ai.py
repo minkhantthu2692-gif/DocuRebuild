@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from app.schemas.ocr import OcrRunOut
+from app.schemas.regions import RegionProposalOut
 
 AiProviderKind = Literal["ollama", "openai_compatible"]
 AiProbeStatus = Literal[
@@ -120,3 +121,22 @@ class AiSuggestionDecisionIn(BaseModel):
 class AiSuggestionDecisionOut(BaseModel):
     suggestion: AiSuggestionOut
     run: OcrRunOut
+
+
+class AiRegionProposalsRequest(BaseModel):
+    """Optional per-request overrides for the saved vision connection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: AiProviderKind | None = None
+    base_url: str | None = None
+    model: str | None = None
+
+
+class AiRegionProposalsOut(BaseModel):
+    status: Literal["ready"]
+    page_width: int
+    page_height: int
+    provider: AiProviderKind
+    model: str
+    proposals: list[RegionProposalOut]

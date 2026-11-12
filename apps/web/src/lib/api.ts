@@ -2,6 +2,8 @@ import type {
   AiProbeRequest,
   AiProbeResponse,
   AiProvidersResponse,
+  AiRegionProposalsRequest,
+  AiRegionProposalsResponse,
   AiSettings,
   AiSuggestionCreate,
   AiSuggestionDecisionInput,
@@ -234,6 +236,15 @@ export const api = {
     }),
   getRegionProposals: (projectId: string, pageId: string) =>
     request<RegionProposals>(`/projects/${projectId}/pages/${pageId}/region-proposals`),
+  createAiRegionProposals: (
+    projectId: string,
+    pageId: string,
+    payload: AiRegionProposalsRequest = {},
+  ) =>
+    request<AiRegionProposalsResponse>(
+      `/projects/${projectId}/pages/${pageId}/ai-region-proposals`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
 
   listAiProviders: () => request<AiProvidersResponse>("/ai/providers"),
   getAiUsage: () => request<AiUsageResponse>("/ai/usage"),

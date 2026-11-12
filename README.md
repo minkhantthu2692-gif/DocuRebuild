@@ -9,7 +9,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 > **Project status — early development (Phase 6 of 12).**
 > The workspace, local project storage, image and PDF import, non-destructive
 > image adjustments, the rich-text editor, local Tesseract OCR, manual region
-> extraction and an optional local-AI OCR text cleanup are implemented. Imports run
+> extraction, an optional local-AI OCR text cleanup and optional vision region
+> proposals are implemented. Imports run
 > as background jobs with page-level progress, cancellation and localized failures.
 > PDF pages are rendered locally and embedded text layers are stored as reviewable
 > proposals; image-only PDF pages can be processed with OCR. OCR and PDF import are
@@ -17,7 +18,7 @@ data on your device, and treats every AI result as a reviewable proposal.
 > talks to an Ollama or OpenAI-compatible server that the user configures and tests;
 > loopback addresses are the default, and any other host needs explicit remote
 > consent. Every result is a proposal that must be accepted or rejected. Cloud
-> providers, free-tier adapters, paid usage, vision profiles, structured
+> providers, free-tier adapters, paid usage, image generation, structured
 > table/figure/equation reconstruction, export and history are **not implemented
 > yet** and are clearly marked as unavailable in the UI. Nothing in this repository
 > fakes those features.
@@ -84,6 +85,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   A "Suggest regions" overlay derives reviewable figure, table and equation
   suggestions from the latest local OCR layout. Suggestions are never saved on
   their own: choosing one only prefills the normal extraction dialog.
+  When a vision model is saved in Settings, "Ask AI for regions" sends only the
+  current page image to that configured local server and shows its figure, table
+  and equation proposals as clearly marked low-confidence regions. Nothing is
+  saved automatically; each proposal goes through the same review and extraction
+  dialog, and every request counts toward the AI usage limit.
 - **Document editor** — Tiptap rich text with headings, paragraphs, lists,
   blockquotes, code blocks, alignment, inline formatting, undo/redo, word and
   character counts, and debounced autosave.
@@ -96,17 +102,18 @@ data on your device, and treats every AI result as a reviewable proposal.
 ### Not available yet
 
 Structured element reconstruction (table cells, equation transcription, generative
-figure detection), cloud/free-tier AI providers, vision and image-generation
-profiles, DOCX/TXT export, revision history, backups/restore UI, desktop packaging
+figure detection), cloud/free-tier AI providers, image-generation profiles,
+DOCX/TXT export, revision history, backups/restore UI, desktop packaging
 and PWA install support are planned but not implemented. OCR extracts text blocks,
 reading order and conservative layout hints; it does not build table structure or
 transcribe equations. Region extraction produces exact pixel crops and can read
 their plain text locally; it does not build structured table cells or equation
-markup. Region suggestions are deterministic heuristics over the OCR text layout,
+markup. Deterministic region suggestions are heuristics over the OCR text layout,
 not a vision model: they cover OCR table/equation blocks and the empty band above a
-figure-like caption, and they are skipped when no suitable layout exists. The local
-AI workflow currently covers only OCR text cleanup with the configured text model;
-it does not run vision tasks, switch providers silently, or use any remote service.
+figure-like caption, and they are skipped when no suitable layout exists. The
+optional vision path only proposes rectangles for review; it does not read their
+text, invent content or change the document. The local AI workflow does not switch
+providers silently or use any remote service without consent.
 See [`docs/roadmap.md`](docs/roadmap.md).
 
 ---
@@ -272,7 +279,10 @@ application, and OCR review works without it.
    contact that URL for either a connection test or a cleanup.
 4. Optionally set a rolling 24-hour **Request limit**. Zero means unlimited.
    Connection tests are not counted.
-5. Open **Extract text** on a page and select **Ask local AI** on one text block.
+5. Optionally add a **Vision model** name (for example `llava:7b`) if the same
+   server has one installed. Leave it empty to keep image AI disabled.
+6. Open **Extract text** on a page and select **Ask local AI** on one text block.
+   For region proposals, use **Ask AI for regions** in the source viewer.
 
 Only that block's text is sent, to the URL you configured. The reply is stored as an
 unverified proposal with provider, model, URL and the original text. The OCR text
@@ -284,16 +294,23 @@ rejected proposals remain available in the block's read-only **Proposal history*
 including the original and proposed text, provider, model and decision time. That
 record is kept even if the block is corrected again later.
 
-Each cleanup attempt is recorded in the local application database as metadata only:
-provider, model, task, outcome, error code and time. The selected document text is
-never written to that usage history. Settings shows the requests from the last 24
-hours and the most recent entries; when a configured limit is reached, the backend
-refuses the next cleanup before contacting the server.
+Region proposals use the same saved connection and the optional vision model. Only
+the current page image is resized locally and sent; the reply is shown as
+low-confidence figure, table and equation rectangles. Nothing is saved until you
+choose a rectangle and confirm the normal extraction dialog, so the proposal can
+never silently become a document element.
 
-The URL is only contacted when you press **Test connection** or **Ask local AI**;
-nothing is downloaded, loaded or generated in the background. There is no cloud
-provider, API key or paid call in this phase. A model name can also be typed
-manually when discovery is unsupported by the server.
+Each cleanup or region-proposal attempt is recorded in the local application database
+as metadata only: provider, model, task, outcome, error code and time. The selected
+document text, page image and model output are never written to that usage history.
+Settings shows the requests from the last 24 hours and the most recent entries; when
+a configured limit is reached, the backend refuses the next request before contacting
+the server.
+
+The URL is only contacted when you press **Test connection**, **Ask local AI** or
+**Ask AI for regions**; nothing is downloaded, loaded or generated in the background.
+There is no cloud provider, API key or paid call in this phase. A model name can also
+be typed manually when discovery is unsupported by the server.
 
 ### PDF import
 
@@ -387,14 +404,15 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   Deleting a PDF page keeps the shared original until its last page is removed.
 - Asset paths stored in databases are relative and validated against traversal.
 - The local API binds to loopback by default and sends no telemetry.
-- The AI settings profile (provider, local base URL, model name, remote consent) is
-  stored in `app.db`. No API keys exist in this phase. Project text sent for cleanup
-  goes only to the configured server URL; a non-loopback URL is refused unless remote
-  consent is explicitly enabled. Responses are stored in the project database as
-  reviewable proposals.
+- The AI settings profile (provider, local base URL, text model, optional vision
+  model, remote consent) is stored in `app.db`. No API keys exist in this phase.
+  Project text sent for cleanup and the current page image sent for region
+  proposals go only to the configured server URL; a non-loopback URL is refused
+  unless remote consent is explicitly enabled. Cleanup responses are stored in the
+  project database as reviewable proposals; region proposals are not stored at all.
 - AI usage history lives in the application database and contains only provider,
   model, task, outcome, error code and timestamps. It never stores the selected
-  document text, the proposal text or the full server response.
+  document text, page images, model output or the full server response.
 - GitHub is used only for source code and documentation. User data is **not** a
   GitHub backup category. See [`AGENTS.md`](AGENTS.md).
 
@@ -484,7 +502,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 3. Import and image processing | Complete |
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
-| 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history and reviewable persisted OCR text cleanup done; vision, free-tier/paid adapters and cost controls pending |
+| 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | Planned |
 | 8. Document editor and export | Planned |
 | 9. History, backup and recovery | Planned |
