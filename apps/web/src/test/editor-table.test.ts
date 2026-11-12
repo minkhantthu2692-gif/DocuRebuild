@@ -91,6 +91,39 @@ describe("manual table editing", () => {
     expect(table?.content?.[0]?.content).toHaveLength(2);
   });
 
+  it("merges and splits selected cells", () => {
+    const instance = createEditor();
+    instance.commands.insertTable(tableInsertOptions(2, 2, true));
+
+    const cellPositions: number[] = [];
+    instance.state.doc.descendants((node, pos) => {
+      if (node.type.name === "tableHeader" || node.type.name === "tableCell") {
+        cellPositions.push(pos);
+      }
+      return true;
+    });
+    instance.commands.setCellSelection({
+      anchorCell: cellPositions[0],
+      headCell: cellPositions[1],
+    });
+    expect(instance.can().mergeCells()).toBe(true);
+    expect(instance.commands.mergeCells()).toBe(true);
+
+    let table = documentJSON(instance).content?.find((node) => node.type === "table");
+    expect(table?.content?.[0]?.content).toHaveLength(1);
+    expect(table?.content?.[0]?.content?.[0]?.attrs?.colspan).toBe(2);
+
+    // Put the cursor inside the merged cell, then split it again.
+    const mergedCell = instance.state.doc.resolve(cellPositions[0] + 1);
+    instance.commands.setTextSelection(mergedCell.pos + 1);
+    expect(instance.can().splitCell()).toBe(true);
+    expect(instance.commands.splitCell()).toBe(true);
+
+    table = documentJSON(instance).content?.find((node) => node.type === "table");
+    expect(table?.content?.[0]?.content).toHaveLength(2);
+    expect(table?.content?.[0]?.content?.[0]?.attrs?.colspan).toBe(1);
+  });
+
   it("clamps table sizes to the supported bounds", () => {
     expect(clampTableSize(0)).toBe(TABLE_MIN_SIZE);
     expect(clampTableSize(Number.NaN)).toBe(TABLE_MIN_SIZE);

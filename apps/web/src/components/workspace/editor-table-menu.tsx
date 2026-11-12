@@ -1,5 +1,12 @@
 import type { Editor } from "@tiptap/react";
-import { Check, Plus, Table2, Trash2 } from "lucide-react";
+import {
+  Check,
+  Plus,
+  Table2,
+  TableCellsMerge,
+  TableCellsSplit,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -109,6 +116,24 @@ export function EditorTableMenu({ editor }: EditorTableMenuProps) {
             <Plus />
             <span>{t("editor.table.addColumnAfter")}</span>
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={!inTable || !editor?.can().mergeCells()}
+            onSelect={() => editor?.chain().focus().mergeCells().run()}
+          >
+            <TableCellsMerge />
+            <span>{t("editor.table.mergeCells")}</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!inTable || !editor?.can().splitCell()}
+            onSelect={() => editor?.chain().focus().splitCell().run()}
+          >
+            <TableCellsSplit />
+            <span>{t("editor.table.splitCell")}</span>
+          </DropdownMenuItem>
+          <DropdownMenuLabel className="max-w-64 whitespace-normal text-2xs font-normal leading-relaxed text-muted-foreground">
+            {t("editor.table.mergeHint")}
+          </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             disabled={!inTable || !editor?.can().deleteRow()}

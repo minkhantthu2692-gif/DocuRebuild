@@ -411,13 +411,21 @@ src/
   `addColumnBefore/After`, `deleteRow`, `deleteColumn`, `toggleHeaderRow` and
   `deleteTable`. Buttons use `editor.can()` so a command that the current schema
   cannot run stays disabled instead of failing silently.
+- Cell merge and split use the `TableKit` commands with a ProseMirror cell
+  selection: `mergeCells()` combines the selected rectangle into one cell with
+  `colspan`/`rowspan`, and `splitCell()` restores the split cells when the cursor is
+  inside a merged cell. Both entries are disabled outside a suitable table
+  selection, and a short menu hint explains that a multi-cell selection is needed.
+  Merging never discards text: the non-empty content of the absorbed cells is
+  appended into the merged cell instead of being deleted.
 - The stored shape is `table > tableRow > tableCell|tableHeader > paragraph >
   text`, with `colspan`, `rowspan` and `colwidth` attributes. It is ordinary Tiptap
   content, so document saves, revisions and project backups need no table-specific
   code.
-- Merging and splitting cells are supported by the underlying editor commands but
-  are not exposed in the menu yet; alignment and column resizing are not
-  implemented.
+- Export reads the stored spans rather than the screen. A table containing any
+  `colspan`/`rowspan` greater than 1 is written as HTML so the merged structure and
+  every cell's text survive. Per-cell vertical alignment and column resizing are
+  still not implemented.
 
 ### Document export
 

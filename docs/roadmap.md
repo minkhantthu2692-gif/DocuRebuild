@@ -15,7 +15,7 @@ presented in the UI until it actually works.
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion and row/column/header tools, plus faithful Markdown/TXT table export; automatic table extraction, merge/split UI, equations and figure structure pending |
+| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, plus faithful Markdown/TXT table export; automatic table extraction, equations and figure structure pending |
 | 8. Document editor and export | In progress | Core editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
 | 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints and restore, a local project activity log for imports, processing, OCR, exports and backups, plus verified project backup download and additive (new-project) restore; version comparison, selective restore and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
@@ -314,6 +314,10 @@ the user must review every region before extracting it.
   rows/columns and an optional header row, then add or delete rows and columns,
   toggle the header, or delete the table. Every cell is typed by the user; no
   content is generated from a source image.
+- Cell merge and split from the table menu. Selecting multiple cells and choosing
+  merge produces a single cell with stored `colspan`/`rowspan` without dropping the
+  absorbed text; split restores the cells when the cursor is inside a merged cell.
+  Both actions stay disabled outside a suitable table selection.
 - Tables are ordinary Tiptap nodes, so saving, version history and project backups
   need no special handling. Column resizing is disabled deliberately because pixel
   widths are screen-dependent and cannot survive Markdown.
@@ -323,7 +327,8 @@ the user must review every region before extracting it.
 
 **Pending**
 
-- Merge/split controls in the table menu, per-cell alignment and comparison view.
+- Per-cell alignment (beyond paragraph alignment) and a source-to-result comparison
+  view.
 - Automatic table-structure extraction from OCR/vision (always as a reviewable
   proposal, never inserted without approval).
 - Structured figure representation and optional reconstruction with approval.
@@ -376,9 +381,9 @@ code blocks, rules, inline marks, tables and figure markers. Equations, footnote
 and page layout are not part of the editor model yet, so they cannot be exported.
 DOCX, PDF and OMML export remain unimplemented.
 
-**Pending** — merge/split and cell alignment, images inline in text, captions,
-equations, footnotes, page layout, headers/footers, page numbers, DOCX export and
-OMML validation.
+**Pending** — per-cell alignment, images inline in text, captions, equations,
+footnotes, page layout, headers/footers, page numbers, DOCX export and OMML
+validation.
 
 ## Phase 9 — History, backup and recovery (in progress)
 

@@ -353,6 +353,9 @@ Tables are reconstructed manually, cell by cell:
   left/right, deletes the current row or column, toggles the header row, or deletes
   the whole table. The picker limit only applies to the initial insert; rows and
   columns can be added afterwards.
+- Select more than one cell to **merge** them into a single cell, and **split** the
+  current merged cell back apart. The stored `colspan`/`rowspan` attributes are
+  exported faithfully instead of being flattened.
 - Tables are ordinary Tiptap nodes in the saved document. Autosave, version
   history and project backups treat them like any other content, and they never
   contain local asset URLs.
@@ -601,9 +604,9 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 - The editor covers core rich text and manual tables, not the full target model
   (equations, footnotes and page layout are pending). Figures are supported as
   block image nodes from the region library.
-- Table limits: inserting offers 1–10 rows and columns, cells cannot be merged or
-  split from the UI yet, and there is no per-cell alignment or column resizing.
-  Merged cells that arrive in a document are preserved by export, but automatic
+- Table limits: inserting offers 1–10 rows and columns, and merged cells can be
+  created by selecting multiple cells and choosing merge/split. There is no
+  per-cell alignment beyond paragraph alignment and no column resizing. Automatic
   table structure from OCR or vision is still not produced. A table is only as
   accurate as the cell text you type.
 - Autosave is debounced and best-effort when leaving the page. Document versions
@@ -683,7 +686,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools and faithful table export done; automatic table extraction, merge/split UI, equations and figure structure pending |
+| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split and faithful table export done; automatic table extraction, equations and figure structure pending |
 | 8. Document editor and export | In progress: rich-text editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
 | 9. History, backup and recovery | In progress: local document versions with manual checkpoints and restore, a project activity log covering imports, processing, OCR, exports and backups, plus verified project backup download and additive restore; version comparison, log filtering and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
