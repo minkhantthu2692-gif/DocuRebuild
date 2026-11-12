@@ -32,3 +32,54 @@ export function useSaveDocument(projectId: string) {
     },
   });
 }
+
+export function useDocumentRevisions(projectId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["document-revisions", projectId],
+    queryFn: () => api.listDocumentRevisions(projectId as string),
+    enabled: Boolean(projectId) && enabled,
+    retry: 1,
+  });
+}
+
+export function useDocumentRevision(
+  projectId: string,
+  revisionId: string | null,
+) {
+  return useQuery({
+    queryKey: ["document-revision", projectId, revisionId],
+    queryFn: () => api.getDocumentRevision(projectId, revisionId as string),
+    enabled: Boolean(revisionId),
+    retry: 1,
+  });
+}
+
+export function useCreateDocumentRevision(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.createDocumentRevision(projectId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["document-revisions", projectId],
+      });
+    },
+  });
+}
+
+export function useRestoreDocumentRevision(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (revisionId: string) =>
+      api.restoreDocumentRevision(projectId, revisionId),
+    onSuccess: (record) => {
+      // The editor applies the restored content directly; keep the cache in sync
+      // so a later remount does not show the replaced document.
+      queryClient.setQueryData(["document", projectId], record);
+      void queryClient.invalidateQueries({
+        queryKey: ["document-revisions", projectId],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}

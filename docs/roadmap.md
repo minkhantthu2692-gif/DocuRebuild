@@ -17,7 +17,7 @@ presented in the UI until it actually works.
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | Planned | Depends on Phase 5/6 |
 | 8. Document editor and export | In progress | Core editor plus local Markdown and TXT export; tables, equations, DOCX and page layout pending |
-| 9. History, backup and recovery | Planned | Event table exists; no restore UI |
+| 9. History, backup and recovery | In progress | Document versions with manual checkpoints and restore; processing/AI/export history and project backup pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
 
@@ -356,12 +356,32 @@ exported. DOCX, PDF and OMML export remain unimplemented.
 **Pending** — tables, images inline in text, captions, equations, footnotes,
 page layout, headers/footers, page numbers, DOCX export and OMML validation.
 
-## Phase 9 — History, backup and recovery (planned)
+## Phase 9 — History, backup and recovery (in progress)
 
-- Document revisions, processing/AI/export history and version comparison.
-- Selective restore and export history.
-- Project backup/restore with verification and conflict detection.
-- Editor undo/redo stays separate from revision history.
+**Delivered**
+
+- Document revisions stored in each project database. A save snapshots the state it
+  replaces; automatic snapshots are coalesced to one per five minutes, and manual
+  checkpoints can be created at any time. Identical consecutive states are never
+  duplicated and the newest 100 versions are retained.
+- `GET /api/projects/{id}/document/revisions` returns newest-first summaries
+  (`preview`, `character_count`, `source`, `created_at`);
+  `POST` creates a manual checkpoint; `GET .../{revision_id}` returns the exact
+  stored content; `POST .../{revision_id}/restore` makes it the live document and
+  always snapshots the replaced state first.
+- The editor's version dialog lists versions with source and time, requires an
+  explicit confirmation before restoring, loads the full stored text of the
+  selected version for review, and flushes unsaved editor state first. If that save
+  fails, nothing is restored.
+- English and Burmese strings, backend tests for coalescing, pruning, exact restore,
+  validation and not-found handling, and a component test for the confirmation and
+  save-guard flow.
+
+**Pending**
+
+- Processing, AI and export history views; document version comparison.
+- Project backup/restore with verification and conflict detection, plus selective
+  restore and deletion. Editor undo/redo stays separate from revision history.
 
 ## Phase 10 — Desktop, PWA and mobile distribution (planned)
 
@@ -394,8 +414,10 @@ page layout, headers/footers, page numbers, DOCX export and OMML validation.
 - **Dependency audit.** ESLint/TypeScript-ESLint currently pull a vulnerable
   `minimatch` (moderate, development-only). Runtime dependencies are clean of
   critical advisories after the Tiptap 3 and Vitest 5 upgrades.
-- **No revision history yet.** Autosave reduces loss but does not replace
-  backups. Do not use this build as the only copy of important work.
+- **Version history is not a backup.** Document versions live in the same project
+  database, so deleting the project folder, disk failure or database corruption
+  removes them too. Project backup and restore are still pending; do not use this
+  build as the only copy of important work.
 
 ## Phase 3 definition of done (met)
 

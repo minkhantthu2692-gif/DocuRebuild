@@ -17,6 +17,7 @@ import {
   Code2,
   Download,
   FileText,
+  History,
   Italic,
   List,
   ListOrdered,
@@ -35,7 +36,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import type { JSONContent } from "@docurebuild/shared-types";
+import type { DocumentRecord, JSONContent } from "@docurebuild/shared-types";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -71,6 +72,7 @@ import { normalizeLinkUrl } from "@/lib/link";
 import { ocrInsertionContent } from "@/lib/ocr-insertion";
 import { countCharacters, countWords } from "@/lib/text";
 import { cn } from "@/lib/utils";
+import { RevisionDialog } from "./revision-dialog";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
 const EMPTY_DOCUMENT: Content = {
@@ -147,6 +149,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
@@ -402,6 +405,26 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     setLinkOpen(false);
   }, [editor]);
 
+  const applyRestoredDocument = useCallback(
+    (record: DocumentRecord) => {
+      if (!editor) return;
+      editor.commands.setContent(record.content as unknown as Content, {
+        emitUpdate: true,
+      });
+      // The backend already stored this exact version, so it is not dirty.
+      // Editor undo history starts fresh here; the replaced state remains a
+      // version and can be restored from the same dialog.
+      savedRevisionRef.current = revisionRef.current;
+      latestContent.current = record.content;
+      latestText.current = record.plain_text;
+      setSavedRevision(revisionRef.current);
+      setPlainText(record.plain_text);
+      setSaveError(false);
+      editor.commands.focus();
+    },
+    [editor],
+  );
+
   useEffect(() => {
     if (!findOpen) return;
     findInputRef.current?.focus();
@@ -534,6 +557,16 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           </div>
 
           <Separator orientation="vertical" className="h-5" />
+
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={t("revisions.open")}
+            disabled={!editor || !initialized}
+            onClick={() => setHistoryOpen(true)}
+          >
+            <History />
+          </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -988,6 +1021,14 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           </form>
         </DialogContent>
       </Dialog>
+
+      <RevisionDialog
+        projectId={projectId}
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        ensureSaved={saveSnapshot}
+        onRestored={applyRestoredDocument}
+      />
     </section>
   );
 }

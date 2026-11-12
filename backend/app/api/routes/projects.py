@@ -24,6 +24,8 @@ from app.schemas.pages import (
 from app.schemas.projects import (
     DocumentOut,
     DocumentPayload,
+    DocumentRevisionOut,
+    DocumentRevisionSummary,
     ProjectCreate,
     ProjectDetail,
     ProjectSummary,
@@ -118,6 +120,57 @@ def export_document_file(
         media_type=content_type,
         headers={"Content-Disposition": disposition},
     )
+
+
+@router.get(
+    "/{project_id}/document/revisions",
+    response_model=list[DocumentRevisionSummary],
+)
+def list_document_revisions(
+    project: ProjectDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[dict[str, Any]]:
+    directory = project_service.ensure_project_storage(project)
+    return documents.list_revisions(directory, limit)
+
+
+@router.post(
+    "/{project_id}/document/revisions",
+    response_model=DocumentRevisionSummary,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_document_revision(
+    project: ProjectDep, session: DbSession
+) -> dict[str, Any]:
+    """Checkpoint the current saved document, so it can be restored later."""
+    directory = project_service.ensure_project_storage(project)
+    revision = documents.create_revision(directory)
+    touch_project(session, project)
+    return revision
+
+
+@router.get(
+    "/{project_id}/document/revisions/{revision_id}",
+    response_model=DocumentRevisionOut,
+)
+def read_document_revision(
+    project: ProjectDep, revision_id: str
+) -> dict[str, Any]:
+    directory = project_service.ensure_project_storage(project)
+    return documents.read_revision(directory, revision_id)
+
+
+@router.post(
+    "/{project_id}/document/revisions/{revision_id}/restore",
+    response_model=DocumentOut,
+)
+def restore_document_revision(
+    project: ProjectDep, revision_id: str, session: DbSession
+) -> dict[str, Any]:
+    directory = project_service.ensure_project_storage(project)
+    document = documents.restore_revision(directory, revision_id)
+    touch_project(session, project)
+    return document
 
 
 # --------------------------------------------------------------------------- #

@@ -41,7 +41,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.image_edits` | Canonical edit validation, geometry pipeline (crop/perspective/deskew), filter pipeline (grayscale, contrast, brightness, sharpness, denoise, threshold, shadow/background cleanup) and skew estimation |
 | `services.pdf` | PDF open/validation, page rendering, embedded text extraction, capability detection |
 | `services.layout` | Shared deterministic block classification (heading, list, caption, equation, table-like grid, running header/footer, page number) for OCR and embedded PDF text |
-| `services.documents` | Document row, Tiptap JSON persistence, timestamps |
+| `services.documents` | Document row, Tiptap JSON persistence, timestamps, coalesced revision snapshots, manual checkpoints and restore |
 | `services.document_export` | Deterministic Tiptap-to-Markdown/TXT rendering, escaping and download names |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
@@ -64,6 +64,7 @@ The application database (`app.db`) contains only global state:
 Each project owns a portable folder and its own `project.db`:
 
 - `documents` — Tiptap JSON content and plain text
+- `document_revisions` — previous document states: exact Tiptap JSON, plain text, capture source (`autosave`/`manual`) and timestamp; newest 100 kept per project
 - `assets` — relative path, MIME type, size, checksum, dimensions
 - `pages` — page order, source/display/thumbnail asset references, rotation,
   `pdf_page_number` for PDF pages, status, and an `edits` JSON document holding the
@@ -163,6 +164,10 @@ POST   /api/projects/{id}/open
 GET    /api/projects/{id}/document
 PUT    /api/projects/{id}/document
 GET    /api/projects/{id}/document/export?format=markdown|txt
+GET    /api/projects/{id}/document/revisions?limit=50
+POST   /api/projects/{id}/document/revisions
+GET    /api/projects/{id}/document/revisions/{revision_id}
+POST   /api/projects/{id}/document/revisions/{revision_id}/restore
 GET    /api/projects/{id}/pages
 POST   /api/projects/{id}/pages/import
 POST   /api/projects/{id}/imports
@@ -238,8 +243,8 @@ src/
   auto-detected and pasted links cannot bypass the dialog. The link dialog can
   edit or remove an existing link, and `Ctrl/Cmd+K` opens it; the shortcut is
   ignored while the dialog is open or the editor is read-only.
-- A best-effort flush runs when leaving the workspace; it is not a substitute for
-  revision history.
+- A best-effort flush runs when leaving the workspace. It complements the document
+  version history but is not a substitute for a project backup.
 - Imports start a job and poll it every 500 ms while active. The progress panel
   shows completed/total pages, the current filename and a cancel action. The page
   list is refreshed when the job settles, so a cancelled file cannot leave
@@ -410,6 +415,36 @@ src/
   save path used by autosave and aborts the download when the save fails, so a
   stale file is never produced. `export` in `/api/meta` advertises the feature.
 
+### Document versions
+
+- Every document write compares the incoming Tiptap JSON with the stored one. When
+  they differ, the stored (previous) state is snapshotted into
+  `document_revisions` before the row is updated. The live document is never a
+  revision, so pruning cannot remove current content.
+- Automatic snapshots are coalesced: if the newest revision is younger than
+  `REVISION_INTERVAL_SECONDS` (300 s), the intervening states are not stored. A
+  consecutive duplicate of the newest revision is never inserted, and the pristine
+  initial empty document is not versioned because it holds no user work. Manual
+  checkpoints and restores force a snapshot regardless of the interval, so
+  restoring a version always preserves the exact state it replaces.
+- `REVISION_LIMIT` (100) prunes the oldest rows after each insert. This is an
+  internal recovery history, not a backup: it lives in the same `project.db`, so
+  disk failure, database corruption or deleting the project folder also removes it.
+- `GET .../document/revisions` accepts `limit` (1–200, default 50) and returns
+  newest-first summaries with a whitespace-collapsed 200-character preview,
+  character count, source and timestamp; revision content is not sent for the list.
+  `GET .../revisions/{id}` returns the exact stored content for the restore
+  preview. Unknown ids return `revision_not_found` (404).
+- `POST .../document` creates a manual checkpoint of the current saved document and
+  deduplicates against the newest revision. `POST .../revisions/{id}/restore`
+  validates the id, writes the revision content and plain text through the same
+  document update path with a forced snapshot.
+- The editor flushes unsaved changes before saving a checkpoint or restoring. If the
+  save fails, neither request is sent. On restore the returned document is applied
+  with `setContent(..., { emitUpdate: true })`, the document cache is updated and
+  the editor marks it saved; editor undo history restarts, while both states remain
+  available as versions.
+
 ### Local AI cleanup
 
 - Phase 6 starts with the smallest useful AI workflow: correcting one OCR text
@@ -541,6 +576,9 @@ src/
 - Markdown and TXT export run in the local backend from the project database. The
   generated file contains no asset URLs, credentials or provider metadata and is
   only sent to the browser that requested it.
+- Document versions are stored in the project database. Saving, listing and
+  restoring them never contacts a provider or the network: no AI call is made and
+  no text leaves the machine. Versions are not a substitute for an external backup.
 - Document links are validated to `http`, `https` or `mailto` before they enter the
   document, and Markdown export repeats that check. A stored `javascript:` or
   `data:` target is never emitted as a link; only its text is kept.

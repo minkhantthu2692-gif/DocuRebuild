@@ -205,6 +205,20 @@ PROJECT_MIGRATIONS: list[tuple[int, str]] = [
             ON ai_suggestions(page_id, created_at DESC);
         """,
     ),
+    (
+        9,
+        """
+        CREATE TABLE IF NOT EXISTS document_revisions (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            plain_text TEXT NOT NULL DEFAULT '',
+            source TEXT NOT NULL DEFAULT 'autosave',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_document_revisions_created
+            ON document_revisions(created_at DESC);
+        """,
+    ),
 ]
 
 

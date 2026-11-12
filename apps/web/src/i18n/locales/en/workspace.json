@@ -150,6 +150,34 @@
     },
     "saveFailed": "The latest changes could not be saved, so nothing was exported. Try again once the save succeeds."
   },
+  "revisions": {
+    "open": "Version history",
+    "title": "Version history",
+    "description": "Versions are saved in this project on this device. Restoring one replaces the document and first keeps the version it replaces.",
+    "create": "Save version",
+    "refresh": "Refresh",
+    "count": "Versions: {{count}}",
+    "loading": "Loading versions…",
+    "error": "The version history could not be loaded.",
+    "retry": "Try again",
+    "emptyTitle": "No versions yet",
+    "empty": "A version is kept automatically when the document changes, and you can save one at any time.",
+    "source": {
+      "autosave": "Automatic",
+      "manual": "Checkpoint"
+    },
+    "restore": "Restore",
+    "confirm": "Restore the version from {{time}}? The current document is kept as a version first.",
+    "confirmAction": "Restore version",
+    "previewLabel": "Version text",
+    "previewLoading": "Loading the version text…",
+    "previewError": "The full version text could not be loaded. You can still restore it.",
+    "restored": "Version restored.",
+    "created": "Version saved.",
+    "saveFailed": "The latest changes could not be saved, so the version history was not changed.",
+    "noText": "This version has no text.",
+    "note": "Up to 100 versions are kept. Automatic versions are saved at most every five minutes, and restoring or saving a version always keeps the current state first. Versions stay on this device."
+  },
   "ocr": {
     "open": "Extract text",
     "title": "Extract text from page {{page}}",

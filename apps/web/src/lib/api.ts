@@ -15,6 +15,8 @@ import type {
   AppSettings,
   AppearanceSettings,
   DocumentRecord,
+  DocumentRevision,
+  DocumentRevisionSummary,
   EditorSettings,
   ElementSummary,
   HealthStatus,
@@ -123,6 +125,24 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ content, plain_text: plainText }),
     }),
+
+  listDocumentRevisions: (projectId: string, limit = 200) =>
+    request<DocumentRevisionSummary[]>(
+      `/projects/${projectId}/document/revisions?limit=${limit}`,
+    ),
+  createDocumentRevision: (projectId: string) =>
+    request<DocumentRevisionSummary>(`/projects/${projectId}/document/revisions`, {
+      method: "POST",
+    }),
+  getDocumentRevision: (projectId: string, revisionId: string) =>
+    request<DocumentRevision>(
+      `/projects/${projectId}/document/revisions/${revisionId}`,
+    ),
+  restoreDocumentRevision: (projectId: string, revisionId: string) =>
+    request<DocumentRecord>(
+      `/projects/${projectId}/document/revisions/${revisionId}/restore`,
+      { method: "POST" },
+    ),
 
   listPages: (projectId: string) => request<PageSummary[]>(`/projects/${projectId}/pages`),
   startImport: (projectId: string, files: File[]) => {

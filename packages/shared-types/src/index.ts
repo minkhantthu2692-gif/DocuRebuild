@@ -470,6 +470,21 @@ export interface DocumentRecord {
   updated_at: string | null;
 }
 
+export interface DocumentRevisionSummary {
+  id: string;
+  /** How the version was captured. */
+  source: "autosave" | "manual";
+  /** Whitespace-collapsed start of the stored text, for list display. */
+  preview: string;
+  character_count: number;
+  created_at: string;
+}
+
+export interface DocumentRevision extends DocumentRevisionSummary {
+  content: JSONContent;
+  plain_text: string;
+}
+
 /* -------------------------------------------------------------------------- */
 /*                              App metadata                                  */
 /* -------------------------------------------------------------------------- */

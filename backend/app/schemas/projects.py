@@ -65,3 +65,16 @@ class DocumentOut(DocumentPayload):
     format: str
     schema_version: int
     updated_at: str | None
+
+
+class DocumentRevisionSummary(BaseModel):
+    id: str
+    source: str
+    preview: str
+    character_count: int
+    created_at: str
+
+
+class DocumentRevisionOut(DocumentRevisionSummary):
+    content: dict[str, Any]
+    plain_text: str

@@ -10,7 +10,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 > The workspace, local project storage, image and PDF import, non-destructive
 > image adjustments, the rich-text editor, local Tesseract OCR, manual region
 > extraction, an optional local-AI OCR text cleanup, optional vision region
-> proposals and local Markdown/TXT document export are implemented. Imports run
+> proposals, local Markdown/TXT document export and document version history are
+> implemented. Imports run
 > as background jobs with page-level progress, cancellation and localized failures.
 > PDF pages are rendered locally and embedded text layers are stored as reviewable
 > proposals; image-only PDF pages can be processed with OCR. OCR and PDF import are
@@ -19,7 +20,7 @@ data on your device, and treats every AI result as a reviewable proposal.
 > loopback addresses are the default, and any other host needs explicit remote
 > consent. Every result is a proposal that must be accepted or rejected. Cloud
 > providers, free-tier adapters, paid usage, image generation, structured
-> table/figure/equation reconstruction, DOCX export and history are **not
+> table/figure/equation reconstruction and DOCX export are **not
 > implemented yet** and are clearly marked as unavailable in the UI. Nothing in this
 > repository fakes those features.
 
@@ -101,6 +102,10 @@ data on your device, and treats every AI result as a reviewable proposal.
   flushed first, and the download is refused if that save fails. Extracted text is
   escaped so it can never turn into Markdown structure, and figure assets stay in
   the project instead of being copied into the file.
+- **Document versions** — the editor header keeps a local version history. Automatic
+  versions are captured when the document changes, a manual checkpoint can be saved
+  at any time, and restoring a version always keeps the state it replaces, so a
+  restore is itself reversible.
 - **Appearance and language** — light/dark/system themes, accent colours, radius,
   blur, density, text size, reduced motion, and live English/Burmese switching.
 - **Local-only defaults** — no account, no cloud database, no telemetry, and no
@@ -111,7 +116,7 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 Structured element reconstruction (table cells, equation transcription, generative
 figure detection), cloud/free-tier AI providers, image-generation profiles,
-DOCX export, revision history, backups/restore UI, desktop packaging
+DOCX export, project backup/restore, desktop packaging
 and PWA install support are planned but not implemented. OCR extracts text blocks,
 reading order and conservative layout hints; it does not build table structure or
 transcribe equations. Region extraction produces exact pixel crops and can read
@@ -344,6 +349,28 @@ extension:
 
 DOCX export, OMML equations and PDF layout export are not implemented yet.
 
+### Document versions
+
+The editor header also opens the local version history:
+
+- A version is captured automatically when the saved document changes. Automatic
+  versions are coalesced to at most one every five minutes so a long typing session
+  does not fill the history with near-identical entries; an untouched new document
+  is not versioned. **Save version** creates a
+  checkpoint of the current document immediately.
+- **Restore** replaces the document with the selected version. The version being
+  replaced is stored first, even inside the coalescing window, so a restore can be
+  undone from the same list. Before confirming, the dialog loads and shows the full
+  stored text of that version, so the choice is not based on a short preview alone.
+- Before either action, unsaved editor changes are saved. If that save fails, the
+  version history is left unchanged and the usual save error is shown.
+- Each project keeps up to 100 versions in its own `project.db`. Version content is
+  the exact stored Tiptap document, never a re-typed summary. Nothing is uploaded.
+- Editor undo/redo is separate from version history; a restore starts a fresh
+  editor undo stack but leaves both states available as versions.
+- Comparing two versions side by side and project backup/restore are not
+  implemented yet.
+
 ### PDF import
 
 PDF support is local and works without an AI provider or API key:
@@ -466,10 +493,12 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 ## Known limitations
 
 - The editor covers core rich text, not the full target model (editable tables,
-  equation nodes, footnotes, page layout and find/replace are pending). Figures are
+  equation nodes, footnotes and page layout are pending). Figures are
   supported as block image nodes from the region library.
-- Autosave is debounced and best-effort when leaving the page; there is no
-  revision history yet, so destructive edits are not recoverable.
+- Autosave is debounced and best-effort when leaving the page. Document versions
+  protect the saved document, but they live in the same project database and are
+  not a backup, so destructive edits outside the version window and disk failures
+  are still not recoverable.
 - `npm audit` reports moderate findings in the ESLint/TypeScript-ESLint toolchain
   (via `minimatch`). They are development-only and do not ship in the client
   bundle; no fixed upstream release is available yet.
@@ -537,7 +566,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | Planned |
 | 8. Document editor and export | In progress: rich-text editor plus local Markdown and TXT export; tables, equations, DOCX and page layout pending |
-| 9. History, backup and recovery | Planned |
+| 9. History, backup and recovery | In progress: local document versions with manual checkpoints and restore; processing/AI/export history and project backup pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
 
