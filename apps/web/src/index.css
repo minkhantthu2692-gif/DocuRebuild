@@ -125,9 +125,13 @@
     @apply rounded-md outline outline-2 outline-offset-4 outline-primary/50;
   }
 
-  /* Display equations: the node view renders KaTeX locally from stored LaTeX. */
-  .doc-content .ProseMirror .tiptap-mathematics-render {
+  /* Equations: the node view renders KaTeX locally from stored LaTeX. */
+  .doc-content .ProseMirror .tiptap-mathematics-render[data-type="block-math"] {
     @apply my-4 overflow-x-auto rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-center;
+  }
+
+  .doc-content .ProseMirror .tiptap-mathematics-render[data-type="inline-math"] {
+    @apply rounded-sm px-0.5;
   }
 
   .doc-content .ProseMirror .tiptap-mathematics-render.ProseMirror-selectednode {
@@ -136,6 +140,10 @@
 
   .doc-content .ProseMirror .tiptap-mathematics-render.block-math-error {
     @apply whitespace-pre-wrap break-words text-left font-mono text-xs text-destructive;
+  }
+
+  .doc-content .ProseMirror .tiptap-mathematics-render.inline-math-error {
+    @apply font-mono text-xs text-destructive;
   }
 
   /* Manual tables. Widths come from the stored document, never from the current

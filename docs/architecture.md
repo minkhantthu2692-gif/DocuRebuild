@@ -251,7 +251,7 @@ src/
 - The editor extension list is defined once in `lib/editor-extensions.ts` and used
   by both the React editor and the tests, so a node cannot work in a test while
   being absent from the real editor. StarterKit, text alignment, the figure node,
-  the block equation node, the placeholder and `TableKit` live there.
+  the block and inline equation nodes, the placeholder and `TableKit` live there.
 - A best-effort flush runs when leaving the workspace. It complements the document
   version history but is not a substitute for a project backup.
 - Imports start a job and poll it every 500 ms while active. The progress panel
@@ -435,25 +435,32 @@ src/
   every cell's text survive. Per-cell vertical alignment and column resizing are
   still not implemented.
 
-### Display equations
+### Equations
 
-- `BlockMath` from `@tiptap/extension-mathematics` adds a `blockMath` block atom
-  with one `latex` attribute. Only the LaTeX source is stored in the document; the
-  editor renders it with KaTeX in a node view. KaTeX and its stylesheet are bundled
-  locally, so rendering works offline and makes no request.
-- The toolbar equation dialog is the only insertion path. It previews the typed
-  source through `renderEquationPreview` with `throwOnError: true` and
-  `trust: false`; blank or invalid LaTeX disables insertion instead of saving a
-  broken equation. Pasting LaTeX is supported through the normal textarea, but the
-  app does not recognise equations from OCR or AI yet.
-- A selected `blockMath` node is edited in place with `updateBlockMath`; otherwise
-  the dialog inserts a new block with `insertBlockMath`. `selectedEquation` ignores
-  a collapsed cursor, and applying re-reads the stored position through
-  `equationAt` (bounds-checked because `nodeAt` throws outside the document), so a
-  node removed while the dialog is open can never be replaced by another one.
-- Because the node is ordinary document content, autosave, revisions, project
-  backups and restore need no equation-specific handling. The dialog and node view
-  use existing design tokens and locale strings.
+- `BlockMath` and `InlineMath` from `@tiptap/extension-mathematics` add
+  `blockMath` and `inlineMath` atoms with one `latex` attribute each. Only the
+  LaTeX source is stored in the document; the editor renders it with KaTeX in a
+  node view. KaTeX and its stylesheet are bundled locally, so rendering works
+  offline and makes no request.
+- The toolbar has one button for a display equation and one for an inline formula.
+  The shared dialog is the only insertion path: it previews the typed source
+  through `renderEquationPreview` with `throwOnError: true` and `trust: false`
+  (`displayMode` follows the equation kind); blank or invalid LaTeX disables
+  insertion instead of saving a broken equation. Pasting LaTeX is supported through
+  the normal textarea, but the app does not recognise equations from OCR or AI yet.
+- The inline extension's automatic `$$...$$` input rule is disabled, so typing
+  dollars in prose is never silently converted into math. This keeps the dialog the
+  single, explicit insertion path.
+- A selected math node is edited in place with `updateBlockMath` or
+  `updateInlineMath` at its stored position; otherwise the dialog inserts a new
+  node. `selectedEquation` ignores a collapsed cursor, and applying re-reads the
+  stored position through `equationAt` (bounds-checked because `nodeAt` throws
+  outside the document), so a node removed while the dialog is open can never be
+  replaced by another one.
+- Because the nodes are ordinary document content, autosave, revisions, project
+  backups and restore need no equation-specific handling. The dialog and node views
+  use existing design tokens and locale strings; block and inline math have
+  separate node-view styling.
 
 ### Document export
 

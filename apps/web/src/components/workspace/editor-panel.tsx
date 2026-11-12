@@ -24,6 +24,7 @@ import {
   Redo2,
   Search,
   Sigma,
+  SquareFunction,
   Strikethrough,
   Type,
   Underline as UnderlineIcon,
@@ -67,8 +68,10 @@ import { api } from "@/lib/api";
 import { createEditorExtensions } from "@/lib/editor-extensions";
 import {
   equationAt,
+  equationContent,
   renderEquationPreview,
   selectedEquation,
+  type EquationKind,
   type SelectedEquation,
 } from "@/lib/editor-equation";
 import { figureInsertionContent, figureAt, selectedFigure, type SelectedFigure } from "@/lib/editor-figure";
@@ -164,6 +167,8 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [equationSelection, setEquationSelection] = useState<SelectedEquation | null>(null);
   const [equationOpen, setEquationOpen] = useState(false);
   const [equationLatex, setEquationLatex] = useState("");
+  // Used when inserting; an edited equation takes its kind from the node.
+  const [equationKind, setEquationKind] = useState<EquationKind>("block");
 
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
@@ -438,15 +443,21 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   }, [editor, figureSelection, figureCaption, figureAlt, t]);
 
   const equationPreview = useMemo(
-    () => renderEquationPreview(equationLatex),
-    [equationLatex],
+    () => renderEquationPreview(equationLatex, equationKind),
+    [equationLatex, equationKind],
   );
 
-  const openEquationDialog = useCallback(() => {
-    if (!editor) return;
-    setEquationLatex(selectedEquation(editor.state)?.latex ?? "");
-    setEquationOpen(true);
-  }, [editor]);
+  const openEquationDialog = useCallback(
+    (kind: EquationKind) => {
+      if (!editor) return;
+      const selected = selectedEquation(editor.state);
+      // Editing keeps the selected node's kind; a new equation uses the button.
+      setEquationKind(selected?.kind ?? kind);
+      setEquationLatex(selected?.latex ?? "");
+      setEquationOpen(true);
+    },
+    [editor],
+  );
 
   const applyEquation = useCallback(() => {
     if (!editor) return;
@@ -461,17 +472,17 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
         toast.error(t("editor.equation.gone"));
         return;
       }
-      editor
-        .chain()
-        .focus()
-        .setNodeSelection(equationSelection.pos)
-        .updateBlockMath({ latex })
-        .run();
+      const chain = editor.chain().focus().setNodeSelection(equationSelection.pos);
+      if (equationSelection.kind === "inline") {
+        chain.updateInlineMath({ latex, pos: equationSelection.pos }).run();
+      } else {
+        chain.updateBlockMath({ latex, pos: equationSelection.pos }).run();
+      }
     } else {
-      editor.chain().focus().insertBlockMath({ latex }).run();
+      editor.chain().focus().insertContent(equationContent(latex, equationKind)).run();
     }
     setEquationOpen(false);
-  }, [editor, equationLatex, equationPreview.error, equationSelection, t]);
+  }, [editor, equationKind, equationLatex, equationPreview.error, equationSelection, t]);
 
   const removeEquation = useCallback(() => {
     if (!editor || !equationSelection) return;
@@ -480,12 +491,12 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
       toast.error(t("editor.equation.gone"));
       return;
     }
-    editor
-      .chain()
-      .focus()
-      .setNodeSelection(equationSelection.pos)
-      .deleteBlockMath()
-      .run();
+    const chain = editor.chain().focus().setNodeSelection(equationSelection.pos);
+    if (equationSelection.kind === "inline") {
+      chain.deleteInlineMath({ pos: equationSelection.pos }).run();
+    } else {
+      chain.deleteBlockMath({ pos: equationSelection.pos }).run();
+    }
     setEquationOpen(false);
   }, [editor, equationSelection, t]);
 
@@ -847,9 +858,17 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
         <ToolbarButton
           label={t("editor.equation.label")}
           icon={Sigma}
-          active={Boolean(equationSelection)}
+          active={equationSelection?.kind === "block"}
           disabled={!editor?.isEditable}
-          onClick={openEquationDialog}
+          onClick={() => openEquationDialog("block")}
+        />
+
+        <ToolbarButton
+          label={t("editor.equation.inlineLabel")}
+          icon={SquareFunction}
+          active={equationSelection?.kind === "inline"}
+          disabled={!editor?.isEditable}
+          onClick={() => openEquationDialog("inline")}
         />
 
         <Separator orientation="vertical" className="mx-1 h-5" />
@@ -1202,9 +1221,15 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
               <DialogTitle>
                 {equationSelection
                   ? t("editor.equation.editTitle")
-                  : t("editor.equation.insertTitle")}
+                  : equationKind === "inline"
+                    ? t("editor.equation.inlineInsertTitle")
+                    : t("editor.equation.insertTitle")}
               </DialogTitle>
-              <DialogDescription>{t("editor.equation.description")}</DialogDescription>
+              <DialogDescription>
+                {equationKind === "inline"
+                  ? t("editor.equation.inlineDescription")
+                  : t("editor.equation.description")}
+              </DialogDescription>
             </DialogHeader>
 
             <div className="mt-4 space-y-4">
@@ -1251,7 +1276,9 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
               </div>
 
               <p className="text-2xs leading-relaxed text-muted-foreground">
-                {t("editor.equation.note")}
+                {equationKind === "inline"
+                  ? t("editor.equation.inlineNote")
+                  : t("editor.equation.note")}
               </p>
             </div>
 
@@ -1275,7 +1302,9 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
               >
                 {equationSelection
                   ? t("editor.equation.update")
-                  : t("editor.equation.insert")}
+                  : equationKind === "inline"
+                    ? t("editor.equation.insertInline")
+                    : t("editor.equation.insert")}
               </Button>
             </DialogFooter>
           </form>

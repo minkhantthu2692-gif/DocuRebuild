@@ -119,11 +119,12 @@ data on your device, and treats every AI result as a reviewable proposal.
   toggle the header, or delete the table. Every cell is typed by hand; no cell text
   is generated from a source image. Tables are part of the saved document, version
   history, backups and Markdown/TXT export.
-- **Display equations** — type a LaTeX equation in the toolbar dialog and check the
-  local KaTeX preview before inserting it. Empty or invalid LaTeX is refused rather
-  than saved. Only the LaTeX source is stored, so equations work offline and are
-  part of the document, versions, backups, Markdown (`$$` blocks) and plain text.
-  Equations are typed by you; OCR or AI equation recognition is not implemented.
+- **Equations** — insert a display equation or an inline formula from the toolbar
+  dialog and check the local KaTeX preview before inserting it. Empty or invalid
+  LaTeX is refused rather than saved. Only the LaTeX source is stored, so equations
+  work offline and are part of the document, versions, backups, Markdown (`$$`
+  blocks and `$...$` formulas) and plain text. Equations are typed by you; OCR or AI
+  equation recognition is not implemented.
 - **Project activity log** — the workspace project menu lists local events newest
   first: imports, page processing, region extraction, OCR, document exports and
   backups. Entries are metadata only (counts, formats, sizes, ids and timestamps);
@@ -629,14 +630,14 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 
 ## Known limitations
 
-- The editor covers core rich text, manual tables and display equations, not the
-  full target model (footnotes and page layout are pending). Figures are supported
-  as block image nodes from the region library; their caption and alt text can be
+- The editor covers core rich text, manual tables and equations, not the full
+  target model (footnotes and page layout are pending). Figures are supported as
+  block image nodes from the region library; their caption and alt text can be
   edited, but figure numbering and cross-references are not implemented.
-- Equations are typed as LaTeX; OCR and AI do not transcribe or suggest them, and
-  only display equations are offered (no inline math yet). Invalid LaTeX is refused
-  before insertion, but the editor cannot verify that the equation matches the
-  source page. Markdown exports a `$$` block and plain text the LaTeX source. The
+- Equations are typed as LaTeX; OCR and AI do not transcribe or suggest them.
+  Invalid LaTeX is refused before insertion, but the editor cannot verify that the
+  equation matches the source page. Markdown exports display equations as a `$$`
+  block and inline formulas as `$...$`; plain text keeps the LaTeX source. The
   version preview and line diff are text-based, so an equation-only change is
   stored and restorable but may not appear in the comparison.
 - Table limits: inserting offers 1–10 rows and columns, and merged cells can be
@@ -725,8 +726,8 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions and user-typed display equations with local preview, plus faithful table/equation export; automatic table/equation extraction and figure numbering pending |
-| 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display equations and local Markdown and TXT export; inline math, DOCX and page layout pending |
+| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions and user-typed display and inline equations with local preview, plus faithful table/equation export; automatic table/equation extraction and figure numbering pending |
+| 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display and inline equations and local Markdown and TXT export; DOCX and page layout pending |
 | 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, plus verified project backup download and additive restore; selective restore and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |

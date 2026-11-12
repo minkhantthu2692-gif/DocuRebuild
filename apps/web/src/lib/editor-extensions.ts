@@ -1,5 +1,5 @@
 import Placeholder from "@tiptap/extension-placeholder";
-import { BlockMath } from "@tiptap/extension-mathematics";
+import { BlockMath, InlineMath } from "@tiptap/extension-mathematics";
 import { TableKit } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
 import StarterKit from "@tiptap/starter-kit";
@@ -43,6 +43,12 @@ export function createEditorExtensions(placeholder: () => string) {
     // single block atom avoids dollar-sign input rules rewriting currency text.
     // Invalid LaTeX is shown as its source instead of disappearing silently.
     BlockMath.configure({
+      katexOptions: { throwOnError: true, strict: "ignore" },
+    }),
+    // Inline math is inserted only from the dialog. The extension's automatic
+    // `$$...$$` input rule would rewrite typed prose without asking, so it is
+    // disabled here instead of surprising the user mid-sentence.
+    InlineMath.extend({ addInputRules: () => [] }).configure({
       katexOptions: { throwOnError: true, strict: "ignore" },
     }),
     Placeholder.configure({ placeholder }),

@@ -23,13 +23,17 @@ function createEditor(): Editor {
   });
 }
 
-function insertEquation(instance: Editor, latex: string): number {
-  instance.commands.insertContent(equationContent(latex));
+function findNodePos(instance: Editor, name: string): number {
   let pos = -1;
   instance.state.doc.descendants((node, nodePos) => {
-    if (node.type.name === "blockMath") pos = nodePos;
+    if (node.type.name === name) pos = nodePos;
   });
   return pos;
+}
+
+function insertEquation(instance: Editor, latex: string, kind: "block" | "inline" = "block"): number {
+  instance.commands.insertContent(equationContent(latex, kind));
+  return findNodePos(instance, kind === "inline" ? "inlineMath" : "blockMath");
 }
 
 describe("equation editor node", () => {
@@ -58,6 +62,7 @@ describe("equation editor node", () => {
     expect(selectedEquation(editor.state)).toEqual({
       pos,
       latex: "a^2 + b^2 = c^2",
+      kind: "block",
     });
   });
 
@@ -97,5 +102,68 @@ describe("equation editor node", () => {
 
     const invalid = renderEquationPreview("\\frac{");
     expect(invalid).toEqual({ html: null, error: true });
+  });
+
+  it("inserts inline math inside a paragraph without dropping the text", () => {
+    editor = createEditor();
+    editor.commands.insertContent("Energy ");
+    const pos = insertEquation(editor, "E = mc^2", "inline");
+    editor.commands.insertContent(" and momentum.");
+
+    const paragraph = editor.getJSON().content?.[0];
+    expect(paragraph?.content?.map((node) => node.type)).toEqual([
+      "text",
+      "inlineMath",
+      "text",
+    ]);
+    expect(paragraph?.content?.[1]).toMatchObject({
+      type: "inlineMath",
+      attrs: { latex: "E = mc^2" },
+    });
+
+    // Inline math stays inside the paragraph and is saved as source only.
+    expect(equationAt(editor.state, pos)).toEqual({
+      pos,
+      latex: "E = mc^2",
+      kind: "inline",
+    });
+    const html = editor.getHTML();
+    expect(html).toContain('data-type="inline-math"');
+    expect(html).not.toContain("katex");
+  });
+
+  it("updates an inline formula in place", () => {
+    editor = createEditor();
+    const pos = insertEquation(editor, "x", "inline");
+
+    editor
+      .chain()
+      .setNodeSelection(pos)
+      .updateInlineMath({ latex: "x^2", pos })
+      .run();
+
+    expect(equationAt(editor.state, pos)).toEqual({ pos, latex: "x^2", kind: "inline" });
+    expect(editor.state.doc.textContent).toBe("");
+  });
+
+  it("previews inline math without display spacing", () => {
+    const block = renderEquationPreview("x^2");
+    const inline = renderEquationPreview("x^2", "inline");
+
+    expect(block.html).toContain("katex-display");
+    expect(inline.error).toBe(false);
+    expect(inline.html).toContain("katex");
+    expect(inline.html).not.toContain("katex-display");
+  });
+
+  it("does not convert typed prose into inline math automatically", () => {
+    editor = createEditor();
+    const extension = editor.extensionManager.extensions.find(
+      (item) => item.name === "inlineMath",
+    ) as { config: { addInputRules?: () => unknown[] } } | undefined;
+
+    expect(extension).toBeDefined();
+    // The dialog is the only way in: no `$$...$$` input rule rewrites prose.
+    expect(extension?.config.addInputRules?.()).toEqual([]);
   });
 });
