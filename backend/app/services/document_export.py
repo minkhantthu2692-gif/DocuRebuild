@@ -119,6 +119,8 @@ def _inline_markdown(nodes: list[dict[str, Any]] | None) -> str:
             parts.append("  \n")
         elif kind == "figure":
             parts.append(_figure_marker(node, markdown=True))
+        elif kind == "inlineMath":
+            parts.append(_equation_marker(node, markdown=True, block=False))
         else:
             # Unknown inline node: keep any readable text, never drop content.
             parts.append(_inline_markdown(node.get("content")))
@@ -141,6 +143,8 @@ def _inline_text(nodes: list[dict[str, Any]] | None) -> str:
             parts.append("\n")
         elif kind == "figure":
             parts.append(_figure_marker(node, markdown=False))
+        elif kind == "inlineMath":
+            parts.append(_equation_marker(node, markdown=False, block=False))
         else:
             parts.append(_inline_text(node.get("content")))
     return "".join(parts)
@@ -164,6 +168,23 @@ def _figure_marker(node: dict[str, Any], *, markdown: bool) -> str:
             else:
                 marker = f"{marker}\n" + "\n".join(note_lines)
     return marker
+
+
+def _equation_latex(node: dict[str, Any]) -> str:
+    """Read the stored LaTeX source without altering it."""
+    latex = (node.get("attrs") or {}).get("latex")
+    return latex.strip() if isinstance(latex, str) else ""
+
+
+def _equation_marker(node: dict[str, Any], *, markdown: bool, block: bool) -> str:
+    latex = _equation_latex(node)
+    if not latex:
+        return ""
+    if not markdown:
+        # Plain text keeps the exact LaTeX source the user typed.
+        return latex
+    # Math must never be escaped as prose, or its backslashes break.
+    return f"$$\n{latex}\n$$" if block else f"${latex}$"
 
 
 def _cell_parts(node: dict[str, Any], *, markdown: bool) -> list[str]:
@@ -358,6 +379,8 @@ def _block_markdown(node: dict[str, Any], depth: int = 0) -> str:
         return "---"
     if kind == "figure":
         return _figure_marker(node, markdown=True)
+    if kind == "blockMath":
+        return _equation_marker(node, markdown=True, block=True)
     if kind == "table":
         return _table_markdown(node)
     if kind == "hardBreak":
@@ -423,6 +446,8 @@ def _block_text(node: dict[str, Any]) -> str:
         return "-" * 3
     if kind == "figure":
         return _figure_marker(node, markdown=False)
+    if kind == "blockMath":
+        return _equation_marker(node, markdown=False, block=True)
     if kind == "table":
         return _table_text(node)
     if kind == "hardBreak":

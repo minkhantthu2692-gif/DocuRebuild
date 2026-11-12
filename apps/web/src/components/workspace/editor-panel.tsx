@@ -23,6 +23,7 @@ import {
   Quote,
   Redo2,
   Search,
+  Sigma,
   Strikethrough,
   Type,
   Underline as UnderlineIcon,
@@ -52,7 +53,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
@@ -64,6 +65,12 @@ import { useAppSettings, useUpdateSettings } from "@/hooks/use-app";
 import { useDocument, useSaveDocument } from "@/hooks/use-document";
 import { api } from "@/lib/api";
 import { createEditorExtensions } from "@/lib/editor-extensions";
+import {
+  equationAt,
+  renderEquationPreview,
+  selectedEquation,
+  type SelectedEquation,
+} from "@/lib/editor-equation";
 import { figureInsertionContent, figureAt, selectedFigure, type SelectedFigure } from "@/lib/editor-figure";
 import { findMatches } from "@/lib/editor-search";
 import { resolveLocale } from "@/lib/format";
@@ -154,6 +161,9 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [figureOpen, setFigureOpen] = useState(false);
   const [figureCaption, setFigureCaption] = useState("");
   const [figureAlt, setFigureAlt] = useState("");
+  const [equationSelection, setEquationSelection] = useState<SelectedEquation | null>(null);
+  const [equationOpen, setEquationOpen] = useState(false);
+  const [equationLatex, setEquationLatex] = useState("");
 
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
@@ -186,10 +196,12 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
       latestText.current = text;
       setPlainText(text);
       setFigureSelection(selectedFigure(instance.state));
+      setEquationSelection(selectedEquation(instance.state));
       setRevision(revisionRef.current);
     },
     onSelectionUpdate: ({ editor: instance }) => {
       setFigureSelection(selectedFigure(instance.state));
+      setEquationSelection(selectedEquation(instance.state));
     },
   });
 
@@ -424,6 +436,58 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
       .run();
     setFigureOpen(false);
   }, [editor, figureSelection, figureCaption, figureAlt, t]);
+
+  const equationPreview = useMemo(
+    () => renderEquationPreview(equationLatex),
+    [equationLatex],
+  );
+
+  const openEquationDialog = useCallback(() => {
+    if (!editor) return;
+    setEquationLatex(selectedEquation(editor.state)?.latex ?? "");
+    setEquationOpen(true);
+  }, [editor]);
+
+  const applyEquation = useCallback(() => {
+    if (!editor) return;
+    const latex = equationLatex.trim();
+    // Invalid or empty LaTeX is never inserted; the dialog explains why.
+    if (!latex || equationPreview.error) return;
+    if (equationSelection) {
+      if (!equationAt(editor.state, equationSelection.pos)) {
+        // The document changed while the dialog was open. Never edit a node
+        // that merely happens to sit at the old position now.
+        setEquationOpen(false);
+        toast.error(t("editor.equation.gone"));
+        return;
+      }
+      editor
+        .chain()
+        .focus()
+        .setNodeSelection(equationSelection.pos)
+        .updateBlockMath({ latex })
+        .run();
+    } else {
+      editor.chain().focus().insertBlockMath({ latex }).run();
+    }
+    setEquationOpen(false);
+  }, [editor, equationLatex, equationPreview.error, equationSelection, t]);
+
+  const removeEquation = useCallback(() => {
+    if (!editor || !equationSelection) return;
+    if (!equationAt(editor.state, equationSelection.pos)) {
+      setEquationOpen(false);
+      toast.error(t("editor.equation.gone"));
+      return;
+    }
+    editor
+      .chain()
+      .focus()
+      .setNodeSelection(equationSelection.pos)
+      .deleteBlockMath()
+      .run();
+    setEquationOpen(false);
+  }, [editor, equationSelection, t]);
 
   const applyRestoredDocument = useCallback(
     (record: DocumentRecord) => {
@@ -780,6 +844,14 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           onClick={openFigureDialog}
         />
 
+        <ToolbarButton
+          label={t("editor.equation.label")}
+          icon={Sigma}
+          active={Boolean(equationSelection)}
+          disabled={!editor?.isEditable}
+          onClick={openEquationDialog}
+        />
+
         <Separator orientation="vertical" className="mx-1 h-5" />
 
         <ToolbarButton
@@ -1113,6 +1185,98 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
                 {tCommon("actions.cancel")}
               </Button>
               <Button type="submit">{t("editor.figure.apply")}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={equationOpen} onOpenChange={setEquationOpen}>
+        <DialogContent className="max-w-lg">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              applyEquation();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>
+                {equationSelection
+                  ? t("editor.equation.editTitle")
+                  : t("editor.equation.insertTitle")}
+              </DialogTitle>
+              <DialogDescription>{t("editor.equation.description")}</DialogDescription>
+            </DialogHeader>
+
+            <div className="mt-4 space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="equation-latex">{t("editor.equation.source")}</Label>
+                <Textarea
+                  id="equation-latex"
+                  dir="ltr"
+                  className="min-h-24 font-mono text-xs"
+                  value={equationLatex}
+                  onChange={(event) => setEquationLatex(event.target.value)}
+                  placeholder="E = mc^2"
+                  spellCheck={false}
+                  autoFocus
+                />
+                <p className="text-2xs leading-relaxed text-muted-foreground">
+                  {t("editor.equation.sourceHint")}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-2xs font-medium text-muted-foreground">
+                  {t("editor.equation.preview")}
+                </p>
+                <div
+                  aria-live="polite"
+                  aria-label={t("editor.equation.preview")}
+                  className="flex min-h-16 items-center justify-center overflow-x-auto rounded-md border border-border/60 bg-muted/20 px-3 py-2"
+                >
+                  {equationPreview.error ? (
+                    <p role="alert" className="text-xs leading-relaxed text-destructive">
+                      {t("editor.equation.invalid")}
+                    </p>
+                  ) : equationPreview.html ? (
+                    // KaTeX output is generated locally with trust disabled, so the
+                    // markup contains no links or HTML from the source.
+                    <div dangerouslySetInnerHTML={{ __html: equationPreview.html }} />
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {t("editor.equation.emptyPreview")}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-2xs leading-relaxed text-muted-foreground">
+                {t("editor.equation.note")}
+              </p>
+            </div>
+
+            <DialogFooter>
+              {equationSelection ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="mr-auto"
+                  onClick={removeEquation}
+                >
+                  {t("editor.equation.remove")}
+                </Button>
+              ) : null}
+              <Button type="button" variant="outline" onClick={() => setEquationOpen(false)}>
+                {tCommon("actions.cancel")}
+              </Button>
+              <Button
+                type="submit"
+                disabled={!equationLatex.trim() || equationPreview.error}
+              >
+                {equationSelection
+                  ? t("editor.equation.update")
+                  : t("editor.equation.insert")}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

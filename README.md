@@ -101,8 +101,9 @@ data on your device, and treats every AI result as a reviewable proposal.
   document as Markdown or plain text. The export is generated on this device by
   the backend from the same document the editor autosaves; unsaved changes are
   flushed first, and the download is refused if that save fails. Extracted text is
-  escaped so it can never turn into Markdown structure, and figure assets stay in
-  the project instead of being copied into the file.
+  escaped so it can never turn into Markdown structure, figure assets stay in
+  the project instead of being copied into the file, and equations are written as
+  their LaTeX source.
 - **Document versions** — the editor header keeps a local version history. Automatic
   versions are captured when the document changes, a manual checkpoint can be saved
   at any time, restoring a version always keeps the state it replaces, so a restore
@@ -118,6 +119,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   toggle the header, or delete the table. Every cell is typed by hand; no cell text
   is generated from a source image. Tables are part of the saved document, version
   history, backups and Markdown/TXT export.
+- **Display equations** — type a LaTeX equation in the toolbar dialog and check the
+  local KaTeX preview before inserting it. Empty or invalid LaTeX is refused rather
+  than saved. Only the LaTeX source is stored, so equations work offline and are
+  part of the document, versions, backups, Markdown (`$$` blocks) and plain text.
+  Equations are typed by you; OCR or AI equation recognition is not implemented.
 - **Project activity log** — the workspace project menu lists local events newest
   first: imports, page processing, region extraction, OCR, document exports and
   backups. Entries are metadata only (counts, formats, sizes, ids and timestamps);
@@ -131,8 +137,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 ### Not available yet
 
-Structured element reconstruction (automatic table-cell extraction, equation
-transcription, generative figure detection), cloud/free-tier AI providers,
+Structured element reconstruction (automatic table-cell extraction, automatic
+equation transcription, generative figure detection), cloud/free-tier AI providers,
 image-generation profiles,
 DOCX export, desktop packaging and PWA install support are planned but not
 implemented. OCR extracts text blocks,
@@ -167,6 +173,7 @@ See [`docs/roadmap.md`](docs/roadmap.md).
 | --- | --- |
 | Web client | React 18, TypeScript, Vite, Tailwind CSS, Radix UI primitives |
 | Editor | Tiptap 3 (ProseMirror) |
+| Equations | KaTeX (bundled locally, MIT) |
 | i18n | i18next / react-i18next (English default, Burmese secondary) |
 | Local API | Python, FastAPI, SQLAlchemy, Alembic, SQLite |
 | Image processing | Pillow |
@@ -622,10 +629,16 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 
 ## Known limitations
 
-- The editor covers core rich text and manual tables, not the full target model
-  (equations, footnotes and page layout are pending). Figures are supported as
-  block image nodes from the region library; their caption and alt text can be
+- The editor covers core rich text, manual tables and display equations, not the
+  full target model (footnotes and page layout are pending). Figures are supported
+  as block image nodes from the region library; their caption and alt text can be
   edited, but figure numbering and cross-references are not implemented.
+- Equations are typed as LaTeX; OCR and AI do not transcribe or suggest them, and
+  only display equations are offered (no inline math yet). Invalid LaTeX is refused
+  before insertion, but the editor cannot verify that the equation matches the
+  source page. Markdown exports a `$$` block and plain text the LaTeX source. The
+  version preview and line diff are text-based, so an equation-only change is
+  stored and restorable but may not appear in the comparison.
 - Table limits: inserting offers 1–10 rows and columns, and merged cells can be
   created by selecting multiple cells and choosing merge/split. There is no
   per-cell alignment beyond paragraph alignment and no column resizing. Automatic
@@ -689,6 +702,9 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 - PyMuPDF (the PDF rendering library) is dual-licensed under AGPL-3.0 or a
   commercial Artifex licence. Running DocuRebuild locally is unaffected, but
   anyone distributing a packaged build should review those terms before release.
+- KaTeX and its fonts are bundled for offline equation rendering under the MIT
+  licence. The stylesheet is served from the app bundle; no request is made to a
+  math service.
 - OCR results and extracted regions become marked stale when the page image or
   rotation changes. They are never silently applied as if they matched the new
   page. The same applies to embedded PDF text after a page is rotated.
@@ -709,8 +725,8 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions and faithful table export done; automatic table extraction, equations and figure numbering pending |
-| 8. Document editor and export | In progress: rich-text editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
+| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions and user-typed display equations with local preview, plus faithful table/equation export; automatic table/equation extraction and figure numbering pending |
+| 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display equations and local Markdown and TXT export; inline math, DOCX and page layout pending |
 | 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, plus verified project backup download and additive restore; selective restore and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |

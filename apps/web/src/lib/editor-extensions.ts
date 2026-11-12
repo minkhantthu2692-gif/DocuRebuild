@@ -1,4 +1,5 @@
 import Placeholder from "@tiptap/extension-placeholder";
+import { BlockMath } from "@tiptap/extension-mathematics";
 import { TableKit } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
 import StarterKit from "@tiptap/starter-kit";
@@ -38,6 +39,12 @@ export function createEditorExtensions(placeholder: () => string) {
       },
     }),
     FigureNode,
+    // Display equations only. The saved document keeps the LaTeX source, and a
+    // single block atom avoids dollar-sign input rules rewriting currency text.
+    // Invalid LaTeX is shown as its source instead of disappearing silently.
+    BlockMath.configure({
+      katexOptions: { throwOnError: true, strict: "ignore" },
+    }),
     Placeholder.configure({ placeholder }),
   ];
 }

@@ -7,6 +7,8 @@ import { initI18n } from "./i18n";
 import { applyCachedAppearance } from "./lib/appearance";
 
 import "./index.css";
+// Local KaTeX stylesheet and fonts; math never needs a network request.
+import "katex/dist/katex.min.css";
 
 applyCachedAppearance();
 initI18n();

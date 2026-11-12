@@ -251,7 +251,7 @@ src/
 - The editor extension list is defined once in `lib/editor-extensions.ts` and used
   by both the React editor and the tests, so a node cannot work in a test while
   being absent from the real editor. StarterKit, text alignment, the figure node,
-  the placeholder and `TableKit` live there.
+  the block equation node, the placeholder and `TableKit` live there.
 - A best-effort flush runs when leaving the workspace. It complements the document
   version history but is not a substitute for a project backup.
 - Imports start a job and poll it every 500 ms while active. The progress panel
@@ -435,6 +435,26 @@ src/
   every cell's text survive. Per-cell vertical alignment and column resizing are
   still not implemented.
 
+### Display equations
+
+- `BlockMath` from `@tiptap/extension-mathematics` adds a `blockMath` block atom
+  with one `latex` attribute. Only the LaTeX source is stored in the document; the
+  editor renders it with KaTeX in a node view. KaTeX and its stylesheet are bundled
+  locally, so rendering works offline and makes no request.
+- The toolbar equation dialog is the only insertion path. It previews the typed
+  source through `renderEquationPreview` with `throwOnError: true` and
+  `trust: false`; blank or invalid LaTeX disables insertion instead of saving a
+  broken equation. Pasting LaTeX is supported through the normal textarea, but the
+  app does not recognise equations from OCR or AI yet.
+- A selected `blockMath` node is edited in place with `updateBlockMath`; otherwise
+  the dialog inserts a new block with `insertBlockMath`. `selectedEquation` ignores
+  a collapsed cursor, and applying re-reads the stored position through
+  `equationAt` (bounds-checked because `nodeAt` throws outside the document), so a
+  node removed while the dialog is open can never be replaced by another one.
+- Because the node is ordinary document content, autosave, revisions, project
+  backups and restore need no equation-specific handling. The dialog and node view
+  use existing design tokens and locale strings.
+
 ### Document export
 
 - The document is exported by the backend from the stored Tiptap JSON, not by the
@@ -449,8 +469,8 @@ src/
 - `services.document_export` maps every known node deterministically: doc,
   paragraph, heading (levels 1–6, clamped), bullet/ordered lists (including
   `start`), listItem, blockquote, codeBlock (fence widened when the code contains
-  backticks), horizontalRule, hardBreak, table, text marks and the custom `figure`
-  atom.
+  backticks), horizontalRule, hardBreak, table, text marks, the custom `figure`
+  atom and the math nodes.
 - Markdown output escapes `` \ ` * _ [ ] < > `` and line-start markers (`#`,
   `-`, `+`, `>`, `1.`/`1)` and `---`), so extracted OCR text cannot become
   structure or raw HTML. Code spans are built from raw text so their content stays
@@ -459,6 +479,11 @@ src/
 - Figures never export their `src`. The local asset URL is meaningless outside the
   project, so the node becomes `[Figure: <caption>]` plus the source note. The
   project asset itself remains untouched and reinsertable.
+- Equations export as source, never as rendered HTML: a block equation becomes a
+  fenced `$$` block, an inline equation `$...$`, and plain text keeps the exact
+  LaTeX. Backslashes are not escaped as prose, and an equation without source is
+  skipped. The export depends only on the saved JSON, so it stays deterministic and
+  offline.
 - Tables render as GFM tables. Literal `|` is escaped, multi-block cells are joined
   with `<br>`, and a missing header row gets a blank structural one because GFM
   requires a separator. When `colspan`/`rowspan` greater than 1 are present, the
@@ -491,6 +516,10 @@ src/
   character count, source and timestamp; revision content is not sent for the list.
   `GET .../revisions/{id}` returns the exact stored content for the restore
   preview. Unknown ids return `revision_not_found` (404).
+- Summaries and the read-only line comparison are built from `plain_text`, which
+  contains prose but not LaTeX. An equation-only change is still snapshotted and
+  restores correctly, but the text preview and diff may not show it; the stored
+  content always does.
 - `POST .../document` creates a manual checkpoint of the current saved document and
   deduplicates against the newest revision. `POST .../revisions/{id}/restore`
   validates the id, writes the revision content and plain text through the same

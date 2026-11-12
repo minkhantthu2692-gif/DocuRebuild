@@ -215,6 +215,52 @@ def test_markdown_export_omits_asset_paths() -> None:
     assert "/api/" not in render_markdown(_doc())
 
 
+def _math_doc(*nodes: dict) -> dict:
+    return {"type": "doc", "content": list(nodes)}
+
+
+def test_markdown_export_writes_equations_as_math() -> None:
+    content = _math_doc(
+        {
+            "type": "blockMath",
+            "attrs": {"latex": r"\frac{a}{b} = \sum_{i=1}^{n} x_i"},
+        },
+        {
+            "type": "paragraph",
+            "content": [
+                {"type": "text", "text": "Inline "},
+                {"type": "inlineMath", "attrs": {"latex": r"E = mc^2"}},
+                {"type": "text", "text": " stays readable."},
+            ],
+        },
+    )
+    markdown = render_markdown(content)
+    # LaTeX backslashes must survive; math is never escaped as prose.
+    assert "$$\n\\frac{a}{b} = \\sum_{i=1}^{n} x_i\n$$" in markdown
+    assert "Inline $E = mc^2$ stays readable." in markdown
+    assert markdown.endswith("\n")
+
+
+def test_text_export_keeps_equation_source() -> None:
+    content = _math_doc(
+        {"type": "blockMath", "attrs": {"latex": r"\int_0^1 x^2\,dx"}},
+        {
+            "type": "paragraph",
+            "content": [{"type": "inlineMath", "attrs": {"latex": "a^2 + b^2"}}],
+        },
+    )
+    text = render_text(content)
+    assert "\\int_0^1 x^2\\,dx" in text
+    assert "a^2 + b^2" in text
+    assert "$$" not in text
+
+
+def test_export_skips_equations_without_latex() -> None:
+    content = _math_doc({"type": "blockMath", "attrs": {"latex": "   "}})
+    assert render_markdown(content) == ""
+    assert render_text(content) == ""
+
+
 def _paragraph(text: str) -> dict:
     return {
         "type": "paragraph",

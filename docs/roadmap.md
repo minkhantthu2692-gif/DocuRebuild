@@ -15,8 +15,8 @@ presented in the UI until it actually works.
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions and faithful Markdown/TXT table export; automatic table extraction, equations and figure numbering pending |
-| 8. Document editor and export | In progress | Core editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
+| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions, user-typed display equations with local KaTeX preview and faithful Markdown/TXT export; automatic table/equation extraction and figure numbering pending |
+| 8. Document editor and export | In progress | Core editor plus manual tables, figures, display equations and local Markdown and TXT export; inline math, footnotes, DOCX and page layout pending |
 | 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, plus verified project backup download and additive (new-project) restore; selective restore and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
@@ -328,6 +328,12 @@ the user must review every region before extracting it.
   figure enables the caption tool; the image, its stored source note, its size and
   its position stay unchanged, and the corrected caption is what Markdown and
   plain-text export write. A collapsed cursor next to a figure never edits it.
+- Display equations typed as LaTeX: a toolbar dialog previews the equation locally
+  with KaTeX, refuses empty or invalid source, and inserts or updates a `blockMath`
+  node that stores only the source. Rendering is offline and bundled; Markdown
+  export writes a `$$` block and plain text keeps the LaTeX. An equation-only change
+  is stored in the document and versions, though the text-based version diff may not
+  display it.
 
 **Pending**
 
@@ -337,7 +343,9 @@ the user must review every region before extracting it.
   proposal, never inserted without approval).
 - Figure numbering, cross-references, inline images in running text and optional
   structured figure reconstruction with approval.
-- LaTeX editing and live preview; validated OMML export for Word.
+- Automatic equation recognition from OCR/vision as a reviewable proposal, and
+  validated OMML export for Word.
+- Inline math entry; only display equations are offered in the toolbar.
 - Uncertain cells/symbols are marked for review, never invented.
 
 ## Phase 8 — Document editor and export (in progress)
@@ -378,16 +386,18 @@ the user must review every region before extracting it.
 - Tables export as GFM Markdown with escaped pipes and `<br>` inside multi-block
   cells; a missing header gets a structural blank header, and merged cells use an
   HTML table so no cell content is lost. Plain-text export keeps every cell.
+- Equations export as source: a `blockMath` node becomes a fenced `$$` block in
+  Markdown and its exact LaTeX in plain text. Backslashes are not escaped as prose.
 - `export` in `/api/meta`, English and Burmese labels, backend serializer and
   endpoint tests.
 
 **Current limitation** — export covers headings, paragraphs, lists, blockquotes,
-code blocks, rules, inline marks, tables and figure markers. Equations, footnotes
-and page layout are not part of the editor model yet, so they cannot be exported.
-DOCX, PDF and OMML export remain unimplemented.
+code blocks, rules, inline marks, tables, figure markers and display equations.
+Footnotes and page layout are not part of the editor model yet, so they cannot be
+exported. DOCX, PDF and OMML export remain unimplemented.
 
-**Pending** — per-cell alignment, images inline in text, equations, footnotes, page
-layout, headers/footers, page numbers, DOCX export and OMML validation.
+**Pending** — per-cell alignment, images inline in text, inline math, footnotes,
+page layout, headers/footers, page numbers, DOCX export and OMML validation.
 
 ## Phase 9 — History, backup and recovery (in progress)
 

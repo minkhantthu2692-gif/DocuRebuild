@@ -30,6 +30,8 @@ export default defineConfig({
           if (id.includes("@tiptap") || id.includes("prosemirror") || id.includes("tippy.js")) {
             return "editor";
           }
+          // KaTeX is only needed by the workspace editor; keep it out of vendor.
+          if (id.includes("katex")) return "math";
           if (id.includes("@radix-ui") || id.includes("lucide-react")) return "ui";
           if (id.includes("@tanstack")) return "query";
           return "vendor";

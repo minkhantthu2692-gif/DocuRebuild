@@ -132,6 +132,22 @@
       "gone": "This figure is no longer in the document.",
       "apply": "Save caption"
     },
+    "equation": {
+      "label": "Equation",
+      "insertTitle": "Insert equation",
+      "editTitle": "Edit equation",
+      "description": "Type a display equation in LaTeX. It is rendered on this device and saved as the LaTeX source.",
+      "source": "LaTeX source",
+      "sourceHint": "Example: \\frac{a}{b} = \\sqrt{x}. Nothing is sent to a server.",
+      "preview": "Preview",
+      "emptyPreview": "The preview appears as you type.",
+      "invalid": "This LaTeX could not be rendered. Check the syntax and try again.",
+      "note": "Markdown export writes the equation as $$...$$ and plain text keeps the LaTeX source. The equation is saved with the document and its versions.",
+      "remove": "Remove equation",
+      "update": "Save equation",
+      "insert": "Insert equation",
+      "gone": "This equation is no longer in the document."
+    },
     "paragraph": "Paragraph",
     "heading1": "Heading 1",
     "heading2": "Heading 2",
