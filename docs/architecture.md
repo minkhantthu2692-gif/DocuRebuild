@@ -247,6 +247,10 @@ src/
   auto-detected and pasted links cannot bypass the dialog. The link dialog can
   edit or remove an existing link, and `Ctrl/Cmd+K` opens it; the shortcut is
   ignored while the dialog is open or the editor is read-only.
+- The editor extension list is defined once in `lib/editor-extensions.ts` and used
+  by both the React editor and the tests, so a node cannot work in a test while
+  being absent from the real editor. StarterKit, text alignment, the figure node,
+  the placeholder and `TableKit` live there.
 - A best-effort flush runs when leaving the workspace. It complements the document
   version history but is not a substitute for a project backup.
 - Imports start a job and poll it every 500 ms while active. The progress panel
@@ -392,6 +396,28 @@ src/
   OCR did not read are not suggested, and no cell or equation structure is
   derived. `region_proposals` in `/api/meta` advertises the feature.
 
+### Document tables
+
+- `TableKit` from `@tiptap/extension-table` provides `table`, `tableRow`,
+  `tableHeader` and `tableCell`. Column resizing is disabled on purpose: stored
+  pixel widths are bound to one screen size, and Markdown cannot represent them. A
+  shared `doc-table` class provides styling through existing design tokens.
+- The insert dialog is the only way cell content enters a new table. It clamps the
+  requested size with `lib/editor-table.ts` (`TABLE_MIN_SIZE = 1`,
+  `TABLE_MAX_SIZE = 10`) and inserts empty cells plus an optional header row. No
+  OCR, AI or vision text is written into a cell.
+- When the selection is inside a table, the menu enables `addRowBefore/After`,
+  `addColumnBefore/After`, `deleteRow`, `deleteColumn`, `toggleHeaderRow` and
+  `deleteTable`. Buttons use `editor.can()` so a command that the current schema
+  cannot run stays disabled instead of failing silently.
+- The stored shape is `table > tableRow > tableCell|tableHeader > paragraph >
+  text`, with `colspan`, `rowspan` and `colwidth` attributes. It is ordinary Tiptap
+  content, so document saves, revisions and project backups need no table-specific
+  code.
+- Merging and splitting cells are supported by the underlying editor commands but
+  are not exposed in the menu yet; alignment and column resizing are not
+  implemented.
+
 ### Document export
 
 - The document is exported by the backend from the stored Tiptap JSON, not by the
@@ -406,7 +432,8 @@ src/
 - `services.document_export` maps every known node deterministically: doc,
   paragraph, heading (levels 1–6, clamped), bullet/ordered lists (including
   `start`), listItem, blockquote, codeBlock (fence widened when the code contains
-  backticks), horizontalRule, hardBreak, text marks and the custom `figure` atom.
+  backticks), horizontalRule, hardBreak, table, text marks and the custom `figure`
+  atom.
 - Markdown output escapes `` \ ` * _ [ ] < > `` and line-start markers (`#`,
   `-`, `+`, `>`, `1.`/`1)` and `---`), so extracted OCR text cannot become
   structure or raw HTML. Code spans are built from raw text so their content stays
@@ -415,6 +442,12 @@ src/
 - Figures never export their `src`. The local asset URL is meaningless outside the
   project, so the node becomes `[Figure: <caption>]` plus the source note. The
   project asset itself remains untouched and reinsertable.
+- Tables render as GFM tables. Literal `|` is escaped, multi-block cells are joined
+  with `<br>`, and a missing header row gets a blank structural one because GFM
+  requires a separator. When `colspan`/`rowspan` greater than 1 are present, the
+  whole table is written as HTML so merged content is not duplicated or dropped.
+  Plain text joins cells with ` | ` and inserts a `--- | ---` line after a real
+  header row.
 - The editor downloads through a temporary anchor. Before that it awaits the same
   save path used by autosave and aborts the download when the save fails, so a
   stale file is never produced. `export` in `/api/meta` advertises the feature.

@@ -111,6 +111,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   thumbnails, exports) from the dashboard or the workspace. Restoring a backup
   always creates a new project and never overwrites existing work. Everything is
   written and read on this device; nothing is uploaded.
+- **Manual tables** — insert an empty table from the editor toolbar with 1–10
+  rows and columns and an optional header row, then add or delete rows and columns,
+  toggle the header, or delete the table. Every cell is typed by hand; no cell text
+  is generated from a source image. Tables are part of the saved document, version
+  history, backups and Markdown/TXT export.
 - **Appearance and language** — light/dark/system themes, accent colours, radius,
   blur, density, text size, reduced motion, and live English/Burmese switching.
 - **Local-only defaults** — no account, no cloud database, no telemetry, and no
@@ -119,8 +124,9 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 ### Not available yet
 
-Structured element reconstruction (table cells, equation transcription, generative
-figure detection), cloud/free-tier AI providers, image-generation profiles,
+Structured element reconstruction (automatic table-cell extraction, equation
+transcription, generative figure detection), cloud/free-tier AI providers,
+image-generation profiles,
 DOCX export, desktop packaging and PWA install support are planned but not
 implemented. OCR extracts text blocks,
 reading order and conservative layout hints; it does not build table structure or
@@ -332,6 +338,25 @@ The URL is only contacted when you press **Test connection**, **Ask local AI** o
 There is no cloud provider, API key or paid call in this phase. A model name can also
 be typed manually when discovery is unsupported by the server.
 
+### Document tables
+
+Tables are reconstructed manually, cell by cell:
+
+- The table button in the editor toolbar inserts an **empty** table. Choose 1–10
+  rows and columns and whether the first row is a header. Nothing is filled in,
+  copied or guessed from the source page.
+- With the cursor inside a table the same menu adds a row above/below or a column
+  left/right, deletes the current row or column, toggles the header row, or deletes
+  the whole table. The picker limit only applies to the initial insert; rows and
+  columns can be added afterwards.
+- Tables are ordinary Tiptap nodes in the saved document. Autosave, version
+  history and project backups treat them like any other content, and they never
+  contain local asset URLs.
+- Column resizing is deliberately disabled: stored pixel widths would make the
+  layout depend on the screen that typed them, and Markdown cannot preserve them.
+  Cells are typed from the source and remain the user's responsibility; the app
+  does not mark them verified.
+
 ### Document export
 
 Markdown and plain-text export are local and need no provider, account or
@@ -349,6 +374,11 @@ extension:
 - Figures are written as an explicit `[Figure: <caption>]` marker plus their
   source note. The image itself is not embedded, because it remains a local
   project asset that has no meaning outside the app.
+- Tables export as GitHub-flavoured Markdown. A literal `|` is escaped, multiple
+  paragraphs in one cell are joined with `<br>`, and a table without a header gets
+  a blank structural header row. If merged cells are present, the table is written
+  as HTML instead so `colspan`/`rowspan` content is neither duplicated nor dropped.
+  Plain-text export keeps every cell with ` | ` separators.
 - The download name comes from the project name. Burmese names are sent with
   RFC 5987 encoding and get a safe ASCII fallback.
 
@@ -542,9 +572,14 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 
 ## Known limitations
 
-- The editor covers core rich text, not the full target model (editable tables,
-  equation nodes, footnotes and page layout are pending). Figures are
-  supported as block image nodes from the region library.
+- The editor covers core rich text and manual tables, not the full target model
+  (equations, footnotes and page layout are pending). Figures are supported as
+  block image nodes from the region library.
+- Table limits: inserting offers 1–10 rows and columns, cells cannot be merged or
+  split from the UI yet, and there is no per-cell alignment or column resizing.
+  Merged cells that arrive in a document are preserved by export, but automatic
+  table structure from OCR or vision is still not produced. A table is only as
+  accurate as the cell text you type.
 - Autosave is debounced and best-effort when leaving the page. Document versions
   protect the saved document, but they live in the same project database and are
   not a backup. Use **Download backup** for a complete copy; backups are manual,
@@ -619,8 +654,8 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | Planned |
-| 8. Document editor and export | In progress: rich-text editor plus local Markdown and TXT export; tables, equations, DOCX and page layout pending |
+| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools and faithful table export done; automatic table extraction, merge/split UI, equations and figure structure pending |
+| 8. Document editor and export | In progress: rich-text editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
 | 9. History, backup and recovery | In progress: local document versions with manual checkpoints and restore, plus verified project backup download and additive restore; processing/AI/export history views and scheduled backups pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |

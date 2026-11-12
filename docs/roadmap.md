@@ -15,8 +15,8 @@ presented in the UI until it actually works.
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | Planned | Depends on Phase 5/6 |
-| 8. Document editor and export | In progress | Core editor plus local Markdown and TXT export; tables, equations, DOCX and page layout pending |
+| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion and row/column/header tools, plus faithful Markdown/TXT table export; automatic table extraction, merge/split UI, equations and figure structure pending |
+| 8. Document editor and export | In progress | Core editor plus manual tables and local Markdown and TXT export; equations, DOCX and page layout pending |
 | 9. History, backup and recovery | In progress | Document versions with manual checkpoints and restore, plus verified project backup download and additive (new-project) restore; processing/AI/export history and selective restore pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
@@ -306,9 +306,26 @@ remains the source of truth. Vision proposals are rectangles with no extracted
 content and low confidence by design; their coordinates may still be imprecise, and
 the user must review every region before extracting it.
 
-## Phase 7 — Tables, figures and equations (planned)
+## Phase 7 — Tables, figures and equations (in progress)
 
-- Editable tables with merge/split, headers, alignment and comparison view.
+**Delivered**
+
+- Manual editable tables in the document editor: insert an empty table with 1–10
+  rows/columns and an optional header row, then add or delete rows and columns,
+  toggle the header, or delete the table. Every cell is typed by the user; no
+  content is generated from a source image.
+- Tables are ordinary Tiptap nodes, so saving, version history and project backups
+  need no special handling. Column resizing is disabled deliberately because pixel
+  widths are screen-dependent and cannot survive Markdown.
+- Markdown export renders GFM tables (escaped `|`, `<br>` for multiple blocks, a
+  blank structural header when none exists) and falls back to HTML for merged
+  cells so spans are not lost. Plain-text export keeps every cell.
+
+**Pending**
+
+- Merge/split controls in the table menu, per-cell alignment and comparison view.
+- Automatic table-structure extraction from OCR/vision (always as a reviewable
+  proposal, never inserted without approval).
 - Structured figure representation and optional reconstruction with approval.
 - LaTeX editing and live preview; validated OMML export for Word.
 - Uncertain cells/symbols are marked for review, never invented.
@@ -331,6 +348,9 @@ the user must review every region before extracting it.
   targets are rejected. The same policy applies to auto-detected and pasted links.
   Existing links can be edited or removed, and links are included in Markdown
   export (other export formats keep their text).
+- Manual tables in the toolbar: an empty table (1–10 rows/columns, optional header),
+  then contextual row/column insertion, deletion, header toggle and table delete.
+  Cells are typed by hand and are part of the saved document.
 - Local Markdown and plain-text export from the editor header. Both formats are
   rendered by the backend from the saved Tiptap document, so export works without
   an internet connection, AI provider or extra dependency.
@@ -345,16 +365,20 @@ the user must review every region before extracting it.
   syntax.
 - Figures export as an explicit `[Figure: <caption>]` marker with their source
   note. Local asset URLs are never written into the file.
+- Tables export as GFM Markdown with escaped pipes and `<br>` inside multi-block
+  cells; a missing header gets a structural blank header, and merged cells use an
+  HTML table so no cell content is lost. Plain-text export keeps every cell.
 - `export` in `/api/meta`, English and Burmese labels, backend serializer and
   endpoint tests.
 
 **Current limitation** — export covers headings, paragraphs, lists, blockquotes,
-code blocks, rules, inline marks and figure markers. Tables, equations,
-footnotes and page layout are not part of the editor model yet, so they cannot be
-exported. DOCX, PDF and OMML export remain unimplemented.
+code blocks, rules, inline marks, tables and figure markers. Equations, footnotes
+and page layout are not part of the editor model yet, so they cannot be exported.
+DOCX, PDF and OMML export remain unimplemented.
 
-**Pending** — tables, images inline in text, captions, equations, footnotes,
-page layout, headers/footers, page numbers, DOCX export and OMML validation.
+**Pending** — merge/split and cell alignment, images inline in text, captions,
+equations, footnotes, page layout, headers/footers, page numbers, DOCX export and
+OMML validation.
 
 ## Phase 9 — History, backup and recovery (in progress)
 

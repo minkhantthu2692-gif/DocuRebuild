@@ -15,6 +15,7 @@ API paths that are meaningless outside the app.
 
 from __future__ import annotations
 
+import html
 import re
 from pathlib import Path
 from typing import Any, Literal
@@ -165,6 +166,153 @@ def _figure_marker(node: dict[str, Any], *, markdown: bool) -> str:
     return marker
 
 
+def _cell_parts(node: dict[str, Any], *, markdown: bool) -> list[str]:
+    """Readable content of one table cell, block by block.
+
+    A cell can hold more than one paragraph. Every block is kept; nothing is
+    dropped because a Markdown table cell can only express inline content.
+    """
+    parts: list[str] = []
+    for child in node.get("content") or []:
+        if not isinstance(child, dict):
+            continue
+        kind = child.get("type")
+        if kind in {"paragraph", "heading"}:
+            rendered = (
+                _inline_markdown(child.get("content"))
+                if markdown
+                else _inline_text(child.get("content"))
+            )
+        else:
+            rendered = (
+                _block_markdown(child) if markdown else _block_text(child)
+            )
+        parts.append(rendered.strip("\n") if rendered else "")
+    return [part for part in parts if part]
+
+
+def _cell_span(cell: dict[str, Any], name: str) -> int:
+    attrs = cell.get("attrs") or {}
+    try:
+        value = int(attrs.get(name) or 1)
+    except (TypeError, ValueError):
+        return 1
+    return max(value, 1)
+
+
+def _table_rows(node: dict[str, Any]) -> list[list[dict[str, Any]]]:
+    rows: list[list[dict[str, Any]]] = []
+    for row in node.get("content") or []:
+        if not isinstance(row, dict) or row.get("type") != "tableRow":
+            continue
+        cells = [
+            cell
+            for cell in (row.get("content") or [])
+            if isinstance(cell, dict)
+            and cell.get("type") in {"tableCell", "tableHeader"}
+        ]
+        if cells:
+            rows.append(cells)
+    return rows
+
+
+def _table_has_spans(rows: list[list[dict[str, Any]]]) -> bool:
+    return any(
+        _cell_span(cell, "colspan") > 1 or _cell_span(cell, "rowspan") > 1
+        for row in rows
+        for cell in row
+    )
+
+
+def _table_header_row(rows: list[list[dict[str, Any]]]) -> bool:
+    if not rows:
+        return False
+    first = rows[0]
+    return bool(first) and all(
+        cell.get("type") == "tableHeader" for cell in first
+    )
+
+
+def _table_html(rows: list[list[dict[str, Any]]]) -> str:
+    """Faithful fallback for merged cells.
+
+    GFM tables cannot express ``colspan``/``rowspan``. Rendering HTML keeps the
+    exact cell structure instead of duplicating or dropping merged content.
+    """
+    lines = ["<table>"]
+    for row in rows:
+        lines.append("  <tr>")
+        for cell in row:
+            tag = "th" if cell.get("type") == "tableHeader" else "td"
+            attributes = ""
+            for name in ("colspan", "rowspan"):
+                span = _cell_span(cell, name)
+                if span > 1:
+                    attributes += f' {name}="{span}"'
+            parts = _cell_parts(cell, markdown=False)
+            text = "<br>".join(html.escape(part, quote=False) for part in parts)
+            lines.append(f"    <{tag}{attributes}>{text}</{tag}>")
+        lines.append("  </tr>")
+    lines.append("</table>")
+    return "\n".join(lines)
+
+
+def _table_markdown(node: dict[str, Any]) -> str:
+    rows = _table_rows(node)
+    if not rows:
+        return ""
+    if _table_has_spans(rows):
+        return _table_html(rows)
+
+    columns = max(len(row) for row in rows)
+    header = _table_header_row(rows)
+    body = rows[1:] if header else rows
+
+    def render_row(row: list[dict[str, Any]]) -> str:
+        cells: list[str] = []
+        for cell in row:
+            parts = _cell_parts(cell, markdown=True)
+            text = "<br>".join(parts).replace("\n", "<br>")
+            # A literal pipe would split the cell into two columns.
+            cells.append(text.replace("|", r"\|"))
+        cells.extend([""] * (columns - len(cells)))
+        return f"| {' | '.join(cells)} |"
+
+    # GFM requires a header row. If the table has none, an empty structural
+    # header is added; the real first row stays a data row.
+    header_cells = (
+        [_render_header_cell(cell) for cell in rows[0]]
+        if header
+        else [""] * columns
+    )
+    header_line = f"| {' | '.join(header_cells)} |"
+    separator = f"| {' | '.join('---' for _ in range(columns))} |"
+    body_lines = [render_row(row) for row in body]
+    return "\n".join([header_line, separator, *body_lines])
+
+
+def _render_header_cell(cell: dict[str, Any]) -> str:
+    parts = _cell_parts(cell, markdown=True)
+    # Header cells obey the same escaping as body cells.
+    return "<br>".join(parts).replace("\n", "<br>").replace("|", r"\|")
+
+
+def _table_text(node: dict[str, Any]) -> str:
+    rows = _table_rows(node)
+    if not rows:
+        return ""
+    columns = max(len(row) for row in rows)
+    header = _table_header_row(rows)
+    lines: list[str] = []
+    for index, row in enumerate(rows):
+        cells = [" ".join(_cell_parts(cell, markdown=False)) for cell in row]
+        cells.extend([""] * (columns - len(cells)))
+        lines.append(" | ".join(cells))
+        if header and index == 0:
+            lines.append(" | ".join("---" for _ in range(columns)))
+    return "\n".join(lines)
+
+
 def _block_markdown(node: dict[str, Any], depth: int = 0) -> str:
     kind = node.get("type")
     children = node.get("content") or []
@@ -210,6 +358,8 @@ def _block_markdown(node: dict[str, Any], depth: int = 0) -> str:
         return "---"
     if kind == "figure":
         return _figure_marker(node, markdown=True)
+    if kind == "table":
+        return _table_markdown(node)
     if kind == "hardBreak":
         return ""
     return _blocks_markdown(children, depth)
@@ -273,6 +423,8 @@ def _block_text(node: dict[str, Any]) -> str:
         return "-" * 3
     if kind == "figure":
         return _figure_marker(node, markdown=False)
+    if kind == "table":
+        return _table_text(node)
     if kind == "hardBreak":
         return ""
     return _blocks_text(children)

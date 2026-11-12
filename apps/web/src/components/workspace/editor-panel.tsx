@@ -1,8 +1,5 @@
-import Placeholder from "@tiptap/extension-placeholder";
-import TextAlign from "@tiptap/extension-text-align";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import type { Content } from "@tiptap/core";
-import StarterKit from "@tiptap/starter-kit";
 import {
   AlignCenter,
   AlignLeft,
@@ -65,13 +62,15 @@ import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAppSettings, useUpdateSettings } from "@/hooks/use-app";
 import { useDocument, useSaveDocument } from "@/hooks/use-document";
 import { api } from "@/lib/api";
-import { FigureNode, figureInsertionContent } from "@/lib/editor-figure";
+import { createEditorExtensions } from "@/lib/editor-extensions";
+import { figureInsertionContent } from "@/lib/editor-figure";
 import { findMatches } from "@/lib/editor-search";
 import { resolveLocale } from "@/lib/format";
 import { normalizeLinkUrl } from "@/lib/link";
 import { ocrInsertionContent } from "@/lib/ocr-insertion";
 import { countCharacters, countWords } from "@/lib/text";
 import { cn } from "@/lib/utils";
+import { EditorTableMenu } from "./editor-table-menu";
 import { RevisionDialog } from "./revision-dialog";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
@@ -164,27 +163,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   editorLabelRef.current = t("document");
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [1, 2, 3] },
-        underline: {},
-        link: {
-          openOnClick: false,
-          autolink: true,
-          linkOnPaste: true,
-          HTMLAttributes: {
-            rel: "noopener noreferrer nofollow",
-            target: "_blank",
-          },
-          // Pasted and auto-detected links must follow the same policy as the
-          // dialog, otherwise a non-http target could enter around it.
-          isAllowedUri: (url) => normalizeLinkUrl(url) !== null,
-        },
-      }),
-      TextAlign.configure({ types: ["heading", "paragraph"] }),
-      FigureNode,
-      Placeholder.configure({ placeholder: () => placeholderRef.current }),
-    ],
+    extensions: createEditorExtensions(() => placeholderRef.current),
     content: EMPTY_DOCUMENT,
     editable: false,
     editorProps: {
@@ -750,6 +729,8 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           disabled={!editor?.isEditable}
           onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
         />
+
+        <EditorTableMenu editor={editor} />
 
         <Separator orientation="vertical" className="mx-1 h-5" />
 

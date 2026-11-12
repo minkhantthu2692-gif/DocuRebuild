@@ -125,6 +125,31 @@
     @apply rounded-md outline outline-2 outline-offset-4 outline-primary/50;
   }
 
+  /* Manual tables. Widths come from the stored document, never from the current
+     screen, because column resizing is disabled. */
+  .doc-content .ProseMirror table.doc-table {
+    @apply my-4 w-full table-fixed border-collapse border border-border text-sm;
+  }
+
+  .doc-content .ProseMirror table.doc-table th,
+  .doc-content .ProseMirror table.doc-table td {
+    @apply relative min-w-[3rem] break-words border border-border px-2.5 py-1.5 align-top;
+  }
+
+  .doc-content .ProseMirror table.doc-table th {
+    @apply bg-muted/60 text-left font-semibold;
+  }
+
+  .doc-content .ProseMirror table.doc-table p {
+    @apply my-0;
+  }
+
+  /* The whole cell is tinted while a selection covers it. */
+  .doc-content .ProseMirror table.doc-table .selectedCell::after {
+    @apply pointer-events-none absolute inset-0 bg-primary/10;
+    content: "";
+  }
+
   .doc-content .ProseMirror .is-empty::before {
     @apply pointer-events-none float-left h-0 text-muted-foreground/70;
     content: attr(data-placeholder);

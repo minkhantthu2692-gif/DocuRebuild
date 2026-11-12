@@ -215,6 +215,105 @@ def test_markdown_export_omits_asset_paths() -> None:
     assert "/api/" not in render_markdown(_doc())
 
 
+def _paragraph(text: str) -> dict:
+    return {
+        "type": "paragraph",
+        "content": [{"type": "text", "text": text}] if text else [],
+    }
+
+
+def _cell(text: str, kind: str = "tableCell", **attrs: object) -> dict:
+    return {
+        "type": kind,
+        "attrs": {"colspan": 1, "rowspan": 1, "colwidth": None, **attrs},
+        "content": [_paragraph(text)],
+    }
+
+
+def _table_doc(*rows: list[dict]) -> dict:
+    return {
+        "type": "doc",
+        "content": [
+            {
+                "type": "table",
+                "content": [{"type": "tableRow", "content": row} for row in rows],
+            }
+        ],
+    }
+
+
+def test_markdown_export_renders_tables_and_escapes_pipes() -> None:
+    content = _table_doc(
+        [_cell("Name", "tableHeader"), _cell("Value | unit", "tableHeader")],
+        [_cell("Mass"), _cell("1.5 kg")],
+    )
+    markdown = render_markdown(content)
+    assert "| Name | Value \\| unit |" in markdown
+    assert "| --- | --- |" in markdown
+    assert "| Mass | 1.5 kg |" in markdown
+
+
+def test_markdown_export_keeps_multiple_paragraphs_inside_a_cell() -> None:
+    content = _table_doc(
+        [_cell("Term", "tableHeader")],
+        [
+            {
+                "type": "tableCell",
+                "attrs": {"colspan": 1, "rowspan": 1},
+                "content": [_paragraph("First line"), _paragraph("Second line")],
+            }
+        ],
+    )
+    markdown = render_markdown(content)
+    assert "First line<br>Second line" in markdown
+
+
+def test_markdown_export_adds_a_structural_header_when_missing() -> None:
+    content = _table_doc([_cell("x"), _cell("y")])
+    markdown = render_markdown(content)
+    assert markdown.startswith("|  |  |\n| --- | --- |\n")
+    assert "| x | y |" in markdown
+
+
+def test_markdown_export_uses_html_for_merged_cells() -> None:
+    content = _table_doc(
+        [
+            _cell("A", "tableHeader", colspan=2),
+            _cell("B", "tableHeader"),
+        ],
+        [_cell("C"), _cell("D"), _cell("E")],
+    )
+    markdown = render_markdown(content)
+    # GFM cannot express spans; the exact structure is kept as HTML instead.
+    assert "<th colspan=\"2\">A</th>" in markdown
+    assert "<td>C</td>" in markdown
+    assert markdown.count("A") == 1
+    assert "| --- |" not in markdown
+
+
+def test_text_export_keeps_every_table_cell() -> None:
+    content = _table_doc(
+        [_cell("Name", "tableHeader"), _cell("Value | unit", "tableHeader")],
+        [_cell("Mass"), _cell("1.5 kg")],
+        [_cell("Charge"), _cell("−1 e")],
+    )
+    text = render_text(content)
+    assert "Name | Value | unit" in text
+    assert "--- | ---" in text
+    assert "Mass | 1.5 kg" in text
+    assert "Charge | −1 e" in text
+
+
+def test_text_export_keeps_merged_cell_content() -> None:
+    content = _table_doc(
+        [_cell("A", "tableHeader", colspan=2), _cell("B", "tableHeader")],
+        [_cell("C"), _cell("D"), _cell("E")],
+    )
+    text = render_text(content)
+    assert "A" in text and "B" in text
+    assert "C | D | E" in text
+
+
 def test_safe_filename_strips_path_characters() -> None:
     assert safe_filename('../../My Book: "draft"', "markdown") == "My-Book-draft.md"
     assert safe_filename("   ", "txt") == "document.txt"
