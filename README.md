@@ -92,7 +92,9 @@ data on your device, and treats every AI result as a reviewable proposal.
   dialog, and every request counts toward the AI usage limit.
 - **Document editor** — Tiptap rich text with headings, paragraphs, lists,
   blockquotes, code blocks, alignment, inline formatting, undo/redo, word and
-  character counts, and debounced autosave.
+  character counts, debounced autosave, and find/replace with match-case and
+  replace-all. Matches can span inline formatting but never jump between
+  paragraphs or hard breaks.
 - **Local Markdown and TXT export** — the editor header downloads the saved
   document as Markdown or plain text. The export is generated on this device by
   the backend from the same document the editor autosaves; unsaved changes are

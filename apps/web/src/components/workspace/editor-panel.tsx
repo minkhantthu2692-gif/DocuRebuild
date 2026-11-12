@@ -8,7 +8,10 @@ import {
   AlignLeft,
   AlignRight,
   Bold,
+  CaseSensitive,
   Check,
+  ChevronDown,
+  ChevronUp,
   Circle,
   CircleAlert,
   Code2,
@@ -19,10 +22,12 @@ import {
   ListOrdered,
   Quote,
   Redo2,
+  Search,
   Strikethrough,
   Type,
   Underline as UnderlineIcon,
   Undo2,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -39,6 +44,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -49,6 +55,7 @@ import { useAppSettings, useUpdateSettings } from "@/hooks/use-app";
 import { useDocument, useSaveDocument } from "@/hooks/use-document";
 import { api } from "@/lib/api";
 import { FigureNode, figureInsertionContent } from "@/lib/editor-figure";
+import { findMatches } from "@/lib/editor-search";
 import { resolveLocale } from "@/lib/format";
 import { ocrInsertionContent } from "@/lib/ocr-insertion";
 import { countCharacters, countWords } from "@/lib/text";
@@ -120,9 +127,17 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [plainText, setPlainText] = useState("");
   const [saveError, setSaveError] = useState(false);
   const [exporting, setExporting] = useState<"markdown" | "txt" | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [replaceQuery, setReplaceQuery] = useState("");
+  const [matchCase, setMatchCase] = useState(false);
+  const [activeMatch, setActiveMatch] = useState(0);
+  const findInputRef = useRef<HTMLInputElement>(null);
 
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
+  // Saves are serialized so an older request can never overwrite newer content.
+  const saveChainRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const latestContent = useRef<JSONContent | null>(null);
   const latestText = useRef("");
 
@@ -206,19 +221,28 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     const snapshot = revisionRef.current;
     if (snapshot === savedRevisionRef.current) return true;
 
-    try {
-      await saveDocument({
-        content: editor.getJSON() as JSONContent,
-        plainText: editor.getText({ blockSeparator: "\n\n" }),
-      });
-      savedRevisionRef.current = snapshot;
-      setSavedRevision(snapshot);
-      setSaveError(false);
-      return true;
-    } catch {
-      setSaveError(true);
-      return false;
-    }
+    // Capture the exact content now; the queue may run later.
+    const content = editor.getJSON() as JSONContent;
+    const text = editor.getText({ blockSeparator: "\n\n" });
+
+    const run = saveChainRef.current.then(async () => {
+      // A queued save that is no longer the newest content is unnecessary.
+      if (snapshot <= savedRevisionRef.current) return true;
+      try {
+        await saveDocument({ content, plainText: text });
+        if (snapshot > savedRevisionRef.current) {
+          savedRevisionRef.current = snapshot;
+          setSavedRevision(snapshot);
+        }
+        setSaveError(false);
+        return true;
+      } catch {
+        setSaveError(true);
+        return false;
+      }
+    });
+    saveChainRef.current = run;
+    return run;
   }, [editor, initialized, saveDocument]);
 
   const exportDocument = useCallback(
@@ -246,6 +270,101 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     },
     [editor, initialized, exporting, saveSnapshot, projectId, t],
   );
+
+  const matches = useMemo(() => {
+    // `revision` changes on every document edit, which refreshes stale ranges.
+    void revision;
+    return editor ? findMatches(editor.state.doc, findQuery, matchCase) : [];
+  }, [editor, findQuery, matchCase, revision]);
+
+  const safeActiveMatch = matches.length === 0 ? 0 : Math.min(activeMatch, matches.length - 1);
+
+  const openFind = useCallback(() => {
+    if (!editor) return;
+    const { from, to } = editor.state.selection;
+    if (to > from && to - from <= 200) {
+      const selected = editor.state.doc.textBetween(from, to, "\n", "\n").trim();
+      if (selected && !selected.includes("\n")) setFindQuery(selected);
+    }
+    setActiveMatch(0);
+    setFindOpen(true);
+  }, [editor]);
+
+  const closeFind = useCallback(() => {
+    setFindOpen(false);
+  }, []);
+
+  const stepMatch = useCallback(
+    (delta: number) => {
+      if (matches.length === 0) return;
+      setActiveMatch((current) => {
+        const next = (Math.min(current, matches.length - 1) + delta) % matches.length;
+        return next < 0 ? next + matches.length : next;
+      });
+    },
+    [matches.length],
+  );
+
+  const replaceCurrent = useCallback(() => {
+    if (!editor || !editor.isEditable || matches.length === 0) return;
+    const match = matches[safeActiveMatch];
+    const { state, view } = editor;
+    const tr = state.tr;
+    if (replaceQuery) {
+      // Keep the formatting of the text being replaced.
+      const marks = state.doc.resolve(match.from).marks();
+      tr.replaceWith(match.from, match.to, state.schema.text(replaceQuery, marks));
+    } else {
+      tr.delete(match.from, match.to);
+    }
+    view.dispatch(tr);
+    editor.commands.scrollIntoView();
+  }, [editor, matches, safeActiveMatch, replaceQuery]);
+
+  const replaceAllMatches = useCallback(() => {
+    if (!editor || !editor.isEditable || matches.length === 0) return;
+    const { state, view } = editor;
+    const tr = state.tr;
+    // Replace from the end so earlier positions stay valid.
+    for (let index = matches.length - 1; index >= 0; index -= 1) {
+      const match = matches[index];
+      if (replaceQuery) {
+        const marks = state.doc.resolve(match.from).marks();
+        tr.replaceWith(match.from, match.to, state.schema.text(replaceQuery, marks));
+      } else {
+        tr.delete(match.from, match.to);
+      }
+    }
+    view.dispatch(tr);
+    editor.commands.scrollIntoView();
+    setActiveMatch(0);
+    toast.success(t("editor.find.replaced", { count: matches.length }));
+  }, [editor, matches, replaceQuery, t]);
+
+  useEffect(() => {
+    if (!findOpen) return;
+    findInputRef.current?.focus();
+    findInputRef.current?.select();
+  }, [findOpen]);
+
+  useEffect(() => {
+    if (!findOpen || !editor || matches.length === 0) return;
+    const match = matches[safeActiveMatch];
+    editor.commands.setTextSelection({ from: match.from, to: match.to });
+    editor.commands.scrollIntoView();
+  }, [findOpen, editor, matches, safeActiveMatch]);
+
+  useEffect(() => {
+    const handleFindKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        if (findOpen) findInputRef.current?.focus();
+        else openFind();
+      }
+    };
+    window.addEventListener("keydown", handleFindKeyDown);
+    return () => window.removeEventListener("keydown", handleFindKeyDown);
+  }, [findOpen, openFind]);
 
   useEffect(() => {
     if (!editor || !initialized || revision === savedRevision) return;
@@ -538,7 +657,147 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           disabled={!editor?.isEditable}
           onClick={() => editor?.chain().focus().setTextAlign("right").run()}
         />
+
+        <Separator orientation="vertical" className="mx-1 h-5" />
+
+        <ToolbarButton
+          label={t("editor.find.open")}
+          icon={Search}
+          active={findOpen}
+          disabled={!editor}
+          onClick={() => (findOpen ? closeFind() : openFind())}
+        />
       </div>
+
+      {findOpen ? (
+        <div
+          role="search"
+          aria-label={t("editor.find.open")}
+          className="flex flex-wrap items-center gap-1.5 border-b border-border/60 bg-background/40 px-2 py-1.5"
+        >
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              ref={findInputRef}
+              value={findQuery}
+              onChange={(event) => {
+                setFindQuery(event.target.value);
+                setActiveMatch(0);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  stepMatch(event.shiftKey ? -1 : 1);
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  closeFind();
+                  editor?.commands.focus();
+                }
+              }}
+              placeholder={t("editor.find.placeholder")}
+              aria-label={t("editor.find.placeholder")}
+              className="h-control-xs w-44 pl-7 text-xs"
+            />
+          </div>
+
+          <span
+            className="min-w-16 text-2xs text-muted-foreground"
+            role="status"
+            aria-live="polite"
+          >
+            {findQuery
+              ? matches.length > 0
+                ? t("editor.find.result", {
+                    current: safeActiveMatch + 1,
+                    total: matches.length,
+                  })
+                : t("editor.find.noResults")
+              : null}
+          </span>
+
+          <Button
+            variant={matchCase ? "secondary" : "ghost"}
+            size="icon-xs"
+            aria-pressed={matchCase}
+            aria-label={t("editor.find.matchCase")}
+            onClick={() => {
+              setMatchCase((value) => !value);
+              setActiveMatch(0);
+            }}
+          >
+            <CaseSensitive />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={t("editor.find.previous")}
+            disabled={matches.length === 0}
+            onClick={() => stepMatch(-1)}
+          >
+            <ChevronUp />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={t("editor.find.next")}
+            disabled={matches.length === 0}
+            onClick={() => stepMatch(1)}
+          >
+            <ChevronDown />
+          </Button>
+
+          <Separator orientation="vertical" className="mx-0.5 h-4" />
+
+          <Input
+            value={replaceQuery}
+            onChange={(event) => setReplaceQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                replaceCurrent();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                closeFind();
+                editor?.commands.focus();
+              }
+            }}
+            placeholder={t("editor.find.replacePlaceholder")}
+            aria-label={t("editor.find.replacePlaceholder")}
+            className="h-control-xs w-44 text-xs"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!editor?.isEditable || matches.length === 0}
+            onClick={replaceCurrent}
+          >
+            {t("editor.find.replace")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!editor?.isEditable || matches.length === 0}
+            onClick={replaceAllMatches}
+          >
+            {t("editor.find.replaceAll")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="ml-auto"
+            aria-label={t("editor.find.close")}
+            onClick={() => {
+              closeFind();
+              editor?.commands.focus();
+            }}
+          >
+            <X />
+          </Button>
+        </div>
+      ) : null}
 
       <div className="scrollbar-thin flex-1 overflow-y-auto bg-muted/25 px-4 py-5 sm:px-6">
         <div

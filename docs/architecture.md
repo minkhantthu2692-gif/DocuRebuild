@@ -162,6 +162,7 @@ DELETE /api/projects/{id}
 POST   /api/projects/{id}/open
 GET    /api/projects/{id}/document
 PUT    /api/projects/{id}/document
+GET    /api/projects/{id}/document/export?format=markdown|txt
 GET    /api/projects/{id}/pages
 POST   /api/projects/{id}/pages/import
 POST   /api/projects/{id}/imports
@@ -222,6 +223,13 @@ src/
   change.
 - A single save is in flight at a time; failures show a retry action and the
   dirty state remains visible. `Ctrl/Cmd+S` saves immediately.
+- Find/replace works on ProseMirror document positions from
+  `lib/editor-search.ts`. A run is a sequence of contiguous text nodes, so a match
+  can span bold/italic boundaries but not paragraphs or hard breaks. Replace and
+  replace-all use transactions that keep the marks at the matched position, and
+  replace-all applies from the end of the match list so earlier positions stay
+  valid. Both stay in the editor undo history. `Ctrl/Cmd+F` opens the bar and
+  preselects the current single-line selection when there is one.
 - A best-effort flush runs when leaving the workspace; it is not a substitute for
   revision history.
 - Imports start a job and poll it every 500 ms while active. The progress panel

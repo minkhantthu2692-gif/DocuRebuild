@@ -319,6 +319,12 @@ the user must review every region before extracting it.
 
 - Headings, paragraphs, lists, blockquotes, code, alignment, inline marks,
   undo/redo and debounced autosave.
+- Find and replace in the editor toolbar (also `Ctrl/Cmd+F`). Matching works on
+  document text positions, can span inline marks, and never crosses a paragraph or
+  hard-break boundary. Match case, previous/next, replace and replace-all are
+  available, and replacements keep the formatting of the matched text.
+  Editor undo/redo still covers the change, and find state is not part of the
+  document.
 - Local Markdown and plain-text export from the editor header. Both formats are
   rendered by the backend from the saved Tiptap document, so export works without
   an internet connection, AI provider or extra dependency.
@@ -342,8 +348,8 @@ footnotes and page layout are not part of the editor model yet, so they cannot b
 exported. DOCX, PDF and OMML export remain unimplemented.
 
 **Pending** — tables, images inline in text, captions, equations, footnotes,
-links editing, page layout, headers/footers, page numbers, find/replace, DOCX
-export and OMML validation.
+links editing, page layout, headers/footers, page numbers, DOCX export and OMML
+validation.
 
 ## Phase 9 — History, backup and recovery (planned)
 

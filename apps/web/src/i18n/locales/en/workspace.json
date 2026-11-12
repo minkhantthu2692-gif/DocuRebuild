@@ -106,6 +106,20 @@
     "serif": "Serif",
     "sans": "Sans-serif",
     "format": "Text style",
+    "find": {
+      "open": "Find and replace",
+      "placeholder": "Find",
+      "replacePlaceholder": "Replace with",
+      "result": "{{current}} of {{total}}",
+      "noResults": "No matches",
+      "previous": "Previous match",
+      "next": "Next match",
+      "matchCase": "Match case",
+      "replace": "Replace",
+      "replaceAll": "Replace all",
+      "replaced": "Replaced matches: {{count}}.",
+      "close": "Close find"
+    },
     "loadError": {
       "title": "The document couldn’t be loaded",
       "description": "Editing is paused until the local document is available. Nothing has been overwritten."
