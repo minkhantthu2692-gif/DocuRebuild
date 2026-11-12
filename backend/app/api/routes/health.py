@@ -48,7 +48,7 @@ def meta() -> AppMeta:
             # The local AI adapter and review workflow exist, but a user must
             # configure and test a local server and model before using it.
             ai=True,
-            export=False,
+            export=True,
         ),
         max_import_mb=settings.max_import_mb,
         max_upload_batch=settings.max_upload_batch,

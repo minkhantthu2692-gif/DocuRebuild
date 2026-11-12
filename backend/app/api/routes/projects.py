@@ -4,8 +4,9 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import quote
 
-from fastapi import APIRouter, File, UploadFile, status
+from fastapi import APIRouter, File, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 
@@ -31,6 +32,7 @@ from app.schemas.projects import (
 from app.services import documents, projects as project_service
 from app.services import imports as import_service
 from app.services import pages as page_service
+from app.services.document_export import ExportFormat, export_document, safe_filename
 from app.services.projects import touch_project
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -96,6 +98,26 @@ def write_document(
     document = documents.write_document(directory, payload.content, payload.plain_text)
     touch_project(session, project)
     return document
+
+
+@router.get("/{project_id}/document/export")
+def export_document_file(
+    project: ProjectDep,
+    export_format: Annotated[ExportFormat, Query(alias="format")] = "markdown",
+) -> Response:
+    """Return the stored document as a UTF-8 attachment (Markdown or TXT)."""
+    directory = project_service.ensure_project_storage(project)
+    body, filename, content_type = export_document(directory, project.name, export_format)
+    ascii_name = safe_filename(project.name, export_format)
+    disposition = (
+        f'attachment; filename="{ascii_name}"; '
+        f"filename*=UTF-8''{quote(filename, safe='')}"
+    )
+    return Response(
+        content=body,
+        media_type=content_type,
+        headers={"Content-Disposition": disposition},
+    )
 
 
 # --------------------------------------------------------------------------- #

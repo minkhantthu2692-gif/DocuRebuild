@@ -9,8 +9,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 > **Project status — early development (Phase 6 of 12).**
 > The workspace, local project storage, image and PDF import, non-destructive
 > image adjustments, the rich-text editor, local Tesseract OCR, manual region
-> extraction, an optional local-AI OCR text cleanup and optional vision region
-> proposals are implemented. Imports run
+> extraction, an optional local-AI OCR text cleanup, optional vision region
+> proposals and local Markdown/TXT document export are implemented. Imports run
 > as background jobs with page-level progress, cancellation and localized failures.
 > PDF pages are rendered locally and embedded text layers are stored as reviewable
 > proposals; image-only PDF pages can be processed with OCR. OCR and PDF import are
@@ -19,9 +19,9 @@ data on your device, and treats every AI result as a reviewable proposal.
 > loopback addresses are the default, and any other host needs explicit remote
 > consent. Every result is a proposal that must be accepted or rejected. Cloud
 > providers, free-tier adapters, paid usage, image generation, structured
-> table/figure/equation reconstruction, export and history are **not implemented
-> yet** and are clearly marked as unavailable in the UI. Nothing in this repository
-> fakes those features.
+> table/figure/equation reconstruction, DOCX export and history are **not
+> implemented yet** and are clearly marked as unavailable in the UI. Nothing in this
+> repository fakes those features.
 
 ---
 
@@ -93,6 +93,12 @@ data on your device, and treats every AI result as a reviewable proposal.
 - **Document editor** — Tiptap rich text with headings, paragraphs, lists,
   blockquotes, code blocks, alignment, inline formatting, undo/redo, word and
   character counts, and debounced autosave.
+- **Local Markdown and TXT export** — the editor header downloads the saved
+  document as Markdown or plain text. The export is generated on this device by
+  the backend from the same document the editor autosaves; unsaved changes are
+  flushed first, and the download is refused if that save fails. Extracted text is
+  escaped so it can never turn into Markdown structure, and figure assets stay in
+  the project instead of being copied into the file.
 - **Appearance and language** — light/dark/system themes, accent colours, radius,
   blur, density, text size, reduced motion, and live English/Burmese switching.
 - **Local-only defaults** — no account, no cloud database, no telemetry, and no
@@ -103,7 +109,7 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 Structured element reconstruction (table cells, equation transcription, generative
 figure detection), cloud/free-tier AI providers, image-generation profiles,
-DOCX/TXT export, revision history, backups/restore UI, desktop packaging
+DOCX export, revision history, backups/restore UI, desktop packaging
 and PWA install support are planned but not implemented. OCR extracts text blocks,
 reading order and conservative layout hints; it does not build table structure or
 transcribe equations. Region extraction produces exact pixel crops and can read
@@ -314,6 +320,28 @@ The URL is only contacted when you press **Test connection**, **Ask local AI** o
 There is no cloud provider, API key or paid call in this phase. A model name can also
 be typed manually when discovery is unsupported by the server.
 
+### Document export
+
+Markdown and plain-text export are local and need no provider, account or
+extension:
+
+- Open the workspace and use the download button in the document header, then
+  choose **Markdown (.md)** or **Plain text (.txt)**.
+- Unsaved editor changes are saved first. If that save fails, nothing is
+  downloaded and the editor shows the usual save error, so the file cannot
+  silently lag behind the screen.
+- Markdown keeps headings, lists, blockquotes, code blocks, rules, bold, italic,
+  strikethrough, underline, links (http/https/mailto only) and hard breaks.
+  Extracted text is escaped, so a line that happens to look like `# heading` or
+  `- list` stays literal text.
+- Figures are written as an explicit `[Figure: <caption>]` marker plus their
+  source note. The image itself is not embedded, because it remains a local
+  project asset that has no meaning outside the app.
+- The download name comes from the project name. Burmese names are sent with
+  RFC 5987 encoding and get a safe ASCII fallback.
+
+DOCX export, OMML equations and PDF layout export are not implemented yet.
+
 ### PDF import
 
 PDF support is local and works without an AI provider or API key:
@@ -395,7 +423,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
     source/              immutable imported originals (images and PDFs)
     processed/           non-destructive display copies (rotations, PDF page renders)
     thumbnails/          cached WebP thumbnails
-    exports/             future export output
+    exports/             reserved for server-side export output (current exports stream)
     backups/             future project backups
     trash/               per-project runtime trash
   trash/                 deleted project folders
@@ -506,7 +534,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | Planned |
-| 8. Document editor and export | Planned |
+| 8. Document editor and export | In progress: rich-text editor plus local Markdown and TXT export; tables, equations, DOCX and page layout pending |
 | 9. History, backup and recovery | Planned |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |

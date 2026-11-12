@@ -16,7 +16,7 @@ presented in the UI until it actually works.
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | Planned | Depends on Phase 5/6 |
-| 8. Document editor and export | Partially started | Core editor exists; full model/export pending |
+| 8. Document editor and export | In progress | Core editor plus local Markdown and TXT export; tables, equations, DOCX and page layout pending |
 | 9. History, backup and recovery | Planned | Event table exists; no restore UI |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
@@ -313,13 +313,37 @@ the user must review every region before extracting it.
 - LaTeX editing and live preview; validated OMML export for Word.
 - Uncertain cells/symbols are marked for review, never invented.
 
-## Phase 8 — Document editor and export (partially started)
+## Phase 8 — Document editor and export (in progress)
 
-**Current** — headings, paragraphs, lists, blockquotes, code, alignment, inline
-marks, undo/redo and autosave.
+**Delivered**
 
-**Pending** — tables, images, captions, equations, footnotes, links, page layout,
-headers/footers, page numbers, find/replace, DOCX/TXT export and OMML validation.
+- Headings, paragraphs, lists, blockquotes, code, alignment, inline marks,
+  undo/redo and debounced autosave.
+- Local Markdown and plain-text export from the editor header. Both formats are
+  rendered by the backend from the saved Tiptap document, so export works without
+  an internet connection, AI provider or extra dependency.
+- `GET /api/projects/{project_id}/document/export?format=markdown|txt` returns a
+  UTF-8 attachment with a project-based filename. Unknown formats are rejected
+  with `422`.
+- The frontend flushes unsaved editor state before downloading and refuses the
+  download when that save fails, so the file always matches the visible document.
+- Markdown escaping keeps extracted text literal (`#`, `-`, `+`, `>`, `1.`,
+  `\`, `` ` ``, `*`, `_`, `[`, `]`, `<`, `>`), code spans stay verbatim, and links
+  are limited to `http`, `https` and `mailto`. Plain-text output has no Markdown
+  syntax.
+- Figures export as an explicit `[Figure: <caption>]` marker with their source
+  note. Local asset URLs are never written into the file.
+- `export` in `/api/meta`, English and Burmese labels, backend serializer and
+  endpoint tests.
+
+**Current limitation** — export covers headings, paragraphs, lists, blockquotes,
+code blocks, rules, inline marks and figure markers. Tables, equations,
+footnotes and page layout are not part of the editor model yet, so they cannot be
+exported. DOCX, PDF and OMML export remain unimplemented.
+
+**Pending** — tables, images inline in text, captions, equations, footnotes,
+links editing, page layout, headers/footers, page numbers, find/replace, DOCX
+export and OMML validation.
 
 ## Phase 9 — History, backup and recovery (planned)
 

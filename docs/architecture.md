@@ -42,6 +42,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.pdf` | PDF open/validation, page rendering, embedded text extraction, capability detection |
 | `services.layout` | Shared deterministic block classification (heading, list, caption, equation, table-like grid, running header/footer, page number) for OCR and embedded PDF text |
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps |
+| `services.document_export` | Deterministic Tiptap-to-Markdown/TXT rendering, escaping and download names |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
@@ -366,6 +367,33 @@ src/
   OCR did not read are not suggested, and no cell or equation structure is
   derived. `region_proposals` in `/api/meta` advertises the feature.
 
+### Document export
+
+- The document is exported by the backend from the stored Tiptap JSON, not by the
+  browser, so the file matches what autosave persisted and no second editor
+  serializer can drift from it.
+- `GET /api/projects/{project_id}/document/export?format=markdown|txt` reads the
+  document row and returns a UTF-8 attachment. `format` is a required enum with a
+  `markdown` default; unknown values are rejected by request validation (`422`).
+  The response uses `text/markdown` or `text/plain` with `charset=utf-8` and a
+  `Content-Disposition` header containing both an ASCII fallback filename and an
+  RFC 5987 `filename*` for Unicode project names.
+- `services.document_export` maps every known node deterministically: doc,
+  paragraph, heading (levels 1–6, clamped), bullet/ordered lists (including
+  `start`), listItem, blockquote, codeBlock (fence widened when the code contains
+  backticks), horizontalRule, hardBreak, text marks and the custom `figure` atom.
+- Markdown output escapes `` \ ` * _ [ ] < > `` and line-start markers (`#`,
+  `-`, `+`, `>`, `1.`/`1)` and `---`), so extracted OCR text cannot become
+  structure or raw HTML. Code spans are built from raw text so their content stays
+  literal. Links are emitted only for `http`, `https` and `mailto`; any other
+  target is dropped while the link text is kept.
+- Figures never export their `src`. The local asset URL is meaningless outside the
+  project, so the node becomes `[Figure: <caption>]` plus the source note. The
+  project asset itself remains untouched and reinsertable.
+- The editor downloads through a temporary anchor. Before that it awaits the same
+  save path used by autosave and aborts the download when the save fails, so a
+  stale file is never produced. `export` in `/api/meta` advertises the feature.
+
 ### Local AI cleanup
 
 - Phase 6 starts with the smallest useful AI workflow: correcting one OCR text
@@ -494,6 +522,9 @@ src/
   files are never uploaded; the backend reads the project's own source/display
   assets and invokes local libraries. Missing engine/language packs are reported,
   never bypassed with a cloud fallback.
+- Markdown and TXT export run in the local backend from the project database. The
+  generated file contains no asset URLs, credentials or provider metadata and is
+  only sent to the browser that requested it.
 - AI requests are sent only when the user tests a connection, asks for a cleanup or
   asks for region proposals, and only to the URL saved or entered in Settings. A
   cleanup sends one OCR text block; a region request sends the current page image

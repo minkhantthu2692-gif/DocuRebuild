@@ -1,0 +1,315 @@
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+from urllib.parse import quote
+
+from app.services.document_export import render_markdown, render_text, safe_filename
+
+
+def _doc() -> dict:
+    return {
+        "type": "doc",
+        "content": [
+            {
+                "type": "heading",
+                "attrs": {"level": 1},
+                "content": [{"type": "text", "text": "Quantum Mechanics"}],
+            },
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "The "},
+                    {
+                        "type": "text",
+                        "text": "Schrödinger",
+                        "marks": [{"type": "bold"}],
+                    },
+                    {"type": "text", "text": " equation."},
+                    {"type": "hardBreak"},
+                    {"type": "text", "text": "Second line."},
+                ],
+            },
+            {
+                "type": "bulletList",
+                "content": [
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [{"type": "text", "text": "First"}],
+                            }
+                        ],
+                    },
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [{"type": "text", "text": "Second"}],
+                            }
+                        ],
+                    },
+                ],
+            },
+            {
+                "type": "orderedList",
+                "attrs": {"start": 3},
+                "content": [
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [{"type": "text", "text": "Third"}],
+                            }
+                        ],
+                    },
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [{"type": "text", "text": "Fourth"}],
+                            }
+                        ],
+                    },
+                ],
+            },
+            {
+                "type": "blockquote",
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": "Quoted"}],
+                    }
+                ],
+            },
+            {
+                "type": "codeBlock",
+                "attrs": {"language": "python"},
+                "content": [{"type": "text", "text": 'print("x")'}],
+            },
+            {"type": "horizontalRule"},
+            {
+                "type": "figure",
+                "attrs": {
+                    "src": "/api/projects/abc/assets/local-only.png",
+                    "alt": "",
+                    "caption": "Figure 1: Wavefunction",
+                    "note": "Source: page 2",
+                    "width": 640,
+                    "height": 480,
+                },
+            },
+        ],
+    }
+
+
+def test_markdown_export_renders_every_block() -> None:
+    markdown = render_markdown(_doc())
+    assert markdown.startswith("# Quantum Mechanics\n")
+    assert "The **Schrödinger** equation.  \nSecond line." in markdown
+    assert "- First\n- Second" in markdown
+    assert "3. Third\n4. Fourth" in markdown
+    assert "> Quoted" in markdown
+    assert '```python\nprint("x")\n```' in markdown
+    assert "\n---\n" in markdown
+    assert "\\[Figure: Figure 1: Wavefunction\\]" in markdown
+    assert "> Source: page 2" in markdown
+    assert markdown.endswith("\n")
+    assert not markdown.endswith("\n\n")
+
+
+def test_markdown_export_escapes_extracted_text() -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "# not a heading\n- not a list\n*star* <script> [link]",
+                    }
+                ],
+            },
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "1. not a list"},
+                ],
+            },
+        ],
+    }
+    markdown = render_markdown(content)
+    assert "\\# not a heading" in markdown
+    assert "\\- not a list" in markdown
+    assert "\\*star\\*" in markdown
+    assert "\\<script\\>" in markdown
+    assert "\\[link\\]" in markdown
+    assert "1\\. not a list" in markdown
+    # Escaped text must never become real Markdown structure.
+    assert not markdown.startswith("# ")
+
+
+def test_markdown_export_keeps_code_spans_literal() -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "**not bold**",
+                        "marks": [{"type": "code"}],
+                    }
+                ],
+            }
+        ],
+    }
+    assert render_markdown(content) == "`**not bold**`\n"
+
+
+def test_markdown_export_drops_unsafe_link_targets() -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "click",
+                        "marks": [{"type": "link", "attrs": {"href": "javascript:alert(1)"}}],
+                    },
+                    {"type": "text", "text": " "},
+                    {
+                        "type": "text",
+                        "text": "safe",
+                        "marks": [{"type": "link", "attrs": {"href": "https://example.com/a"}}],
+                    },
+                ],
+            }
+        ],
+    }
+    markdown = render_markdown(content)
+    assert "javascript" not in markdown
+    assert "click" in markdown
+    assert "[safe](https://example.com/a)" in markdown
+
+
+def test_text_export_is_plain_and_omits_asset_paths() -> None:
+    text = render_text(_doc())
+    assert "# Quantum Mechanics" not in text
+    assert text.startswith("Quantum Mechanics\n")
+    assert "- First\n- Second" in text
+    assert "3. Third\n4. Fourth" in text
+    assert "[Figure: Figure 1: Wavefunction]\nSource: page 2" in text
+    assert "local-only.png" not in text
+    assert "/api/" not in text
+
+
+def test_markdown_export_omits_asset_paths() -> None:
+    assert "/api/" not in render_markdown(_doc())
+
+
+def test_safe_filename_strips_path_characters() -> None:
+    assert safe_filename('../../My Book: "draft"', "markdown") == "My-Book-draft.md"
+    assert safe_filename("   ", "txt") == "document.txt"
+    assert safe_filename("မြန်မာ", "txt") == "document.txt"
+
+
+def test_export_endpoint_returns_markdown_attachment(
+    client: TestClient, project: dict
+) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "heading",
+                "attrs": {"level": 2},
+                "content": [{"type": "text", "text": "Chapter"}],
+            },
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Body text."}],
+            },
+        ],
+    }
+    saved = client.put(
+        f"/api/projects/{project['id']}/document",
+        json={"content": content, "plain_text": "Chapter\n\nBody text."},
+    )
+    assert saved.status_code == 200, saved.text
+
+    response = client.get(f"/api/projects/{project['id']}/document/export")
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "text/markdown; charset=utf-8"
+    disposition = response.headers["content-disposition"]
+    assert disposition.startswith('attachment; filename="Quantum-Mechanics.md"')
+    assert "filename*=UTF-8''Quantum%20Mechanics.md" in disposition
+    assert response.text == "## Chapter\n\nBody text.\n"
+
+
+def test_export_endpoint_returns_txt(client: TestClient, project: dict) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Only text."}],
+            }
+        ],
+    }
+    client.put(
+        f"/api/projects/{project['id']}/document",
+        json={"content": content, "plain_text": "Only text."},
+    )
+
+    response = client.get(
+        f"/api/projects/{project['id']}/document/export",
+        params={"format": "txt"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "text/plain; charset=utf-8"
+    assert 'filename="Quantum-Mechanics.txt"' in response.headers["content-disposition"]
+    assert response.text == "Only text.\n"
+
+
+def test_export_endpoint_keeps_unicode_project_name(client: TestClient) -> None:
+    created = client.post(
+        "/api/projects",
+        json={"name": "မြန်မာ စာအုပ်", "description": ""},
+    )
+    assert created.status_code == 201, created.text
+    project_id = created.json()["id"]
+
+    response = client.get(f"/api/projects/{project_id}/document/export")
+    assert response.status_code == 200, response.text
+    disposition = response.headers["content-disposition"]
+    assert quote("မြန်မာ စာအုပ်.md", safe="") in disposition
+    assert 'filename="document.md"' in disposition
+
+
+def test_export_endpoint_rejects_unknown_format(
+    client: TestClient, project: dict
+) -> None:
+    response = client.get(
+        f"/api/projects/{project['id']}/document/export",
+        params={"format": "docx"},
+    )
+    assert response.status_code == 422
+
+
+def test_export_reports_missing_project(client: TestClient) -> None:
+    response = client.get(
+        "/api/projects/00000000-0000-0000-0000-000000000000/document/export"
+    )
+    assert response.status_code == 404
+
+
+def test_meta_advertises_export(client: TestClient) -> None:
+    meta = client.get("/api/meta").json()
+    assert meta["capabilities"]["export"] is True

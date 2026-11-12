@@ -43,7 +43,8 @@ def test_meta_is_honest_about_available_capabilities(
     # The local AI adapter and review workflow exist; a provider and model must
     # still be configured by the user before any AI request can run.
     assert capabilities["ai"] is True
-    assert capabilities["export"] is False
+    # Local Markdown/TXT export needs no optional dependency.
+    assert capabilities["export"] is True
 
 
 def test_meta_advertises_ocr_only_when_engine_is_available(

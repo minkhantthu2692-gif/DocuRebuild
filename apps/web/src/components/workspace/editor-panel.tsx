@@ -12,6 +12,7 @@ import {
   Circle,
   CircleAlert,
   Code2,
+  Download,
   FileText,
   Italic,
   List,
@@ -110,7 +111,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const settingsQuery = useAppSettings();
   const updateSettings = useUpdateSettings();
   const errorMessage = useApiErrorMessage();
-  const { mutate: saveDocument, isPending: isSaving } = useSaveDocument(projectId);
+  const { mutateAsync: saveDocument, isPending: isSaving } = useSaveDocument(projectId);
   const { insertion, consumeInsertion } = useWorkspaceActions();
 
   const [initialized, setInitialized] = useState(false);
@@ -118,6 +119,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [savedRevision, setSavedRevision] = useState(0);
   const [plainText, setPlainText] = useState("");
   const [saveError, setSaveError] = useState(false);
+  const [exporting, setExporting] = useState<"markdown" | "txt" | null>(null);
 
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
@@ -199,30 +201,57 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     consumeInsertion(insertion.id);
   }, [editor, initialized, insertion, consumeInsertion]);
 
-  const saveSnapshot = useCallback(() => {
-    if (!editor || !initialized) return;
+  const saveSnapshot = useCallback(async (): Promise<boolean> => {
+    if (!editor || !initialized) return true;
     const snapshot = revisionRef.current;
-    if (snapshot === savedRevisionRef.current) return;
+    if (snapshot === savedRevisionRef.current) return true;
 
-    saveDocument(
-      {
+    try {
+      await saveDocument({
         content: editor.getJSON() as JSONContent,
         plainText: editor.getText({ blockSeparator: "\n\n" }),
-      },
-      {
-        onSuccess: () => {
-          savedRevisionRef.current = snapshot;
-          setSavedRevision(snapshot);
-          setSaveError(false);
-        },
-        onError: () => setSaveError(true),
-      },
-    );
+      });
+      savedRevisionRef.current = snapshot;
+      setSavedRevision(snapshot);
+      setSaveError(false);
+      return true;
+    } catch {
+      setSaveError(true);
+      return false;
+    }
   }, [editor, initialized, saveDocument]);
+
+  const exportDocument = useCallback(
+    async (format: "markdown" | "txt") => {
+      if (!editor || !initialized || exporting) return;
+      setExporting(format);
+      try {
+        // Never export stale content: the download must reflect what is on screen.
+        const saved = await saveSnapshot();
+        if (!saved) {
+          toast.error(t("export.saveFailed"));
+          return;
+        }
+        const link = document.createElement("a");
+        link.href = api.documentExportUrl(projectId, format);
+        link.rel = "noopener";
+        link.download = "";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        toast.success(t(`export.started.${format}`));
+      } finally {
+        setExporting(null);
+      }
+    },
+    [editor, initialized, exporting, saveSnapshot, projectId, t],
+  );
 
   useEffect(() => {
     if (!editor || !initialized || revision === savedRevision) return;
-    const timer = window.setTimeout(saveSnapshot, AUTOSAVE_DELAY_MS);
+    const timer = window.setTimeout(() => {
+      void saveSnapshot();
+    }, AUTOSAVE_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [editor, initialized, revision, savedRevision, saveSnapshot]);
 
@@ -230,7 +259,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        saveSnapshot();
+        void saveSnapshot();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -284,7 +313,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
               <button
                 type="button"
                 className="focus-ring flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-destructive transition-colors hover:bg-destructive/10"
-                onClick={saveSnapshot}
+                onClick={() => void saveSnapshot()}
               >
                 <CircleAlert className="size-3.5" />
                 <span>{t("save.failed")}</span>
@@ -309,6 +338,41 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           </div>
 
           <Separator orientation="vertical" className="h-5" />
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={t("export.label")}
+                disabled={!editor || !initialized || exporting !== null}
+              >
+                {exporting ? <Spinner /> : <Download />}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>{t("export.label")}</DropdownMenuLabel>
+              <DropdownMenuItem
+                onSelect={() => void exportDocument("markdown")}
+                className="flex-col items-start gap-0.5"
+              >
+                <span>{t("export.markdown")}</span>
+                <span className="text-2xs text-muted-foreground">
+                  {t("export.markdownHint")}
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => void exportDocument("txt")}
+                className="flex-col items-start gap-0.5"
+              >
+                <span>{t("export.txt")}</span>
+                <span className="text-2xs text-muted-foreground">{t("export.txtHint")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuLabel className="max-w-64 whitespace-normal text-2xs font-normal leading-relaxed text-muted-foreground">
+                {t("export.note")}
+              </DropdownMenuLabel>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

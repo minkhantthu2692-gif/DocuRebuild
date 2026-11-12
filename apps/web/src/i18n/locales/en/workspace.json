@@ -111,6 +111,19 @@
       "description": "Editing is paused until the local document is available. Nothing has been overwritten."
     }
   },
+  "export": {
+    "label": "Export",
+    "markdown": "Markdown (.md)",
+    "markdownHint": "Headings, lists and emphasis stay as Markdown.",
+    "txt": "Plain text (.txt)",
+    "txtHint": "Text only, without formatting.",
+    "note": "Writes the document on this device. Figures become a short marker because their images stay in the project.",
+    "started": {
+      "markdown": "Markdown export started.",
+      "txt": "Plain text export started."
+    },
+    "saveFailed": "The latest changes could not be saved, so nothing was exported. Try again once the save succeeds."
+  },
   "ocr": {
     "open": "Extract text",
     "title": "Extract text from page {{page}}",
