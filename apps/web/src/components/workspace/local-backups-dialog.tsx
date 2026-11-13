@@ -1,4 +1,4 @@
-import { Archive, CircleAlert, Download, Plus, Trash2 } from "lucide-react";
+import { Archive, CircleAlert, Download, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ import {
   useDeleteProjectBackupCopy,
   useDownloadProjectBackupCopy,
   useProjectBackups,
+  useRestoreProjectBackupCopy,
 } from "@/hooks/use-projects";
 import { saveBlob } from "@/lib/download";
 import { formatDateTime, formatFileSize, resolveLocale } from "@/lib/format";
@@ -33,8 +34,9 @@ interface LocalBackupsDialogProps {
 }
 
 /**
- * Verified backup copies kept on this device. Copies are created only when the
- * user asks, so nothing is written behind their back during normal editing.
+ * Verified backup copies kept on this device. New copies are only written when the
+ * user asks or opts into automatic copies in Settings; restoring one always creates
+ * a new project and never overwrites current work.
  */
 export function LocalBackupsDialog({
   projectId,
@@ -49,10 +51,17 @@ export function LocalBackupsDialog({
   const createCopy = useCreateProjectBackupCopy(projectId);
   const downloadCopy = useDownloadProjectBackupCopy();
   const deleteCopy = useDeleteProjectBackupCopy(projectId);
+  const restoreCopy = useRestoreProjectBackupCopy(projectId);
   const [pendingDelete, setPendingDelete] = useState<ProjectBackupSummary | null>(null);
+  const [pendingRestore, setPendingRestore] = useState<ProjectBackupSummary | null>(
+    null,
+  );
 
   const changeOpen = (next: boolean) => {
-    if (!next) setPendingDelete(null);
+    if (!next) {
+      setPendingDelete(null);
+      setPendingRestore(null);
+    }
     onOpenChange(next);
   };
 
@@ -75,6 +84,17 @@ export function LocalBackupsDialog({
       onSuccess: () => {
         toast.success(t("backups.deleted"));
         setPendingDelete(null);
+      },
+      onError: (error) => toast.error(errorMessage(error)),
+    });
+  };
+
+  const confirmRestore = () => {
+    if (!pendingRestore) return;
+    restoreCopy.mutate(pendingRestore.filename, {
+      onSuccess: () => {
+        toast.success(t("backups.restored"));
+        setPendingRestore(null);
       },
       onError: (error) => toast.error(errorMessage(error)),
     });
@@ -163,6 +183,22 @@ export function LocalBackupsDialog({
                         type="button"
                         variant="ghost"
                         size="icon-sm"
+                        aria-label={t("backups.restoreCopy")}
+                        title={t("backups.restoreCopy")}
+                        disabled={restoreCopy.isPending}
+                        onClick={() => setPendingRestore(copy)}
+                      >
+                        {restoreCopy.isPending &&
+                        restoreCopy.variables === copy.filename ? (
+                          <Spinner />
+                        ) : (
+                          <RotateCcw />
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
                         className="text-muted-foreground hover:text-destructive"
                         aria-label={t("backups.deleteCopy")}
                         title={t("backups.deleteCopy")}
@@ -216,6 +252,42 @@ export function LocalBackupsDialog({
             >
               {deleteCopy.isPending ? <Spinner /> : <Trash2 />}
               {deleteCopy.isPending ? t("backups.deleting") : t("backups.deleteConfirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingRestore !== null}
+        onOpenChange={(next) => !next && setPendingRestore(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("backups.restoreTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("backups.restoreDescription", {
+                filename: pendingRestore?.filename ?? "",
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={restoreCopy.isPending}
+              onClick={() => setPendingRestore(null)}
+            >
+              {tCommon("actions.cancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={restoreCopy.isPending}
+              onClick={confirmRestore}
+            >
+              {restoreCopy.isPending ? <Spinner /> : <RotateCcw />}
+              {restoreCopy.isPending
+                ? t("backups.restoring")
+                : t("backups.restoreConfirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

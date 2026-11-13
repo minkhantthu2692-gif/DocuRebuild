@@ -139,6 +139,19 @@ def delete_local_backup(project: ProjectDep, filename: str) -> dict[str, Any]:
 
 
 @router.post(
+    "/{project_id}/backups/{filename}/restore",
+    response_model=ProjectDetail,
+    status_code=status.HTTP_201_CREATED,
+)
+def restore_local_backup(
+    project: ProjectDep, filename: str, session: DbSession
+) -> dict[str, Any]:
+    """Restore a stored copy as a new project. Nothing is overwritten."""
+    restored = local_backups.restore_copy(session, project, filename)
+    return _detail(restored)
+
+
+@router.post(
     "/restore",
     response_model=ProjectDetail,
     status_code=status.HTTP_201_CREATED,

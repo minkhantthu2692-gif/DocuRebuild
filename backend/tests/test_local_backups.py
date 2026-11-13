@@ -162,3 +162,35 @@ def test_deleting_a_project_moves_its_vault_to_trash(
     moved = list(get_settings().trash_dir.glob("*-vault"))
     assert len(moved) == 1
     assert list(moved[0].glob("*.zip"))
+
+
+def test_a_stored_copy_restores_as_a_new_project(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    created = client.post(f"/api/projects/{project_id}/backups")
+    assert created.status_code == 201, created.text
+    filename = created.json()["filename"]
+
+    restored = client.post(
+        f"/api/projects/{project_id}/backups/{quote(filename)}/restore"
+    )
+    assert restored.status_code == 201, restored.text
+    body = restored.json()
+    assert body["id"] != project_id
+    assert body["name"] == "Quantum Mechanics (restored)"
+
+    # Restoring is additive: the original project and the copy are untouched.
+    assert client.get(f"/api/projects/{project_id}").status_code == 200
+    assert len(client.get(f"/api/projects/{project_id}/backups").json()) == 1
+    assert local_backups.vault_dir(project_id).joinpath(filename).is_file()
+    assert client.get(f"/api/projects/{body['id']}").status_code == 200
+
+
+def test_restoring_a_missing_copy_fails_cleanly(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    missing = client.post(f"/api/projects/{project_id}/backups/missing.zip/restore")
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["code"] == "backup_not_found"

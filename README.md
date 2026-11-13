@@ -34,7 +34,7 @@ data on your device, and treats every AI result as a reviewable proposal.
   projects are moved to a local trash folder rather than destroyed.
 - **Per-project storage** — each project gets its own SQLite database, manifest,
   source files, processed copies, thumbnails, exports and working folders, plus a
-  shared local vault for user-created backup copies.
+  shared local vault for verified backup copies.
 - **Image import** — drag and drop or file picker; JPG, PNG, WebP, BMP and TIFF.
   Limits and validation errors come from the backend, not hardcoded UI values.
 - **PDF import** — text-based, image-based and mixed PDFs. The original PDF is
@@ -119,9 +119,10 @@ data on your device, and treats every AI result as a reviewable proposal.
   workspace project menu. Copies are created when you ask, or after opening a project
   when you opt in and the newest copy is older than the configured interval. The
   number kept is configurable (five by default) and the oldest is pruned after a new
-  copy is written. Any copy can be downloaded again or deleted explicitly;
-  downloading never removes it. Deleting a project moves its vault copies to the local
-  trash. The vault is not encrypted and is not synced anywhere.
+  copy is written. Any copy can be downloaded again, restored as a new project, or
+  deleted explicitly; downloading never removes it. Deleting a project moves its
+  vault copies to the local trash. The vault is not encrypted and is not synced
+  anywhere.
 - **Manual tables** — insert an empty table from the editor toolbar with 1–10
   rows and columns and an optional header row, then add or delete rows and columns,
   toggle the header, or delete the table. Every cell is typed by hand; no cell text
@@ -507,9 +508,11 @@ Backups are local files, not a cloud service and not a GitHub upload:
   successful new copy. The name is sanitised
   to a filesystem-safe stem (Unicode is kept), and same-second copies get a numeric
   suffix. A vault download streams the stored file without deleting it. Deleting a
-  copy requires confirmation and removes only that archive. Copies are excluded from
-  new backups, so they can never nest archive inside archive; deleting a project moves
-  its vault folder into the local trash rather than destroying it.
+  copy requires confirmation and removes only that archive. Restoring a stored copy
+  also requires confirmation and creates a new project from it; the original project
+  and the copy are left unchanged. Copies are excluded from new backups, so they can
+  never nest archive inside archive; deleting a project moves its vault folder into
+  the local trash rather than destroying it.
 
 ```text
 GET    /api/projects/{project_id}/backup      # application/zip attachment
@@ -517,6 +520,7 @@ GET    /api/projects/{project_id}/backups     # ProjectBackupSummary[]
 POST   /api/projects/{project_id}/backups     # create one verified copy → 201 summary
 GET    /api/projects/{project_id}/backups/{filename}  # application/zip attachment
 DELETE /api/projects/{project_id}/backups/{filename}  # delete one copy
+POST   /api/projects/{project_id}/backups/{filename}/restore  # restore as new project
 POST   /api/projects/restore                  # multipart field: file → 201 ProjectDetail
 ```
 
@@ -758,7 +762,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions and user-typed display and inline equations with local preview, plus faithful table/equation export; automatic table/equation extraction and figure numbering pending |
 | 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display and inline equations and local Markdown and TXT export; DOCX and page layout pending |
-| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download, additive restore, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
+| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download, additive restore from upload or a stored vault copy, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
 

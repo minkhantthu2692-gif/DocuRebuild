@@ -17,7 +17,7 @@ presented in the UI until it actually works.
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions, user-typed display and inline equations with local KaTeX preview and faithful Markdown/TXT export; automatic table/equation extraction and figure numbering pending |
 | 8. Document editor and export | In progress | Core editor plus manual tables, figures, display and inline equations and local Markdown and TXT export; footnotes, DOCX and page layout pending |
-| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download, additive (new-project) restore, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
+| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download, additive (new-project) restore from an upload or a stored vault copy, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
 
@@ -461,8 +461,10 @@ headers/footers, page numbers, DOCX export and OMML validation.
   details, empty, error, unknown-event, filtered, no-match and export states.
 - Local backup vault: `GET /api/projects/{id}/backups` lists verified copies newest
   first, `POST` creates one from the same validated archive builder,
-  `GET .../backups/{filename}` streams a stored copy, and
-  `DELETE .../backups/{filename}` removes one copy after confirmation. Copies live in
+  `GET .../backups/{filename}` streams a stored copy,
+  `DELETE .../backups/{filename}` removes one copy after confirmation, and
+  `POST .../backups/{filename}/restore` restores a stored copy as a new project.
+  Copies live in
   `data_dir/backups/<project_id>/`, are created on request, and older copies are
   pruned after a successful write. Retention is configurable (`backups.keep_copies`,
   default 5, backend range 1–50; the UI offers 3, 5, 10 and 20) and applies to manual
@@ -470,8 +472,8 @@ headers/footers, page numbers, DOCX export and OMML validation.
   are rejected, and a vault download never deletes the copy. Deleting a project moves
   its vault folder to the local trash as `*-vault`, preserving the archives. The
   workspace project menu opens a dialog that lists time and size, creates a copy,
-  downloads or deletes one with confirmation, and shows empty, loading and error
-  states. Creating a copy is recorded in the activity log.
+  downloads, restores or deletes one with confirmation, and shows empty, loading and
+  error states. Creating a copy is recorded in the activity log.
 - Opt-in automatic copies: a new Settings → Backups section controls
   `backups.auto_on_open` (default off), `interval_hours` (6 hours to 7 days in the UI,
   1–720 accepted) and `keep_copies`. When enabled, `POST /projects/{id}/open`
@@ -480,12 +482,12 @@ headers/footers, page numbers, DOCX export and OMML validation.
   snapshots from simultaneous opens, and a failed copy is logged without blocking the
   open. There is no background scheduler; a copy is attempted only after an open
   request.
-- Backend vault tests for create/list/download/delete, retention pruning, missing
-  projects, unsafe names, due checks, configurable retention, automatic-on-open
+- Backend vault tests for create/list/download/delete/restore, retention pruning,
+  missing projects, unsafe names, due checks, configurable retention, automatic-on-open
   (including the off-by-default and not-due paths) and moving a deleted project's
-  vault to trash, plus component tests for listing, downloading, deleting with
-  confirmation, creating from the empty state, load errors and the Settings controls.
-  The dialog, settings and strings exist in English and Burmese.
+  vault to trash, plus component tests for listing, downloading, deleting and
+  restoring with confirmation, creating from the empty state, load errors and the
+  Settings controls. The dialog, settings and strings exist in English and Burmese.
 
 **Pending**
 

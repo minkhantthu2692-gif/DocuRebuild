@@ -92,7 +92,7 @@ projects/<project-id>/
 ```
 
 The data directory also holds `app.db`, a shared `trash/` for deleted projects, a
-shared `backups/<project_id>/` vault for user-created copies and a short-lived `tmp/`
+shared `backups/<project_id>/` vault for verified copies and a short-lived `tmp/`
 folder used only while building or restoring a backup. Relative asset references are
 stored in SQLite so a project folder can be moved without rewriting paths.
 `resolve_within` rejects path traversal.
@@ -169,6 +169,7 @@ GET    /api/projects/{id}/backups
 POST   /api/projects/{id}/backups
 GET    /api/projects/{id}/backups/{filename}
 DELETE /api/projects/{id}/backups/{filename}
+POST   /api/projects/{id}/backups/{filename}/restore
 POST   /api/projects/restore
 GET    /api/projects/{id}/document
 PUT    /api/projects/{id}/document
@@ -654,6 +655,14 @@ src/
   `backups/<project_id>/` to `trash/<project-folder-name>-vault`, so the copies are
   preserved but no longer appear under the project id. The move is best-effort: a
   failure is logged and never blocks or reverses the project deletion.
+- `POST /projects/{id}/backups/{filename}/restore` restores a stored copy through the
+  same `prepare_restore()`/`finalize_restore()` path as an upload, so the archive is
+  validated, extracted into staging and registered as a **new** project with a new
+  id and a `(restored)` name when needed. `prepare_restore()` only reads the archive,
+  so the stored copy and its original project stay untouched. The stored file is
+  size-checked against `max_backup_mb` before extraction, and the same expanded-size,
+  unsafe-path, checksum and schema checks apply. A failed restore removes its staging
+  folder and leaves both the copy and the original project in place.
 
 ### Local AI cleanup
 

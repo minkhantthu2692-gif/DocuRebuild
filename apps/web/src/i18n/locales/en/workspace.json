@@ -642,7 +642,13 @@
     "deleteDescription": "{{filename}} will be removed from the local vault. This cannot be undone from DocuRebuild.",
     "deleteConfirm": "Delete copy",
     "deleting": "Deleting…",
-    "deleted": "Backup copy deleted"
+    "deleted": "Backup copy deleted",
+    "restoreCopy": "Restore from this copy",
+    "restoreTitle": "Restore this backup copy?",
+    "restoreDescription": "{{filename}} will be restored as a new project. Your current project and this copy stay unchanged.",
+    "restoreConfirm": "Restore copy",
+    "restoring": "Restoring…",
+    "restored": "Backup restored as a new project. Open it from the dashboard."
   },
   "panels": {
     "collapseLeft": "Hide source panel",

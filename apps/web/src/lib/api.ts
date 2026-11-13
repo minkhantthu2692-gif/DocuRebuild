@@ -155,6 +155,11 @@ export const api = {
       `/projects/${projectId}/backups/${encodeURIComponent(filename)}`,
       { method: "DELETE" },
     ),
+  restoreProjectBackupCopy: (projectId: string, filename: string) =>
+    request<ProjectDetail>(
+      `/projects/${projectId}/backups/${encodeURIComponent(filename)}/restore`,
+      { method: "POST" },
+    ),
   restoreProjectBackup: (file: File) => {
     const form = new FormData();
     form.append("file", file);

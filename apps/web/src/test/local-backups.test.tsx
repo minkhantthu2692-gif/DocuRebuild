@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   download: vi.fn(),
   deleteCopy: vi.fn(),
+  restoreCopy: vi.fn(),
   saveBlob: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -35,6 +36,11 @@ vi.mock("@/hooks/use-projects", () => ({
     isPending: false,
     variables: undefined,
     mutate: mocks.deleteCopy,
+  }),
+  useRestoreProjectBackupCopy: () => ({
+    isPending: false,
+    variables: undefined,
+    mutate: mocks.restoreCopy,
   }),
 }));
 
@@ -63,6 +69,7 @@ beforeEach(() => {
   mocks.create.mockReset();
   mocks.download.mockReset();
   mocks.deleteCopy.mockReset();
+  mocks.restoreCopy.mockReset();
   mocks.saveBlob.mockReset();
   mocks.toast.success.mockReset();
   mocks.toast.error.mockReset();
@@ -145,6 +152,40 @@ describe("LocalBackupsDialog", () => {
       ),
     );
     expect(mocks.toast.success).toHaveBeenCalledWith("Backup copy deleted");
+  });
+
+  it("confirms before restoring a copy as a new project", async () => {
+    mocks.backups.data = [
+      {
+        filename: "Book-20261113-101500.zip",
+        byte_size: 1536,
+        created_at: "2026-11-13T10:15:00+00:00",
+      },
+    ];
+    mocks.restoreCopy.mockImplementation(
+      (_filename: string, options: { onSuccess: () => void }) =>
+        options.onSuccess(),
+    );
+    renderDialog();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Restore from this copy" }),
+    );
+
+    expect(screen.getByText("Restore this backup copy?")).toBeInTheDocument();
+    expect(mocks.restoreCopy).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore copy" }));
+
+    await waitFor(() =>
+      expect(mocks.restoreCopy).toHaveBeenCalledWith(
+        "Book-20261113-101500.zip",
+        expect.any(Object),
+      ),
+    );
+    expect(mocks.toast.success).toHaveBeenCalledWith(
+      "Backup restored as a new project. Open it from the dashboard.",
+    );
   });
 
   it("shows an error when the list cannot be loaded", () => {

@@ -104,6 +104,18 @@ export function useDeleteProjectBackupCopy(projectId: string) {
   });
 }
 
+export function useRestoreProjectBackupCopy(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (filename: string) =>
+      api.restoreProjectBackupCopy(projectId, filename),
+    onSuccess: (project) => {
+      queryClient.setQueryData(["project", project.id], project);
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
 export function useRestoreProjectBackup() {
   const queryClient = useQueryClient();
   return useMutation({

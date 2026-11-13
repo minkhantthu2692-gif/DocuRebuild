@@ -1,9 +1,10 @@
-"""User-initiated local backup copies.
+"""Local backup copies.
 
 A download is a one-off file. This vault keeps recent verified project archives on
 disk so a lost or damaged download is not the only recovery path. Copies are
-created only when the user asks for one, live under the application data
-directory, and are pruned to a small fixed count per project.
+created when the user asks, or after opening a project when opted in, live under
+the application data directory, are pruned to a configurable count per project,
+and can be downloaded, restored as a new project, or deleted explicitly.
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ import shutil
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import AppError
@@ -145,6 +148,36 @@ def delete_copy(project_id: str, filename: str) -> dict[str, object]:
             500, "backup_delete_failed", "The backup copy could not be deleted."
         ) from exc
     return {"ok": True, "filename": filename}
+
+
+def restore_copy(session: Session, project: Project, filename: str) -> Project:
+    """Restore a stored copy as a new project.
+
+    ``prepare_restore()`` only reads the archive, so the stored copy and the
+    project it came from stay untouched. Restoring is additive by design: the
+    result is a new project with a new id.
+    """
+    path = resolve_copy(project.id, filename)
+    limit = get_settings().max_backup_mb * 1024 * 1024
+    try:
+        compressed = path.stat().st_size
+    except OSError as exc:
+        raise AppError(
+            404, "backup_not_found", "That backup copy does not exist."
+        ) from exc
+    if compressed > limit:
+        raise AppError(
+            413,
+            "backup_too_large",
+            f"Backups are limited to {get_settings().max_backup_mb} MB.",
+        )
+
+    candidate = project_backup.prepare_restore(path)
+    try:
+        return project_backup.finalize_restore(session, candidate)
+    except Exception:
+        shutil.rmtree(candidate.directory, ignore_errors=True)
+        raise
 
 
 def trash_project_vault(project_id: str, base_name: str | None = None) -> Path | None:
