@@ -21,6 +21,7 @@ import {
   List,
   ListOrdered,
   Link2,
+  Parentheses,
   Quote,
   Redo2,
   Search,
@@ -68,6 +69,7 @@ import { useDocument, useSaveDocument } from "@/hooks/use-document";
 import { api } from "@/lib/api";
 import { createEditorExtensions } from "@/lib/editor-extensions";
 import {
+  createEquationId,
   equationAt,
   equationContent,
   renderEquationPreview,
@@ -75,6 +77,11 @@ import {
   type EquationKind,
   type SelectedEquation,
 } from "@/lib/editor-equation";
+import {
+  equationReferenceContent,
+  numberedEquationTargets,
+  type EquationTarget,
+} from "@/lib/editor-equation-reference";
 import { figureInsertionContent, createFigureId, figureAt, selectedFigure, type SelectedFigure } from "@/lib/editor-figure";
 import {
   figureReferenceContent,
@@ -179,6 +186,8 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [equationOpen, setEquationOpen] = useState(false);
   const [equationLatex, setEquationLatex] = useState("");
   const [equationNumbered, setEquationNumbered] = useState(false);
+  const [equationReferenceOpen, setEquationReferenceOpen] = useState(false);
+  const [equationReferenceTargets, setEquationReferenceTargets] = useState<EquationTarget[]>([]);
   // Used when inserting; an edited equation takes its kind from the node.
   const [equationKind, setEquationKind] = useState<EquationKind>("block");
 
@@ -472,6 +481,21 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     [editor],
   );
 
+  const openEquationReferenceDialog = useCallback(() => {
+    if (!editor) return;
+    setEquationReferenceTargets(numberedEquationTargets(editor.state.doc));
+    setEquationReferenceOpen(true);
+  }, [editor]);
+
+  const insertEquationReference = useCallback(
+    (targetId: string) => {
+      if (!editor) return;
+      editor.chain().focus().insertContent(equationReferenceContent(targetId)).run();
+      setEquationReferenceOpen(false);
+    },
+    [editor],
+  );
+
   const equationPreview = useMemo(
     () => renderEquationPreview(equationLatex, equationKind),
     [equationLatex, equationKind],
@@ -515,6 +539,9 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
               ...node.attrs,
               latex,
               numbered: equationNumbered,
+              id: equationNumbered
+                ? equationSelection.id ?? createEquationId()
+                : equationSelection.id,
             });
             return true;
           })
@@ -937,6 +964,13 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           active={equationSelection?.kind === "inline"}
           disabled={!editor?.isEditable}
           onClick={() => openEquationDialog("inline")}
+        />
+
+        <ToolbarButton
+          label={t("editor.equation.reference.insert")}
+          icon={Parentheses}
+          disabled={!editor?.isEditable}
+          onClick={openEquationReferenceDialog}
         />
 
         <Separator orientation="vertical" className="mx-1 h-5" />
@@ -1452,6 +1486,57 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={equationReferenceOpen} onOpenChange={setEquationReferenceOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("editor.equation.reference.title")}</DialogTitle>
+            <DialogDescription>
+              {t("editor.equation.reference.description")}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-4">
+            {equationReferenceTargets.length === 0 ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {t("editor.equation.reference.empty")}
+              </p>
+            ) : (
+              <ul className="max-h-72 space-y-1.5 overflow-y-auto">
+                {equationReferenceTargets.map((target) => (
+                  <li key={target.id}>
+                    <button
+                      type="button"
+                      className="flex w-full flex-col items-start gap-0.5 rounded-md border border-border/60 bg-background/50 px-3 py-2 text-left text-xs transition-colors hover:border-border hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => insertEquationReference(target.id)}
+                    >
+                      <span className="font-medium">
+                        {t("editor.equation.referenceLabel", { n: target.number })}
+                      </span>
+                      <span
+                        dir="ltr"
+                        className="line-clamp-2 w-full break-all font-mono text-2xs text-muted-foreground"
+                      >
+                        {target.latex || t("editor.equation.reference.untitled")}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEquationReferenceOpen(false)}
+            >
+              {tCommon("actions.cancel")}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

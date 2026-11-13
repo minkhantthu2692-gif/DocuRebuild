@@ -493,11 +493,26 @@ src/
   inserting, deleting or moving equations renumbers the document without touching
   any stored source. The label is `pointer-events-none`, so it cannot be selected or
   edited as content, and inline math never carries the flag.
+- A numbered display equation also gets a stable `id` and can be cited from prose
+  with the inline atom `equationReference`, which stores only `targetId`. It reuses
+  the same `createReferenceNode` / `resolveReferenceLabel` implementation as figure
+  references, so the two cannot drift. `numberedEquationTargets` walks the document,
+  counts numbered display equations and maps each id to its current number; the
+  visible `Equation (n)` label is resolved on every transaction. A deleted,
+  unnumbered or inline target renders as `Equation (missing)` in a destructive style
+  rather than silently becoming another number. A numbered equation created before
+  ids existed still consumes a number, so ids and numbers cannot drift apart.
 - Export preserves that numbering deterministically: while traversing, a numbered
   display equation emits a NUL-delimited token, and `render_markdown` /
   `render_text` replace the tokens in document order with `(1)`, `(2)`, … after the
   `$$` block or LaTeX line. Unnumbered equations export unchanged, and the token is
   resolved before the string is returned, so no control character reaches the file.
+- Equation references are resolved the same way as figure references. A pre-pass
+  (`_equation_number_map`) maps each numbered display equation id to its
+  document-order number, traversal writes `\x00equation-ref:<id>\x00`, and the
+  post-pass replaces each token with `Equation (n)` or `Equation (missing)`. Word
+  export uses the same map through `_DocxRenderer.equation_numbers`. Inline math is
+  never counted, so it cannot become a target.
 
 ### Document export
 

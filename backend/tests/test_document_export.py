@@ -304,6 +304,85 @@ def test_unnumbered_figure_cannot_be_referenced() -> None:
     assert "Figure (missing)" in render_text(content)
 
 
+def test_equation_references_resolve_to_document_order() -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {"type": "blockMath", "attrs": {"id": "eq-a", "latex": "a = b", "numbered": True}},
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "From "},
+                    {"type": "equationReference", "attrs": {"targetId": "eq-b"}},
+                    {"type": "text", "text": " and "},
+                    {"type": "equationReference", "attrs": {"targetId": "eq-a"}},
+                    {"type": "text", "text": "."},
+                ],
+            },
+            {"type": "blockMath", "attrs": {"id": "eq-b", "latex": "c = d", "numbered": True}},
+        ],
+    }
+    markdown = render_markdown(content)
+    assert "From Equation (2) and Equation (1)." in markdown
+    assert "\x00" not in markdown
+
+    text = render_text(content)
+    assert "From Equation (2) and Equation (1)." in text
+    assert "\x00" not in text
+
+
+def test_equation_reference_to_missing_target_is_explicit() -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "equationReference", "attrs": {"targetId": "gone"}},
+                ],
+            }
+        ],
+    }
+    # A reference never silently becomes a different equation number.
+    assert render_markdown(content) == "Equation (missing)\n"
+    assert render_text(content) == "Equation (missing)\n"
+
+
+def test_unnumbered_equation_cannot_be_referenced() -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {"type": "blockMath", "attrs": {"id": "eq-a", "latex": "a = b"}},
+            {
+                "type": "paragraph",
+                "content": [{"type": "equationReference", "attrs": {"targetId": "eq-a"}}],
+            },
+        ],
+    }
+    assert "Equation (missing)" in render_markdown(content)
+    assert "Equation (missing)" in render_text(content)
+
+
+def test_inline_math_is_not_a_reference_target() -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    # Even if an inline formula somehow carried an id, only a
+                    # numbered display equation may be a reference target.
+                    {"type": "inlineMath", "attrs": {"latex": "x^2", "id": "eq-inline"}},
+                    {"type": "text", "text": " "},
+                    {"type": "equationReference", "attrs": {"targetId": "eq-inline"}},
+                ],
+            },
+        ],
+    }
+    assert "Equation (missing)" in render_markdown(content)
+    assert "Equation (missing)" in render_text(content)
+
+
 def test_markdown_export_omits_asset_paths() -> None:
     assert "/api/" not in render_markdown(_doc())
 

@@ -137,7 +137,8 @@ data on your device, and treats every AI result as a reviewable proposal.
   LaTeX is refused rather than saved. Display equations can be given an optional
   number: the editor shows it from document order, and Markdown/TXT/Word export
   writes the same `(n)` label after the equation, while the saved LaTeX never
-  contains it.
+  contains it. A numbered display equation can be cited from the text; the
+  citation shows `Equation (n)` and follows the equation when it moves.
   Only the LaTeX source is stored, so equations work offline and are part of the
   document, versions, backups, Markdown (`$$` blocks and `$...$` formulas), plain
   text and Word export (native equations). Equations are typed by you; OCR or AI
@@ -418,6 +419,10 @@ extension:
   longer numbered is written as `Figure (missing)` rather than silently becoming a
   different number. The stored document keeps only the target id, so renumbering a
   figure updates every citation in every format.
+- Equation citations use the same rule: a numbered display equation is written as
+  `Equation (n)` where it is cited, or `Equation (missing)` when the target was
+  deleted, unnumbered or was inline math. The LaTeX itself is never rewritten to
+  carry a citation number.
 - Tables export as GitHub-flavoured Markdown. A literal `|` is escaped, multiple
   paragraphs in one cell are joined with `<br>`, and a table without a header gets
   a blank structural header row. If merged cells are present, the table is written
@@ -699,13 +704,14 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 - Equations are typed as LaTeX; OCR and AI do not transcribe or suggest them.
   Invalid LaTeX is refused before insertion, but the editor cannot verify that the
   equation matches the source page. Display equations can be numbered per equation;
-  the number is a position-derived `(n)` label, not a manually typed or
-  cross-referenced identifier, and inline formulas cannot be numbered. Markdown
-  exports display equations as a `$$` block and inline formulas as `$...$`; plain
-  text keeps the LaTeX source. The version preview and line diff are text-based, so
-  an equation-only change is stored and restorable but may not appear in the
-  comparison; the same applies to figure citations, whose generated label is not
-  part of the preview text.
+  the number is a position-derived `(n)` label, and numbered display equations can be
+  cited from the text. A citation is a resolved `Equation (n)` label, not a clickable
+  link or a Word cross-reference field, and inline formulas cannot be numbered or
+  cited. Markdown exports display equations as a `$$` block and inline formulas as
+  `$...$`; plain text keeps the LaTeX source. The version preview and line diff are
+  text-based, so an equation-only change is stored and restorable but may not appear
+  in the comparison; the same applies to figure and equation citations, whose
+  generated label is not part of the preview text.
 - Table limits: inserting offers 1–10 rows and columns, and merged cells can be
   created by selecting multiple cells and choosing merge/split. There is no
   per-cell alignment beyond paragraph alignment and no column resizing. Automatic
@@ -802,7 +808,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview and optional equation numbering, plus faithful table/equation export to Markdown, TXT and Word; automatic table/equation extraction pending |
+| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT and Word; automatic table/equation extraction pending |
 | 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display and inline equations and local Markdown, TXT and Word export; footnotes and PDF page layout pending |
 | 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download, additive restore from upload or a stored vault copy, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned |

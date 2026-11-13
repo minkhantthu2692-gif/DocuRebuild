@@ -28,6 +28,8 @@ export interface SelectedEquation {
   kind: EquationKind;
   /** Display equations only; inline math is never numbered. */
   numbered: boolean;
+  /** Stable id for references; null on equations created before ids existed. */
+  id: string | null;
 }
 
 function equationKind(node: PMNode): EquationKind | null {
@@ -42,6 +44,10 @@ function readEquation(node: PMNode, pos: number, kind: EquationKind): SelectedEq
     latex: String(node.attrs.latex ?? ""),
     kind,
     numbered: kind === "block" && Boolean(node.attrs.numbered),
+    id:
+      kind === "block" && typeof node.attrs.id === "string" && node.attrs.id
+        ? node.attrs.id
+        : null,
   };
 }
 
@@ -68,15 +74,31 @@ export function equationAt(state: EditorState, pos: number): SelectedEquation | 
   return readEquation(node, pos, kind);
 }
 
+/** A stable id for a numbered equation, used by equation references. */
+export function createEquationId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `equation-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /** Stored document content for one equation. */
 export function equationContent(
   latex: string,
   kind: EquationKind = "block",
   numbered = false,
+  id: string | null = null,
 ): JSONContent {
   return kind === "inline"
     ? { type: "inlineMath", attrs: { latex } }
-    : { type: "blockMath", attrs: { latex, numbered } };
+    : {
+        type: "blockMath",
+        attrs: {
+          latex,
+          numbered,
+          id: id ?? (numbered ? createEquationId() : null),
+        },
+      };
 }
 
 /**
@@ -116,6 +138,12 @@ export const NumberedBlockMath = BlockMath.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
+      id: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-equation-id"),
+        renderHTML: (attributes) =>
+          attributes.id ? { "data-equation-id": String(attributes.id) } : {},
+      },
       numbered: {
         default: false,
         parseHTML: (element) => element.getAttribute("data-numbered") === "true",

@@ -160,6 +160,15 @@
       "inlineNote": "Markdown export writes the formula as $...$ inside the sentence. It is saved with the document and its versions.",
       "numbered": "Show an equation number",
       "numberedHint": "Numbers follow document order and are written on export. The saved LaTeX never contains the number.",
+      "referenceLabel": "Equation ({{n}})",
+      "referenceMissing": "Equation (missing)",
+      "reference": {
+        "insert": "Insert equation reference",
+        "title": "Insert equation reference",
+        "description": "Insert a reference to a numbered display equation at the cursor. The number is read from the document, so moving or renumbering the equation updates the reference.",
+        "empty": "No numbered equation yet. Insert a display equation and turn on \"Show an equation number\" first.",
+        "untitled": "Untitled equation"
+      },
       "remove": "Remove equation",
       "update": "Save equation",
       "insert": "Insert equation",

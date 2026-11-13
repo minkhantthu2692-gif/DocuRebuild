@@ -15,7 +15,7 @@ presented in the UI until it actually works.
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and faithful Markdown/TXT/Word export; automatic table/equation extraction pending |
+| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word export; automatic table/equation extraction pending |
 | 8. Document editor and export | In progress | Core editor plus manual tables, figures, display and inline equations and local Markdown, TXT and Word export with native equations and embedded figures; footnotes and PDF page layout pending |
 | 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download, additive (new-project) restore from an upload or a stored vault copy, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
@@ -351,6 +351,12 @@ the user must review every region before extracting it.
   `Figure n` label from document order, so moving or renumbering the figure updates
   every citation. A deleted or unnumbered target renders as `Figure (missing)` and
   exports the same marker instead of silently becoming another number.
+- Equation cross-references: a numbered display equation also gets a stable id, and
+  the toolbar can insert a citation that stores only that id. The live label
+  `Equation (n)` is resolved from document order, so moving or renumbering the
+  equation updates every citation; a deleted, unnumbered or inline target exports as
+  `Equation (missing)`. Figure and equation citations share the same reference node
+  implementation.
 
 **Pending**
 
@@ -406,6 +412,9 @@ the user must review every region before extracting it.
 - Figure citations export as their resolved `Figure n` label at the position of the
   citation; a missing or unnumbered target becomes `Figure (missing)`. The stored
   node keeps only the target id, so a renumbered figure updates every format.
+- Equation citations export as `Equation (n)` at the position of the citation; a
+  missing, unnumbered or inline target becomes `Equation (missing)`. The LaTeX source
+  is never rewritten to carry the citation.
 - Tables export as GFM Markdown with escaped pipes and `<br>` inside multi-block
   cells; a missing header gets a structural blank header, and merged cells use an
   HTML table so no cell content is lost. Plain-text export keeps every cell. Word

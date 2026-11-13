@@ -5,6 +5,7 @@ import TextAlign from "@tiptap/extension-text-align";
 import StarterKit from "@tiptap/starter-kit";
 
 import { NumberedBlockMath } from "./editor-equation";
+import { EquationReference } from "./editor-equation-reference";
 import { FigureNode } from "./editor-figure";
 import { FigureReference } from "./editor-reference";
 import { normalizeLinkUrl } from "./link";
@@ -45,6 +46,9 @@ export function createEditorExtensions(placeholder: () => string) {
     // only the target id; the visible "Figure n" is computed, so a moved figure
     // renumbers its references and a deleted one becomes an explicit missing marker.
     FigureReference,
+    // Equation references use the same inline atom pattern and resolve their
+    // number from the document, so a renumbered equation updates its citations.
+    EquationReference,
     // Display equations only. The saved document keeps the LaTeX source and an
     // optional number flag; numbering is rendered from document order, and a
     // single block atom avoids dollar-sign input rules rewriting currency text.

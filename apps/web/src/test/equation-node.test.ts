@@ -64,6 +64,7 @@ describe("equation editor node", () => {
       latex: "a^2 + b^2 = c^2",
       kind: "block",
       numbered: false,
+      id: null,
     });
   });
 
@@ -136,6 +137,7 @@ describe("equation editor node", () => {
       latex: "x^2",
       kind: "inline",
       numbered: false,
+      id: null,
     });
     expect(JSON.stringify(editor.getJSON())).not.toContain('"numbered":true');
     expect(editor.getHTML()).not.toContain('data-numbered="true"');
@@ -207,6 +209,7 @@ describe("equation editor node", () => {
       latex: "E = mc^2",
       kind: "inline",
       numbered: false,
+      id: null,
     });
     const html = editor.getHTML();
     expect(html).toContain('data-type="inline-math"');
@@ -228,6 +231,7 @@ describe("equation editor node", () => {
       latex: "x^2",
       kind: "inline",
       numbered: false,
+      id: null,
     });
     expect(editor.state.doc.textContent).toBe("");
   });

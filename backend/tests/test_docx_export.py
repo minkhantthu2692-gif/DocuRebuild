@@ -220,6 +220,30 @@ def test_docx_export_resolves_figure_references(tmp_path: Path) -> None:
     assert all("\x00" not in text for text in texts)
 
 
+def test_docx_export_resolves_equation_references(tmp_path: Path) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {"type": "blockMath", "attrs": {"id": "eq-a", "latex": "a = b", "numbered": True}},
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "From "},
+                    {"type": "equationReference", "attrs": {"targetId": "eq-b"}},
+                    {"type": "text", "text": " and "},
+                    {"type": "equationReference", "attrs": {"targetId": "eq-a"}},
+                    {"type": "text", "text": "."},
+                ],
+            },
+            {"type": "blockMath", "attrs": {"id": "eq-b", "latex": "c = d", "numbered": True}},
+        ],
+    }
+    document = _open(render_docx(content, tmp_path))
+    texts = _paragraph_texts(document)
+    assert "From Equation (2) and Equation (1)." in texts
+    assert all("\x00" not in text for text in texts)
+
+
 def test_docx_export_embeds_project_figures(
     client: TestClient, project: dict
 ) -> None:
