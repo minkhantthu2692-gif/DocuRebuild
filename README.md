@@ -164,7 +164,7 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 Structured element reconstruction (automatic table-cell extraction, automatic
 equation transcription, generative figure detection), cloud/free-tier AI providers,
-image-generation profiles, scheduled or background backups, selective restore from an
+image-generation profiles, selective restore from an
 archive, backup encryption, PDF layout export, desktop packaging and PWA install
 support are planned but not implemented. OCR extracts text blocks,
 reading order and conservative layout hints; it does not build table structure or
@@ -541,17 +541,16 @@ Backups are local files, not a cloud service and not a GitHub upload:
   menu lists them newest first with time and size. A copy is created when you press
   **Create copy**, or automatically after opening a project if you enabled automatic
   copies in Settings and the newest copy is older than the chosen interval (6 hours to
-  7 days). The copy is created after the project-open response; no backup runs while
-  the app is closed. The number kept is set in Settings (presets from 3 to 20, 1–50
-  accepted by the backend; default 5), and the oldest archives are pruned after a
-  successful new copy. The name is sanitised
-  to a filesystem-safe stem (Unicode is kept), and same-second copies get a numeric
-  suffix. A vault download streams the stored file without deleting it. Deleting a
-  copy requires confirmation and removes only that archive. Restoring a stored copy
-  also requires confirmation and creates a new project from it; the original project
-  and the copy are left unchanged. Copies are excluded from new backups, so they can
-  never nest archive inside archive; deleting a project moves its vault folder into
-  the local trash rather than destroying it.
+  7 days). The copy is created after the project-open response. The number kept is set
+  in Settings (presets from 3 to 20, 1–50 accepted by the backend; default 5), and the
+  oldest archives are pruned after a successful new copy. The name is sanitised to a
+  filesystem-safe stem (Unicode is kept), and same-second copies get a numeric suffix.
+  A vault download streams the stored file without deleting it. Deleting a copy
+  requires confirmation and removes only that archive. Restoring a stored copy also
+  requires confirmation and creates a new project from it; the original project and
+  the copy are left unchanged. Copies are excluded from new backups, so they can never
+  nest archive inside archive; deleting a project moves its vault folder into the
+  local trash rather than destroying it.
 
 ```text
 GET    /api/projects/{project_id}/backup      # application/zip attachment
@@ -568,6 +567,31 @@ Restore error codes: `backup_invalid`, `backup_missing_files`,
 `backup_too_large`, `backup_import_running`, `backup_incomplete`,
 `backup_verification_failed`, `backup_restore_failed` and
 `project_storage_incomplete`.
+
+#### Optional scheduled copies
+
+Automatic copies normally run after you open a project. To create them while the
+app is closed, run the included command from your own scheduler:
+
+```text
+# Windows, from the backend folder
+.venv\Scripts\python.exe -m app.scheduled_backup
+
+# Linux or macOS, from the backend folder
+.venv/bin/python -m app.scheduled_backup
+```
+
+The command is a single pass, not a daemon. It opens the local database, reads the
+saved backup settings and creates at most one copy for each project whose newest
+copy is older than the configured interval. It prints a summary and exits with code
+1 if any project failed, so the scheduler can report the problem. It does nothing
+unless **Automatic copies** is enabled in Settings, and it uses the same interval
+and retention as opening a project. Set `DOCUREBUILD_DATA_DIR` for the command if
+you run the app with a custom data folder. Schedule it with Windows Task Scheduler,
+cron or a systemd timer, and run it while the app is closed so two processes do not
+create a copy at the same moment. It makes no network request and copies nothing
+outside the local data folder. Selective restore and backup encryption remain
+unimplemented.
 
 ### PDF import
 
@@ -826,7 +850,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT and Word; automatic table/equation extraction pending |
 | 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT and Word export; PDF page layout pending |
-| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download, additive restore from upload or a stored vault copy, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
+| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download, additive restore from upload or a stored vault copy, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers; selective restore and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
 

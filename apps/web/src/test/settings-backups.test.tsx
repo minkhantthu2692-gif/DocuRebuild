@@ -71,7 +71,7 @@ describe("backup settings", () => {
     expect(screen.getByText("1 day")).toBeInTheDocument();
     expect(screen.getByText("5 copies")).toBeInTheDocument();
     expect(
-      screen.getByText(/Nothing runs while the app is closed/),
+      screen.getByText(/The optional scheduled command uses the same setting/),
     ).toBeInTheDocument();
   });
 
@@ -79,7 +79,7 @@ describe("backup settings", () => {
     renderPage();
 
     fireEvent.click(
-      screen.getByLabelText("Create a backup copy after opening a project when one is due"),
+      screen.getByLabelText("Create automatic backup copies when one is due"),
     );
 
     expect(mocks.update).toHaveBeenCalledWith(

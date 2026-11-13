@@ -17,7 +17,7 @@ presented in the UI until it actually works.
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word export; automatic table/equation extraction pending |
 | 8. Document editor and export | In progress | Core editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT and Word export with native equations and footnotes and embedded figures; PDF page layout pending |
-| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download, additive (new-project) restore from an upload or a stored vault copy, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
+| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download, additive (new-project) restore from an upload or a stored vault copy, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers; selective restore and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
 
@@ -523,8 +523,13 @@ headers/footers, page numbers, PDF layout export and broader OMML coverage.
   schedules a background copy only if the newest vault copy is older than the
   interval. The task re-reads settings in its own session, a lock prevents duplicate
   snapshots from simultaneous opens, and a failed copy is logged without blocking the
-  open. There is no background scheduler; a copy is attempted only after an open
-  request.
+  open.
+- Optional scheduled copies while the app is closed:
+  `python -m app.scheduled_backup` is a one-pass command for Windows Task Scheduler,
+  cron or a systemd timer. It respects the same opt-in setting, interval and
+  retention, creates at most one due copy per project, continues after a per-project
+  failure, prints a summary and exits with code 1 when any project failed. It is not
+  a daemon and makes no network request.
 - Backend vault tests for create/list/download/delete/restore, retention pruning,
   missing projects, unsafe names, due checks, configurable retention, automatic-on-open
   (including the off-by-default and not-due paths) and moving a deleted project's
@@ -534,9 +539,8 @@ headers/footers, page numbers, PDF layout export and broader OMML coverage.
 
 **Pending**
 
-- Selective restore (single page, asset or version from an archive), scheduled or
-  background backups while the app is closed, and backup encryption. Editor undo/redo
-  stays separate from revision history.
+- Selective restore (single page, asset or version from an archive) and backup
+  encryption. Editor undo/redo stays separate from revision history.
 
 ## Phase 10 — Desktop, PWA and mobile distribution (planned)
 

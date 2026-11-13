@@ -158,10 +158,10 @@
   },
   "backups": {
     "title": "Backup copies",
-    "description": "Keep verified copies of each project on this device. Automatic copies are opt-in and run only after you open a project.",
+    "description": "Keep verified copies of each project on this device. Automatic copies are opt-in and run after you open a project or when the optional scheduled command runs.",
     "auto": "Automatic copies",
-    "autoDescription": "When enabled, opening a project creates a copy only if the newest one is older than the interval below. Nothing runs while the app is closed.",
-    "autoLabel": "Create a backup copy after opening a project when one is due",
+    "autoDescription": "When enabled, opening a project creates a copy only if the newest one is older than the interval below. The optional scheduled command uses the same setting, interval and retention.",
+    "autoLabel": "Create automatic backup copies when one is due",
     "interval": "Minimum interval",
     "intervalDescription": "How old the newest copy must be before opening the project creates another.",
     "intervalValues": {

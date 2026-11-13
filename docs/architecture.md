@@ -42,7 +42,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.pdf` | PDF open/validation, page rendering, embedded text extraction, capability detection |
 | `services.layout` | Shared deterministic block classification (heading, list, caption, equation, table-like grid, running header/footer, page number) for OCR and embedded PDF text |
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps, coalesced revision snapshots, manual checkpoints and restore |
-| `services.document_export` | Deterministic Tiptap-to-Markdown/TXT/DOCX rendering, escaping, OMML equations, figure embedding and download names |
+| `services.document_export` | Deterministic Tiptap-to-Markdown/TXT/DOCX rendering, escaping, OMML equations, figure embedding, native footnotes and download names |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
@@ -50,6 +50,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, vision region requests, listing and review decisions |
 | `services.ai_vision` | Page-image encoding, normalized-to-source rectangle mapping and filtering for optional vision region proposals |
 | `services.ai_usage` | Local AI request metadata, rolling-window request counting and usage summaries |
+| `app.scheduled_backup` | Optional one-pass CLI entry point for external schedulers: creates due automatic copies, respects saved preferences and reports failures |
 | `api.routes.*` | HTTP surface (`/api/...`) |
 
 ### Storage model
@@ -767,16 +768,23 @@ src/
   oldest archives are unlinked after a successful move. Same-second copies get `-2`,
   `-3`, … suffixes, so a create never overwrites an existing copy. Listing is
   newest-first by `st_mtime_ns`. Downloads stream the stored file and never delete it.
-- Automatic copies are opt-in (`backups.auto_on_open`, default `false`) and only run
-  after `POST /projects/{id}/open`. The route checks the setting, then schedules
+- Automatic copies are opt-in (`backups.auto_on_open`, default `false`) and normally
+  run after `POST /projects/{id}/open`. The route checks the setting, then schedules
   `auto_copy_for_project()` as a FastAPI background task, so opening never waits for
   an archive. That task opens its own session, re-reads `backups.interval_hours`
   (1–720, default 24) and `keep_copies`, and skips the copy unless the newest vault
   copy is at least that old. A process-wide lock re-checks due state, so two
   simultaneous opens cannot write duplicate snapshots. An import in progress makes
-  `create_backup()` refuse; the failure is logged and the project still opens. There
-  is no background scheduler: a copy is attempted only as part of an open request,
-  and no setting change triggers a copy by itself.
+  `create_backup()` refuse; the failure is logged and the project still opens.
+- The app itself has no always-on scheduler. For copies while the app is closed,
+  `python -m app.scheduled_backup` is an optional one-pass entry point for Windows
+  Task Scheduler, cron or a systemd timer. It runs migrations if needed, reads the
+  same opt-in setting, interval and retention, calls the same `auto_copy()` for each
+  project, logs a failure per project without stopping the rest, prints a summary and
+  exits with code 1 when any project failed. It is not a daemon, makes no network
+  request and writes only inside the local data directory. The documentation tells
+  the user to run it while the app is closed so two processes do not create a copy at
+  the same moment.
 - Vault filenames are treated as untrusted input: the service rejects empty names,
   path separators, `..`, non-`.zip` suffixes, symlinks and non-files with
   `backup_not_found`. The route also sets an ASCII `filename` fallback derived with
