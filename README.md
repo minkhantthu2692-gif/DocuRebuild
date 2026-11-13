@@ -143,6 +143,12 @@ data on your device, and treats every AI result as a reviewable proposal.
   document, versions, backups, Markdown (`$$` blocks and `$...$` formulas), plain
   text and Word export (native equations). Equations are typed by you; OCR or AI
   equation recognition is not implemented.
+- **Footnotes** — insert a footnote from the toolbar and type its text in the
+  dialog. Footnotes are numbered in document order, so inserting or deleting one
+  renumbers the rest automatically; the number is never stored in the note. Export
+  keeps the text: Markdown writes GitHub-flavoured `[^n]` markers with definitions,
+  plain text appends a `Notes:` section, and Word writes native footnotes. Footnotes
+  are never detected from the source automatically, and an empty note is refused.
 - **Project activity log** — the workspace project menu lists local events newest
   first: imports, page processing, region extraction, OCR, document exports and
   backups. Entries are metadata only (counts, formats, sizes, ids and timestamps);
@@ -423,6 +429,10 @@ extension:
   `Equation (n)` where it is cited, or `Equation (missing)` when the target was
   deleted, unnumbered or was inline math. The LaTeX itself is never rewritten to
   carry a citation number.
+- Footnotes export their stored text. Markdown writes `[^n]` at the citation point
+  and a matching `[^n]: text` definition (continuation lines indented); plain text
+  writes `[n]` and a `Notes:` section; Word writes a native footnote part, so the
+  note is editable in Word rather than pasted into the sentence.
 - Tables export as GitHub-flavoured Markdown. A literal `|` is escaped, multiple
   paragraphs in one cell are joined with `<br>`, and a table without a header gets
   a blank structural header row. If merged cells are present, the table is written
@@ -690,8 +700,8 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 
 ## Known limitations
 
-- The editor covers core rich text, manual tables and equations, not the full
-  target model (footnotes and page layout are pending). Figures are supported as
+- The editor covers core rich text, manual tables, equations and footnotes, not the
+  full target model (page layout is pending). Figures are supported as
   block image nodes from the region library; their caption and alt text can be
   edited, an optional figure number can be generated, and numbered figures can be
   cited from the text. A citation is a resolved `Figure n` label, not a clickable
@@ -712,6 +722,12 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   text-based, so an equation-only change is stored and restorable but may not appear
   in the comparison; the same applies to figure and equation citations, whose
   generated label is not part of the preview text.
+- Footnotes are typed by hand; OCR and AI never create or transcribe one. The
+  editor cannot verify that a note matches the source page, and a note is a single
+  plain-text field with no rich formatting or nested notes. The number is derived
+  from document order and cannot be set manually, so a typed number in the note text
+  would appear twice. Markdown exports GitHub-flavoured footnote definitions, plain
+  text a `Notes:` section, and Word a native footnote; PDF export is still pending.
 - Table limits: inserting offers 1–10 rows and columns, and merged cells can be
   created by selecting multiple cells and choosing merge/split. There is no
   per-cell alignment beyond paragraph alignment and no column resizing. Automatic
@@ -809,7 +825,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT and Word; automatic table/equation extraction pending |
-| 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display and inline equations and local Markdown, TXT and Word export; footnotes and PDF page layout pending |
+| 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT and Word export; PDF page layout pending |
 | 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download, additive restore from upload or a stored vault copy, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |

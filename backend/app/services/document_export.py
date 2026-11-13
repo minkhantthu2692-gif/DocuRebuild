@@ -24,12 +24,17 @@ import io
 import re
 from pathlib import Path
 from typing import Any, Literal
+from xml.sax.saxutils import escape as xml_escape
 
 import latex2mathml.converter
 import mathml2omml
 from docx import Document
+from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.opc.constants import CONTENT_TYPE as CT
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
+from docx.opc.packuri import PackURI
+from docx.opc.part import Part
 from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import nsdecls, qn
 from docx.shared import Inches, Pt
@@ -146,6 +151,8 @@ def _inline_markdown(nodes: list[dict[str, Any]] | None) -> str:
             parts.append(_figure_reference_marker(node))
         elif kind == "equationReference":
             parts.append(_equation_reference_marker(node))
+        elif kind == "footnote":
+            parts.append(_FOOTNOTE_MARKER_TOKEN)
         elif kind == "inlineMath":
             parts.append(_equation_marker(node, markdown=True, block=False))
         else:
@@ -174,6 +181,8 @@ def _inline_text(nodes: list[dict[str, Any]] | None) -> str:
             parts.append(_figure_reference_marker(node))
         elif kind == "equationReference":
             parts.append(_equation_reference_marker(node))
+        elif kind == "footnote":
+            parts.append(_FOOTNOTE_MARKER_TOKEN)
         elif kind == "inlineMath":
             parts.append(_equation_marker(node, markdown=False, block=False))
         else:
@@ -330,6 +339,61 @@ def _resolve_equation_references(rendered: str, numbers: dict[str, int]) -> str:
         return f"Equation ({number})" if number else _EQUATION_REFERENCE_MISSING
 
     return _EQUATION_REFERENCE_TOKEN.sub(replace, rendered)
+
+
+# Footnotes store their own text on an inline atom. The visible number is derived
+# from document order, so inserting or deleting a note renumbers the rest. Every
+# footnote is counted, even one with empty text, so the marker and its definition
+# can never drift apart.
+_FOOTNOTE_MARKER_TOKEN = "\x00footnote-marker\x00"
+
+
+def _footnote_nodes(content: dict[str, Any]) -> list[str]:
+    """Read footnote text in document order."""
+    notes: list[str] = []
+    stack: list[dict[str, Any]] = [content]
+    while stack:
+        node = stack.pop()
+        if node.get("type") == "footnote":
+            text = (node.get("attrs") or {}).get("text")
+            notes.append(text if isinstance(text, str) else "")
+        children = node.get("content")
+        if isinstance(children, list):
+            stack.extend(
+                child for child in reversed(children) if isinstance(child, dict)
+            )
+    return notes
+
+
+def _apply_footnote_numbers(rendered: str, *, markdown: bool) -> str:
+    """Replace footnote tokens with ``[^n]`` (Markdown) or ``[n]`` (text)."""
+    number = 0
+    while _FOOTNOTE_MARKER_TOKEN in rendered:
+        number += 1
+        marker = f"[^{number}]" if markdown else f"[{number}]"
+        rendered = rendered.replace(_FOOTNOTE_MARKER_TOKEN, marker, 1)
+    return rendered
+
+
+def _footnote_definitions_markdown(notes: list[str]) -> str:
+    """Write GitHub-flavoured footnote definitions in numbering order."""
+    definitions: list[str] = []
+    for index, text in enumerate(notes, start=1):
+        lines = text.splitlines() or [""]
+        # Note text is literal: escape markup characters so a note cannot become
+        # document structure or inject another footnote marker.
+        definitions.append(f"[^{index}]: {_escape_inline(lines[0])}".rstrip())
+        # A continuation line must be indented, or it would end the definition.
+        definitions.extend(f"    {_escape_inline(line)}" for line in lines[1:])
+    return "\n".join(definitions)
+
+
+def _footnote_notes_text(notes: list[str]) -> str:
+    """Readable notes section for plain text, matching the editor's preview."""
+    if not notes:
+        return ""
+    lines = [f"[{index}] {text}" for index, text in enumerate(notes, start=1)]
+    return "Notes:\n" + "\n".join(lines)
 
 
 def _equation_marker(node: dict[str, Any], *, markdown: bool, block: bool) -> str:
@@ -630,15 +694,24 @@ def render_markdown(content: dict[str, Any]) -> str:
     """Render a Tiptap document as Markdown, ending with a single newline."""
     figure_numbers = _figure_number_map(content)
     equation_numbers = _equation_number_map(content)
-    body = _resolve_equation_references(
-        _resolve_figure_references(
-            _apply_figure_numbers(
-                _apply_equation_numbers(_blocks_markdown(content.get("content") or []))
+    notes = _footnote_nodes(content)
+    body = _apply_footnote_numbers(
+        _resolve_equation_references(
+            _resolve_figure_references(
+                _apply_figure_numbers(
+                    _apply_equation_numbers(
+                        _blocks_markdown(content.get("content") or [])
+                    )
+                ),
+                figure_numbers,
             ),
-            figure_numbers,
+            equation_numbers,
         ),
-        equation_numbers,
+        markdown=True,
     )
+    if notes:
+        definitions = _footnote_definitions_markdown(notes)
+        body = f"{body}\n\n{definitions}" if body else definitions
     return f"{body}\n" if body else ""
 
 
@@ -646,15 +719,22 @@ def render_text(content: dict[str, Any]) -> str:
     """Render a Tiptap document as plain text, ending with a single newline."""
     figure_numbers = _figure_number_map(content)
     equation_numbers = _equation_number_map(content)
-    body = _resolve_equation_references(
-        _resolve_figure_references(
-            _apply_figure_numbers(
-                _apply_equation_numbers(_blocks_text(content.get("content") or []))
+    notes = _footnote_nodes(content)
+    body = _apply_footnote_numbers(
+        _resolve_equation_references(
+            _resolve_figure_references(
+                _apply_figure_numbers(
+                    _apply_equation_numbers(_blocks_text(content.get("content") or []))
+                ),
+                figure_numbers,
             ),
-            figure_numbers,
+            equation_numbers,
         ),
-        equation_numbers,
+        markdown=False,
     )
+    if notes:
+        notes_text = _footnote_notes_text(notes)
+        body = f"{body}\n\n{notes_text}" if body else notes_text
     return f"{body}\n" if body else ""
 
 
@@ -709,6 +789,69 @@ def _span_attr(value: Any, maximum: int) -> int:
     return max(1, min(number, maximum))
 
 
+def _footnote_xml(notes: list[str]) -> bytes:
+    """Build the ``word/footnotes.xml`` part for the given notes.
+
+    Word requires the two separator notes (ids -1 and 0) before real footnotes.
+    Every note text is XML-escaped, and a newline becomes a real line break so a
+    multi-line note is not silently collapsed.
+    """
+    parts = [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        f"<w:footnotes {nsdecls('w')}>",
+        (
+            '  <w:footnote w:type="separator" w:id="-1">'
+            '<w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>'
+            "<w:r><w:separator/></w:r></w:p></w:footnote>"
+        ),
+        (
+            '  <w:footnote w:type="continuationSeparator" w:id="0">'
+            '<w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>'
+            "<w:r><w:continuationSeparator/></w:r></w:p></w:footnote>"
+        ),
+    ]
+    for index, text in enumerate(notes, start=1):
+        lines = text.splitlines() or [""]
+        # The first line keeps a leading space after the generated note number.
+        first, *rest = lines
+        body = f'<w:t xml:space="preserve"> {xml_escape(first)}</w:t>'
+        for line in rest:
+            body += f'<w:br/><w:t xml:space="preserve">{xml_escape(line)}</w:t>'
+        parts.append(
+            f'  <w:footnote w:id="{index}">'
+            '<w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr>'
+            '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr>'
+            "<w:footnoteRef/></w:r>"
+            f"<w:r>{body}</w:r></w:p></w:footnote>"
+        )
+    parts.append("</w:footnotes>")
+    return "\n".join(parts).encode("utf-8")
+
+
+def _ensure_footnote_styles(document: Any) -> None:
+    """Add the two footnote styles Word expects, without duplicating them."""
+    existing = {style.name for style in document.styles}
+    if "Footnote Reference" not in existing:
+        style = document.styles.add_style("Footnote Reference", WD_STYLE_TYPE.CHARACTER)
+        style.font.superscript = True
+    if "Footnote Text" not in existing:
+        document.styles.add_style("Footnote Text", WD_STYLE_TYPE.PARAGRAPH)
+
+
+def _attach_footnotes(document: Any, notes: list[str]) -> None:
+    """Attach a real footnotes part so Word shows native footnotes."""
+    if not notes:
+        return
+    _ensure_footnote_styles(document)
+    part = Part(
+        PackURI("/word/footnotes.xml"),
+        CT.WML_FOOTNOTES,
+        _footnote_xml(notes),
+        document.part.package,
+    )
+    document.part.relate_to(part, RT.FOOTNOTES)
+
+
 class _DocxRenderer:
     """Turn the stored Tiptap JSON into native Word content."""
 
@@ -719,6 +862,7 @@ class _DocxRenderer:
         self.figure_number = 0
         self.figure_numbers: dict[str, int] = {}
         self.equation_numbers: dict[str, int] = {}
+        self.footnotes: list[str] = []
         self._omml_cache: dict[str, str | None] = {}
 
     # -- equations -----------------------------------------------------
@@ -849,8 +993,27 @@ class _DocxRenderer:
                 paragraph.add_run(
                     f"Equation ({number})" if number else _EQUATION_REFERENCE_MISSING
                 )
+            elif kind == "footnote":
+                text = (node.get("attrs") or {}).get("text")
+                self._add_footnote_reference(
+                    paragraph, text if isinstance(text, str) else ""
+                )
             else:
                 self._add_inline(paragraph, node.get("content"))
+
+    def _add_footnote_reference(self, paragraph: Any, text: str) -> None:
+        """Append a native Word footnote reference and remember its text."""
+        self.footnotes.append(text)
+        number = len(self.footnotes)
+        run = paragraph.add_run()
+        properties = OxmlElement("w:rPr")
+        style = OxmlElement("w:rStyle")
+        style.set(qn("w:val"), "FootnoteReference")
+        properties.append(style)
+        run._r.append(properties)
+        reference = OxmlElement("w:footnoteReference")
+        reference.set(qn("w:id"), str(number))
+        run._r.append(reference)
 
     # -- blocks ---------------------------------------------------------
 
@@ -1200,6 +1363,7 @@ def render_docx(
     renderer.figure_numbers = _figure_number_map(content)
     renderer.equation_numbers = _equation_number_map(content)
     renderer.add_blocks(document, content.get("content") or [])
+    _attach_footnotes(document, renderer.footnotes)
     buffer = io.BytesIO()
     document.save(buffer)
     return buffer.getvalue()

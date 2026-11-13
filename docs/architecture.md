@@ -514,6 +514,29 @@ src/
   export uses the same map through `_DocxRenderer.equation_numbers`. Inline math is
   never counted, so it cannot become a target.
 
+### Footnotes
+
+- A footnote is an inline atom `footnote` that stores its own `text` plus a stable
+  `id`. The visible number is generated from document order by `footnoteNumberAt`,
+  so inserting, deleting or moving a note renumbers the rest without rewriting any
+  stored text. The number is never saved and never typed by the user.
+- The toolbar dialog is the only insertion and editing path. Empty text is refused,
+  and a selected note is re-read through `footnoteAt` before saving, so a node
+  removed while the dialog is open cannot be replaced by another one. Removing a
+  note deletes the atom.
+- The node view renders the number as a superscript with a localized `aria-label`
+  and the note text as its `title`; the stored text is not shown inline, so it
+  cannot be mistaken for document prose. `translateWorkspace` is shared with the
+  reference node views, so a node view that renders before i18n is initialized still
+  interpolates its fallback instead of showing `{{n}}`.
+- `footnoteTexts` and `footnoteNotesText` append a readable `Notes:` section to the
+  stored `plain_text`, because `editor.getText()` cannot see atom attributes. Every
+  note keeps its document-order slot, so the preview numbering matches the marker
+  and the exported definition. That keeps version previews and diffs aware of
+  footnote edits without changing the document content.
+- Footnotes are not detected automatically: OCR and AI never create one, and the
+  text is typed by the user from the source page.
+
 ### Document export
 
 - The document is exported by the backend from the stored Tiptap JSON, not by the
@@ -531,9 +554,10 @@ src/
 - `services.document_export` maps every known node deterministically: doc,
   paragraph, heading (levels 1–6, clamped), bullet/ordered lists (including
   `start`), listItem, blockquote, codeBlock (fence widened when the code contains
-  backticks), horizontalRule, hardBreak, table, text marks, the custom `figure` and
-  `figureReference` atoms and the math nodes. Markdown and TXT share that traversal;
-  DOCX uses a separate `_DocxRenderer` over the same JSON.
+  backticks), horizontalRule, hardBreak, table, text marks, the custom `figure`,
+  `figureReference`, `equationReference` and `footnote` atoms and the math nodes.
+  Markdown and TXT share that traversal; DOCX uses a separate `_DocxRenderer` over
+  the same JSON.
 - Markdown output escapes `` \ ` * _ [ ] < > `` and line-start markers (`#`,
   `-`, `+`, `>`, `1.`/`1)` and `---`), so extracted OCR text cannot become
   structure or raw HTML. Code spans are built from raw text so their content stays
@@ -554,6 +578,14 @@ src/
   skipped. A numbered display equation gains `(n)` after the block in both formats,
   numbered in document order. The export depends only on the saved JSON, so it stays
   deterministic and offline.
+- Footnotes export their stored text, never a rendered marker alone. Traversal emits
+  a NUL-delimited token in place of each atom; the post-pass replaces tokens with
+  `[^n]` in Markdown and `[n]` in plain text, then appends the definitions. Markdown
+  writes GitHub-flavoured `[^n]: text` definitions (continuation lines are indented),
+  and plain text appends a `Notes:` section in the same shape as the editor preview.
+  Markdown note text is escaped as literal prose, so it cannot become markup or a
+  second footnote marker. Every footnote is counted, including one with empty text,
+  so a marker and its definition cannot drift apart; no token byte reaches the file.
 - Tables render as GFM tables. Literal `|` is escaped, multi-block cells are joined
   with `<br>`, and a missing header row gets a blank structural one because GFM
   requires a separator. When `colspan`/`rowspan` greater than 1 are present, the
@@ -599,6 +631,13 @@ src/
 - Tables are native Word tables with the `Table Grid` style. Column spans and row
   spans are computed on a grid first, then the target cells are merged, so merged
   content is neither duplicated nor dropped. Header cells are bold and shaded.
+- Footnotes are native Word footnotes. Each atom appends a `w:footnoteReference`
+  run (with the `FootnoteReference` style) and its text is collected in document
+  order. After the body is written, a `word/footnotes.xml` part is attached with the
+  required separator notes, one `w:footnote` per atom, a `FootnoteText` paragraph
+  style and the footnotes relationship. Multi-line note text becomes a real
+  `w:br/` line break and is XML-escaped, so markup characters cannot leak into the
+  package. A document without footnotes gets no footnotes part.
 - Core properties keep the project title but clear author, last-modified-by and
   comments, so the exporting machine's identity is not written into the file.
 - The Word file is produced only from local libraries and project data; no provider

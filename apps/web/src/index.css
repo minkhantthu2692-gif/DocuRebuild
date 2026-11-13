@@ -144,6 +144,15 @@
     @apply bg-destructive/10 text-destructive;
   }
 
+  /* A footnote stores its text on the atom; the visible number is generated. */
+  .doc-content .ProseMirror .doc-footnote {
+    @apply cursor-default rounded-sm bg-primary/10 px-0.5 align-super text-2xs font-semibold text-primary;
+  }
+
+  .doc-content .ProseMirror .doc-footnote.ProseMirror-selectednode {
+    @apply outline outline-2 outline-offset-1 outline-primary/50;
+  }
+
   /* Equations and figures share the editor root so their numbers follow
      document order and update on insert, delete or move. */
   .doc-content .ProseMirror {

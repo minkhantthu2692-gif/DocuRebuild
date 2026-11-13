@@ -383,6 +383,68 @@ def test_inline_math_is_not_a_reference_target() -> None:
     assert "Equation (missing)" in render_text(content)
 
 
+def _footnote_doc(*notes: str) -> dict:
+    content: list[dict] = [
+        {"type": "paragraph", "content": [{"type": "text", "text": "Text"}]}
+    ]
+    for note in notes:
+        content[0]["content"].append(
+            {"type": "footnote", "attrs": {"id": f"fn-{len(content[0]['content'])}", "text": note}}
+        )
+    return {"type": "doc", "content": content}
+
+
+def test_footnotes_export_as_markers_and_definitions() -> None:
+    content = _footnote_doc("First note.", "Second note.")
+
+    markdown = render_markdown(content)
+    assert "Text[^1][^2]" in markdown
+    assert "[^1]: First note." in markdown
+    assert "[^2]: Second note." in markdown
+    assert "\x00" not in markdown
+
+    text = render_text(content)
+    assert "Text[1][2]" in text
+    assert "Notes:\n[1] First note.\n[2] Second note." in text
+    assert "\x00" not in text
+
+
+def test_footnote_numbering_stays_aligned_for_empty_text() -> None:
+    # The editor refuses empty notes, but export must still count every atom so a
+    # later marker can never point at the wrong definition.
+    content = _footnote_doc("", "Real note.")
+
+    markdown = render_markdown(content)
+    assert "Text[^1][^2]" in markdown
+    assert "[^1]:" in markdown
+    assert "[^2]: Real note." in markdown
+
+    text = render_text(content)
+    assert "Text[1][2]" in text
+    assert "Notes:\n[1] \n[2] Real note." in text
+
+
+def test_multiline_footnote_definition_keeps_continuation_indented() -> None:
+    content = _footnote_doc("First line.\nSecond line.")
+
+    markdown = render_markdown(content)
+    assert "[^1]: First line." in markdown
+    assert "    Second line." in markdown
+
+    text = render_text(content)
+    assert "Notes:\n[1] First line.\nSecond line." in text
+
+
+def test_footnote_markdown_text_cannot_become_markup() -> None:
+    content = _footnote_doc("A < B & [^9] *literal*")
+
+    markdown = render_markdown(content)
+    # The note is prose, so its characters are escaped rather than becoming HTML,
+    # another footnote marker, or emphasis.
+    assert "A \\< B & \\[^9\\] \\*literal\\*" in markdown
+    assert "[^1]:" in markdown
+
+
 def test_markdown_export_omits_asset_paths() -> None:
     assert "/api/" not in render_markdown(_doc())
 

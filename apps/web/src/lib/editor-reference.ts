@@ -3,6 +3,7 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
 
 import { i18n } from "@/i18n";
+import { translateWorkspace } from "./editor-i18n";
 
 /** A numbered node that can be referenced from prose. */
 export interface ReferenceTarget {
@@ -19,16 +20,6 @@ export interface ReferenceLabel {
 export type FigureTarget = ReferenceTarget;
 export type FigureReferenceLabel = ReferenceLabel;
 
-function translate(key: string, fallback: string, options?: Record<string, unknown>): string {
-  if (!i18n.isInitialized) {
-    return fallback.replace(/\{\{(\w+)\}\}/g, (match, name: string) =>
-      options && name in options ? String(options[name]) : match,
-    );
-  }
-  const value = i18n.t(key, { ns: "workspace", defaultValue: fallback, ...options });
-  return typeof value === "string" && value ? value : fallback;
-}
-
 /** Resolve a target id to its visible label, or an explicit missing marker. */
 export function resolveReferenceLabel(
   targetId: string,
@@ -38,10 +29,10 @@ export function resolveReferenceLabel(
 ): ReferenceLabel {
   const target = targets.find((item) => item.id === targetId);
   if (!target) {
-    return { text: translate(keys.missing, fallbacks.missing), missing: true };
+    return { text: translateWorkspace(keys.missing, fallbacks.missing), missing: true };
   }
   return {
-    text: translate(keys.label, fallbacks.label, { n: target.number }),
+    text: translateWorkspace(keys.label, fallbacks.label, { n: target.number }),
     missing: false,
   };
 }

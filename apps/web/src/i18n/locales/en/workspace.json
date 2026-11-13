@@ -175,6 +175,19 @@
       "insertInline": "Insert inline equation",
       "gone": "This equation is no longer in the document."
     },
+    "footnote": {
+      "label": "Footnote",
+      "insertTitle": "Insert footnote",
+      "editTitle": "Edit footnote {{n}}",
+      "description": "Type the footnote text. It is saved with the document and exported as a footnote in Markdown, plain text and Word.",
+      "text": "Footnote text",
+      "placeholder": "Note text from the source page",
+      "hint": "Footnotes are numbered in document order. The number is generated, so do not type it here.",
+      "apply": "Save footnote",
+      "remove": "Remove footnote",
+      "gone": "This footnote is no longer in the document.",
+      "ariaLabel": "Footnote {{n}}"
+    },
     "paragraph": "Paragraph",
     "heading1": "Heading 1",
     "heading2": "Heading 2",

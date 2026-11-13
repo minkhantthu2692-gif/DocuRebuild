@@ -28,6 +28,7 @@ import {
   Sigma,
   SquareFunction,
   Strikethrough,
+  Superscript,
   Type,
   Underline as UnderlineIcon,
   Undo2,
@@ -82,6 +83,13 @@ import {
   numberedEquationTargets,
   type EquationTarget,
 } from "@/lib/editor-equation-reference";
+import {
+  footnoteAt,
+  footnoteContent,
+  footnoteNotesText,
+  selectedFootnote,
+  type SelectedFootnote,
+} from "@/lib/editor-footnote";
 import { figureInsertionContent, createFigureId, figureAt, selectedFigure, type SelectedFigure } from "@/lib/editor-figure";
 import {
   figureReferenceContent,
@@ -145,6 +153,14 @@ function blockValue(editor: Editor): string {
   return "p";
 }
 
+function plainTextWithNotes(instance: Editor): string {
+  // Footnote text lives on the atom, so getText() cannot see it. Appending a
+  // readable notes section keeps the stored plain text (and version diff) complete.
+  const body = instance.getText({ blockSeparator: "\n\n" });
+  const notes = footnoteNotesText(instance.state.doc);
+  return [body, notes].filter(Boolean).join("\n\n");
+}
+
 export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const { t, i18n } = useTranslation("workspace");
   const { t: tCommon } = useTranslation("common");
@@ -188,6 +204,9 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [equationNumbered, setEquationNumbered] = useState(false);
   const [equationReferenceOpen, setEquationReferenceOpen] = useState(false);
   const [equationReferenceTargets, setEquationReferenceTargets] = useState<EquationTarget[]>([]);
+  const [footnoteSelection, setFootnoteSelection] = useState<SelectedFootnote | null>(null);
+  const [footnoteOpen, setFootnoteOpen] = useState(false);
+  const [footnoteText, setFootnoteText] = useState("");
   // Used when inserting; an edited equation takes its kind from the node.
   const [equationKind, setEquationKind] = useState<EquationKind>("block");
 
@@ -217,17 +236,19 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     },
     onUpdate: ({ editor: instance }) => {
       revisionRef.current += 1;
-      const text = instance.getText({ blockSeparator: "\n\n" });
+      const text = plainTextWithNotes(instance);
       latestContent.current = instance.getJSON() as JSONContent;
       latestText.current = text;
       setPlainText(text);
       setFigureSelection(selectedFigure(instance.state));
       setEquationSelection(selectedEquation(instance.state));
+      setFootnoteSelection(selectedFootnote(instance.state));
       setRevision(revisionRef.current);
     },
     onSelectionUpdate: ({ editor: instance }) => {
       setFigureSelection(selectedFigure(instance.state));
       setEquationSelection(selectedEquation(instance.state));
+      setFootnoteSelection(selectedFootnote(instance.state));
     },
   });
 
@@ -277,7 +298,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
 
     // Capture the exact content now; the queue may run later.
     const content = editor.getJSON() as JSONContent;
-    const text = editor.getText({ blockSeparator: "\n\n" });
+    const text = plainTextWithNotes(editor);
 
     const run = saveChainRef.current.then(async () => {
       // A queued save that is no longer the newest content is unnecessary.
@@ -495,6 +516,60 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     },
     [editor],
   );
+
+  const openFootnoteDialog = useCallback(() => {
+    if (!editor) return;
+    const selected = selectedFootnote(editor.state);
+    setFootnoteText(selected?.text ?? "");
+    setFootnoteOpen(true);
+  }, [editor]);
+
+  const applyFootnote = useCallback(() => {
+    if (!editor) return;
+    const text = footnoteText.trim();
+    // An empty footnote would leave a number with nothing to read.
+    if (!text) return;
+    if (footnoteSelection) {
+      if (!footnoteAt(editor.state, footnoteSelection.pos)) {
+        // The document changed while the dialog was open. Never edit a node
+        // that merely happens to sit at the old position now.
+        setFootnoteOpen(false);
+        toast.error(t("editor.footnote.gone"));
+        return;
+      }
+      editor
+        .chain()
+        .focus()
+        .command(({ tr }) => {
+          const node = tr.doc.nodeAt(footnoteSelection.pos);
+          if (!node || node.type.name !== "footnote") return false;
+          tr.setNodeMarkup(footnoteSelection.pos, undefined, { ...node.attrs, text });
+          return true;
+        })
+        .run();
+    } else {
+      editor.chain().focus().insertContent(footnoteContent(text)).run();
+    }
+    setFootnoteOpen(false);
+  }, [editor, footnoteSelection, footnoteText, t]);
+
+  const removeFootnote = useCallback(() => {
+    if (!editor || !footnoteSelection) return;
+    const node = editor.state.doc.nodeAt(footnoteSelection.pos);
+    if (!node || node.type.name !== "footnote") {
+      setFootnoteOpen(false);
+      return;
+    }
+    editor
+      .chain()
+      .focus()
+      .command(({ tr }) => {
+        tr.delete(footnoteSelection.pos, footnoteSelection.pos + node.nodeSize);
+        return true;
+      })
+      .run();
+    setFootnoteOpen(false);
+  }, [editor, footnoteSelection]);
 
   const equationPreview = useMemo(
     () => renderEquationPreview(equationLatex, equationKind),
@@ -971,6 +1046,14 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           icon={Parentheses}
           disabled={!editor?.isEditable}
           onClick={openEquationReferenceDialog}
+        />
+
+        <ToolbarButton
+          label={t("editor.footnote.label")}
+          icon={Superscript}
+          active={Boolean(footnoteSelection)}
+          disabled={!editor?.isEditable}
+          onClick={openFootnoteDialog}
         />
 
         <Separator orientation="vertical" className="mx-1 h-5" />
@@ -1537,6 +1620,62 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
               {tCommon("actions.cancel")}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={footnoteOpen} onOpenChange={setFootnoteOpen}>
+        <DialogContent className="max-w-lg">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              applyFootnote();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>
+                {footnoteSelection
+                  ? t("editor.footnote.editTitle", {
+                      n: footnoteSelection.number ?? "",
+                    })
+                  : t("editor.footnote.insertTitle")}
+              </DialogTitle>
+              <DialogDescription>{t("editor.footnote.description")}</DialogDescription>
+            </DialogHeader>
+
+            <div className="mt-4 space-y-1.5">
+              <Label htmlFor="editor-footnote-text">{t("editor.footnote.text")}</Label>
+              <Textarea
+                id="editor-footnote-text"
+                value={footnoteText}
+                onChange={(event) => setFootnoteText(event.target.value)}
+                placeholder={t("editor.footnote.placeholder")}
+                rows={4}
+                autoFocus
+              />
+              <p className="text-2xs leading-relaxed text-muted-foreground">
+                {t("editor.footnote.hint")}
+              </p>
+            </div>
+
+            <DialogFooter className="mt-6">
+              {footnoteSelection ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="mr-auto text-destructive"
+                  onClick={removeFootnote}
+                >
+                  {t("editor.footnote.remove")}
+                </Button>
+              ) : null}
+              <Button type="button" variant="outline" onClick={() => setFootnoteOpen(false)}>
+                {tCommon("actions.cancel")}
+              </Button>
+              <Button type="submit" disabled={!footnoteText.trim()}>
+                {t("editor.footnote.apply")}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

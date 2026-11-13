@@ -16,7 +16,7 @@ presented in the UI until it actually works.
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word export; automatic table/equation extraction pending |
-| 8. Document editor and export | In progress | Core editor plus manual tables, figures, display and inline equations and local Markdown, TXT and Word export with native equations and embedded figures; footnotes and PDF page layout pending |
+| 8. Document editor and export | In progress | Core editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT and Word export with native equations and footnotes and embedded figures; PDF page layout pending |
 | 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download, additive (new-project) restore from an upload or a stored vault copy, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
@@ -424,17 +424,24 @@ the user must review every region before extracting it.
   keeps the exact LaTeX. Backslashes are not escaped as prose. Word export converts
   each equation through MathML to Office Math, so it stays editable in Word, and
   numbered equations keep their `(n)` label.
+- Footnotes: the toolbar dialog inserts an inline atom that stores its own text and a
+  stable id; the number is generated from document order, so inserting or deleting a
+  note renumbers the rest without touching stored text. The node view shows a
+  localized accessible label and the note text as a tooltip. Export keeps the text:
+  Markdown writes `[^n]` markers plus `[^n]: text` definitions, plain text appends a
+  `Notes:` section, and Word writes a native footnotes part. The stored plain text
+  includes the notes, so version previews and diffs see footnote edits.
 - `export` in `/api/meta`, English and Burmese labels, backend serializer and
   endpoint tests.
 
 **Current limitation** — export covers headings, paragraphs, lists, blockquotes,
-code blocks, rules, inline marks, tables, figures and equations. Footnotes and page
-layout are not part of the editor model yet, so they cannot be exported. Word export
+code blocks, rules, inline marks, tables, figures, equations and footnotes. Page
+layout is not part of the editor model yet. Word export
 follows the document flow rather than the source page geometry, and a formula the
 local converter cannot handle is written as its LaTeX source. PDF layout export is
 still unimplemented.
 
-**Pending** — per-cell alignment, images inline in text, footnotes, page layout,
+**Pending** — per-cell alignment, images inline in text, page layout,
 headers/footers, page numbers, PDF layout export and broader OMML coverage.
 
 ## Phase 9 — History, backup and recovery (in progress)

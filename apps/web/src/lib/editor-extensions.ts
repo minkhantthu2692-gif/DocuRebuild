@@ -6,6 +6,7 @@ import StarterKit from "@tiptap/starter-kit";
 
 import { NumberedBlockMath } from "./editor-equation";
 import { EquationReference } from "./editor-equation-reference";
+import { FootnoteNode } from "./editor-footnote";
 import { FigureNode } from "./editor-figure";
 import { FigureReference } from "./editor-reference";
 import { normalizeLinkUrl } from "./link";
@@ -49,6 +50,9 @@ export function createEditorExtensions(placeholder: () => string) {
     // Equation references use the same inline atom pattern and resolve their
     // number from the document, so a renumbered equation updates its citations.
     EquationReference,
+    // A footnote stores its own text and gets a generated document-order number.
+    // The number is never saved, so inserting or deleting a note renumbers the rest.
+    FootnoteNode,
     // Display equations only. The saved document keeps the LaTeX source and an
     // optional number flag; numbering is rendered from document order, and a
     // single block atom avoids dollar-sign input rules rewriting currency text.

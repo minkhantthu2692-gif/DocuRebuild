@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import io
+import zipfile
 from pathlib import Path
 
 from docx import Document
 from fastapi.testclient import TestClient
+from lxml import etree
 
 from app.core.config import get_settings
 from app.services.document_export import render_docx
@@ -371,6 +373,88 @@ def test_docx_export_merges_table_cells(tmp_path: Path) -> None:
     assert table.cell(0, 0).text == "Merged"
     assert table.cell(1, 0).text == "A"
     assert table.cell(1, 1).text == "B"
+
+
+def test_docx_export_writes_native_footnotes(tmp_path: Path) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "First claim"},
+                    {"type": "footnote", "attrs": {"id": "fn-a", "text": "First note."}},
+                    {"type": "text", "text": " and second claim"},
+                    {"type": "footnote", "attrs": {"id": "fn-b", "text": "Second note."}},
+                    {"type": "text", "text": "."},
+                ],
+            }
+        ],
+    }
+    data = render_docx(content, tmp_path)
+
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        names = archive.namelist()
+        assert "word/footnotes.xml" in names
+        footnotes = archive.read("word/footnotes.xml").decode("utf-8")
+        body = archive.read("word/document.xml").decode("utf-8")
+        rels = archive.read("word/_rels/document.xml.rels").decode("utf-8")
+        content_types = archive.read("[Content_Types].xml").decode("utf-8")
+        styles = archive.read("word/styles.xml").decode("utf-8")
+
+        # Every XML part in the package must still be parseable.
+        for name in names:
+            if name.endswith(".xml") or name.endswith(".rels"):
+                etree.fromstring(archive.read(name))
+
+    assert 'w:footnoteReference w:id="1"' in body
+    assert 'w:footnoteReference w:id="2"' in body
+    assert 'w:type="separator" w:id="-1"' in footnotes
+    assert 'w:type="continuationSeparator" w:id="0"' in footnotes
+    assert 'w:id="1"' in footnotes and "First note." in footnotes
+    assert 'w:id="2"' in footnotes and "Second note." in footnotes
+    assert "relationships/footnotes" in rels
+    assert "wordprocessingml.footnotes+xml" in content_types
+    assert "FootnoteReference" in styles
+    assert "FootnoteText" in styles
+
+
+def test_docx_footnote_text_is_escaped_and_multiline(tmp_path: Path) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "Claim"},
+                    {
+                        "type": "footnote",
+                        "attrs": {"id": "fn-a", "text": "A < B & C\nsecond line"},
+                    },
+                ],
+            }
+        ],
+    }
+    data = render_docx(content, tmp_path)
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        footnotes = archive.read("word/footnotes.xml").decode("utf-8")
+        etree.fromstring(archive.read("word/footnotes.xml"))
+
+    # Markup characters must be escaped, not injected into the package.
+    assert "A &lt; B &amp; C" in footnotes
+    assert "<w:br/>" in footnotes
+
+
+def test_docx_without_footnotes_has_no_footnotes_part(tmp_path: Path) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "Plain"}]}
+        ],
+    }
+    data = render_docx(content, tmp_path)
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        assert "word/footnotes.xml" not in archive.namelist()
 
 
 def test_export_endpoint_returns_docx(client: TestClient, project: dict) -> None:
