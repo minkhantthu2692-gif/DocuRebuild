@@ -121,13 +121,21 @@
     @apply text-foreground;
   }
 
+  /* The figure number is generated chrome, never stored caption text. */
+  .doc-content .ProseMirror figure.doc-figure [data-figure-label]::before {
+    counter-increment: figure;
+    content: "Figure " counter(figure) ". ";
+    @apply tabular-nums text-muted-foreground;
+  }
+
   .doc-content .ProseMirror figure.doc-figure.ProseMirror-selectednode {
     @apply rounded-md outline outline-2 outline-offset-4 outline-primary/50;
   }
 
-  /* Equations: the node view renders KaTeX locally from stored LaTeX. */
+  /* Equations and figures share the editor root so their numbers follow
+     document order and update on insert, delete or move. */
   .doc-content .ProseMirror {
-    counter-reset: equation;
+    counter-reset: equation figure;
   }
 
   .doc-content .ProseMirror .tiptap-mathematics-render[data-type="block-math"] {

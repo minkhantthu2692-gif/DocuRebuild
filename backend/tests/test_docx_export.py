@@ -173,6 +173,28 @@ def test_docx_export_falls_back_to_latex_when_conversion_fails(tmp_path: Path) -
     assert "\\frac{" in _paragraph_texts(document)
 
 
+def test_docx_export_numbers_figures_in_document_order(tmp_path: Path) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "figure",
+                "attrs": {"caption": "First", "numbered": True},
+            },
+            {"type": "figure", "attrs": {"caption": "Second"}},
+            {
+                "type": "figure",
+                "attrs": {"caption": "Third", "numbered": True},
+            },
+        ],
+    }
+    document = _open(render_docx(content, tmp_path))
+    texts = _paragraph_texts(document)
+    assert "[Figure 1: First]" in texts
+    assert "[Figure: Second]" in texts
+    assert "[Figure 2: Third]" in texts
+
+
 def test_docx_export_embeds_project_figures(
     client: TestClient, project: dict
 ) -> None:

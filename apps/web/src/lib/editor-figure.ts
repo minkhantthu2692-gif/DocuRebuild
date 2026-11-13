@@ -1,4 +1,4 @@
-import { Node } from "@tiptap/core";
+import { Node, mergeAttributes } from "@tiptap/core";
 import type { DOMOutputSpec, Node as PMNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import type { EditorState } from "@tiptap/pm/state";
@@ -12,6 +12,8 @@ export interface FigureContent {
   note: string | null;
   width: number | null;
   height: number | null;
+  /** Display-only figure number; the caption text itself is never rewritten. */
+  numbered?: boolean;
 }
 
 /** A figure the cursor has selected, with the position needed to edit it. */
@@ -20,6 +22,7 @@ export interface SelectedFigure {
   caption: string;
   alt: string;
   note: string | null;
+  numbered: boolean;
 }
 
 function readFigure(node: PMNode, pos: number): SelectedFigure {
@@ -28,6 +31,7 @@ function readFigure(node: PMNode, pos: number): SelectedFigure {
     caption: String(node.attrs.caption ?? ""),
     alt: String(node.attrs.alt ?? ""),
     note: node.attrs.note ? String(node.attrs.note) : null,
+    numbered: Boolean(node.attrs.numbered),
   };
 }
 
@@ -106,6 +110,12 @@ export const FigureNode = Node.create({
           return image ? numberAttribute(image, "height") : null;
         },
       },
+      numbered: {
+        default: false,
+        parseHTML: (element) => element.getAttribute("data-numbered") === "true",
+        renderHTML: (attributes) =>
+          attributes.numbered ? { "data-numbered": "true" } : {},
+      },
     };
   },
 
@@ -114,7 +124,8 @@ export const FigureNode = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    const { src, alt, caption, note, width, height } = HTMLAttributes as FigureContent;
+    const { src, alt, caption, note, width, height } =
+      HTMLAttributes as FigureContent;
 
     const image: Record<string, string> = {
       src: src ?? "",
@@ -125,9 +136,20 @@ export const FigureNode = Node.create({
     if (width) image.width = String(width);
     if (height) image.height = String(height);
 
+    // `numbered` has its own renderHTML hook, so it arrives as `data-numbered`
+    // rather than as a raw attribute value.
+    const showNumber = HTMLAttributes["data-numbered"] === "true";
     const captionChildren: DOMOutputSpec[] = [];
-    if (caption) {
-      captionChildren.push(["span", { "data-figure-caption": "" }, caption]);
+    if (caption || showNumber) {
+      const label: DOMOutputSpec[] = showNumber
+        ? [["span", { "data-figure-label": "" }]]
+        : [];
+      captionChildren.push([
+        "span",
+        { "data-figure-caption": "" },
+        ...label,
+        caption,
+      ]);
     }
     if (note) {
       captionChildren.push(["span", { "data-figure-note": "" }, note]);
@@ -140,7 +162,7 @@ export const FigureNode = Node.create({
 
     return [
       "figure",
-      { "data-doc-figure": "", class: "doc-figure" },
+      mergeAttributes(HTMLAttributes, { "data-doc-figure": "", class: "doc-figure" }),
       ...children,
     ];
   },
@@ -162,6 +184,7 @@ export function figureInsertionContent(figure: FigureContent): JSONContent[] {
         note: figure.note,
         width: figure.width,
         height: figure.height,
+        ...(figure.numbered ? { numbered: true } : {}),
       },
     },
   ];

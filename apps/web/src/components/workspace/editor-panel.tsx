@@ -166,6 +166,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [figureOpen, setFigureOpen] = useState(false);
   const [figureCaption, setFigureCaption] = useState("");
   const [figureAlt, setFigureAlt] = useState("");
+  const [figureNumbered, setFigureNumbered] = useState(false);
   const [equationSelection, setEquationSelection] = useState<SelectedEquation | null>(null);
   const [equationOpen, setEquationOpen] = useState(false);
   const [equationLatex, setEquationLatex] = useState("");
@@ -419,6 +420,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     if (!figure) return;
     setFigureCaption(figure.caption);
     setFigureAlt(figure.alt);
+    setFigureNumbered(figure.numbered);
     setFigureOpen(true);
   }, [editor]);
 
@@ -440,10 +442,11 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
       .updateAttributes("figure", {
         caption: figureCaption.trim(),
         alt: figureAlt.trim(),
+        numbered: figureNumbered,
       })
       .run();
     setFigureOpen(false);
-  }, [editor, figureSelection, figureCaption, figureAlt, t]);
+  }, [editor, figureSelection, figureCaption, figureAlt, figureNumbered, t]);
 
   const equationPreview = useMemo(
     () => renderEquationPreview(equationLatex, equationKind),
@@ -1216,6 +1219,21 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
                   {t("editor.figure.altHint")}
                 </p>
               </div>
+
+              <label className="flex items-start gap-2 text-2xs leading-relaxed text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-3.5 accent-primary"
+                  checked={figureNumbered}
+                  onChange={(event) => setFigureNumbered(event.target.checked)}
+                />
+                <span>
+                  <span className="block text-xs text-foreground">
+                    {t("editor.figure.numbered")}
+                  </span>
+                  {t("editor.figure.numberedHint")}
+                </span>
+              </label>
 
               {figureSelection?.note ? (
                 <div className="rounded-md border border-border/60 bg-background/50 p-2.5">

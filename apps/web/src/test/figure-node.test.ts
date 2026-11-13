@@ -84,6 +84,7 @@ describe("figure editor node", () => {
       caption: "Figure 1. Phase diagram",
       alt: "Figure 1",
       note: "Source: page 4 · manual region · Unverified",
+      numbered: false,
     });
 
     editor.commands.setTextSelection(1);
@@ -137,5 +138,48 @@ describe("figure editor node", () => {
     expect(html).not.toContain("Figure 1. Phase diagram");
     expect(html).toContain('alt="Phase diagram of the alloy"');
     expect(html).toContain("Unverified");
+  });
+
+  it("stores an optional figure number without rewriting the caption", () => {
+    editor = createEditor();
+    editor.commands.insertContent(
+      figureInsertionContent({
+        src: "/api/projects/p/assets/a/file",
+        alt: "Phase diagram",
+        caption: "Phase diagram",
+        note: "Source: page 4",
+        width: 320,
+        height: 180,
+        numbered: true,
+      }),
+    );
+
+    const figure = editor
+      .getJSON()
+      .content?.find((node) => node.type === "figure");
+    expect(figure?.attrs).toMatchObject({ caption: "Phase diagram", numbered: true });
+
+    const html = editor.getHTML();
+    expect(html).toContain('data-numbered="true"');
+    expect(html).toContain("data-figure-label");
+    // The label is CSS-generated chrome, so no number is written into the caption.
+    expect(html).toContain("Phase diagram");
+    expect(html).not.toContain("Figure 1. Phase diagram");
+
+    // The flag survives an HTML round-trip, so a saved document keeps it.
+    editor.commands.setContent(html);
+    const restored = editor
+      .getJSON()
+      .content?.find((node) => node.type === "figure");
+    expect(restored?.attrs).toMatchObject({ caption: "Phase diagram", numbered: true });
+  });
+
+  it("leaves an unnumbered figure without number markup", () => {
+    editor = createEditor();
+    insertFigure(editor);
+
+    const html = editor.getHTML();
+    expect(html).not.toContain('data-numbered="true"');
+    expect(html).not.toContain("data-figure-label");
   });
 });

@@ -15,7 +15,7 @@ presented in the UI until it actually works.
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions, user-typed display and inline equations with local KaTeX preview, optional equation numbering and faithful Markdown/TXT/Word export; automatic table/equation extraction and figure numbering pending |
+| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions with optional generated figure numbers, user-typed display and inline equations with local KaTeX preview, optional equation numbering and faithful Markdown/TXT/Word export; automatic table/equation extraction and figure cross-references pending |
 | 8. Document editor and export | In progress | Core editor plus manual tables, figures, display and inline equations and local Markdown, TXT and Word export with native equations and embedded figures; footnotes and PDF page layout pending |
 | 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download, additive (new-project) restore from an upload or a stored vault copy, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
@@ -328,6 +328,11 @@ the user must review every region before extracting it.
   figure enables the caption tool; the image, its stored source note, its size and
   its position stay unchanged, and the corrected caption is what Markdown and
   plain-text export write. A collapsed cursor next to a figure never edits it.
+- Optional figure numbering: the caption dialog stores a `numbered` flag, the editor
+  shows `Figure n.` from a CSS counter in document order, and every export adds the
+  same number after the marker (`[Figure 1: caption]`) or before the caption in Word
+  (`Figure 1. caption`). The caption text is never rewritten, so no number is
+  injected into the stored document. Cross-references to a figure are still pending.
 - Display and inline equations typed as LaTeX: a toolbar dialog previews the
   equation locally with KaTeX, refuses empty or invalid source, and inserts or
   updates a `blockMath` or `inlineMath` node that stores only the source. Inline
@@ -349,7 +354,8 @@ the user must review every region before extracting it.
 - Automatic table-structure extraction from OCR/vision (always as a reviewable
   proposal, never inserted without approval).
 - Figure numbering, cross-references, inline images in running text and optional
-  structured figure reconstruction with approval.
+  structured figure reconstruction with approval. Numbering is delivered; references
+  to a figure number from prose are not.
 - Automatic equation recognition from OCR/vision as a reviewable proposal. Word
   export now converts typed equations to native OMML.
 - Uncertain cells/symbols are marked for review, never invented.
@@ -389,9 +395,10 @@ the user must review every region before extracting it.
   are limited to `http`, `https` and `mailto`. Plain-text output has no Markdown
   syntax.
 - Figures export as an explicit `[Figure: <caption>]` marker with their source
-  note in Markdown and plain text. Local asset URLs are never written into any file.
-  Word export embeds the project image itself, keeps the caption and source note,
-  and falls back to the same marker when an asset is missing.
+  note in Markdown and plain text; a numbered figure uses `[Figure n: <caption>]`.
+  Local asset URLs are never written into any file. Word export embeds the project
+  image itself, keeps the caption and source note, prefixes a numbered caption with
+  `Figure n.`, and falls back to the same marker when an asset is missing.
 - Tables export as GFM Markdown with escaped pipes and `<br>` inside multi-block
   cells; a missing header gets a structural blank header, and merged cells use an
   HTML table so no cell content is lost. Plain-text export keeps every cell. Word

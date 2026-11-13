@@ -374,12 +374,20 @@ src/
   through the normal text insertion path with a provenance note.
 - A selected figure can be edited through the toolbar caption dialog. Editing
   applies only to a real node selection (`selectedFigure` ignores a collapsed
-  cursor), writes only the `caption` and `alt` attributes, and leaves `src`, `note`,
-  `width` and `height` untouched, so provenance cannot be rewritten by a caption
-  correction. The change is ordinary document content: autosave, versions, backups
-  and Markdown/plain-text export all see the corrected caption without special
-  handling. Applying re-reads the stored position first, so a figure removed while
-  the dialog was open is never replaced by whichever node now sits there.
+  cursor), writes only the `caption`, `alt` and optional `numbered` attributes, and
+  leaves `src`, `note`, `width` and `height` untouched, so provenance cannot be
+  rewritten by a caption correction. The change is ordinary document content:
+  autosave, versions, backups and Markdown/plain-text/Word export all see the
+  corrected caption without special handling. Applying re-reads the stored position
+  first, so a figure removed while the dialog was open is never replaced by whichever
+  node now sits there.
+- A figure can carry an optional display-only number. The flag is stored on the
+  node, a `data-figure-label` span is rendered in the caption, and the visible
+  `Figure n.` prefix comes from a CSS counter that resets on the editor root and
+  increments only on numbered figures. The caption text is never rewritten, so a
+  figure that already has a typed number keeps it exactly; the dialog says so. The
+  label cannot be selected or edited as content, and numbering follows document
+  order across inserts, deletes and moves.
 - No external detector or AI model is invoked. Region text uses the same local
   Tesseract adapter as page OCR; `element_extraction` in `/api/meta` reports the
   manual region and local text paths.
@@ -506,8 +514,10 @@ src/
   literal. Links are emitted only for `http`, `https` and `mailto`; any other
   target is dropped while the link text is kept.
 - Figures never export their `src`. The local asset URL is meaningless outside the
-  project, so the node becomes `[Figure: <caption>]` plus the source note. The
-  project asset itself remains untouched and reinsertable.
+  project, so the node becomes `[Figure: <caption>]` plus the source note. A numbered
+  figure becomes `[Figure n: <caption>]`, counted in document order with the same
+  token approach as equations. The project asset itself remains untouched and
+  reinsertable.
 - Equations export as source, never as rendered HTML: a block equation becomes a
   fenced `$$` block, an inline equation `$...$`, and plain text keeps the exact
   LaTeX. Backslashes are not escaped as prose, and an equation without source is
@@ -542,8 +552,10 @@ src/
   Word cannot read (for example WebP) are converted to PNG in memory with Pillow;
   the pixels are unchanged. Wide images are scaled to 6 inches, the caption is
   written as a centered `Caption` paragraph, the source note stays as recorded, and
-  the alt text becomes the drawing description. A missing asset produces a visible
-  `[Figure: <caption>]` marker instead of a silent gap.
+  the alt text becomes the drawing description. A numbered figure gets a
+  `Figure n.` prefix in its caption paragraph, counted in document order; the caption
+  text itself is unchanged. A missing asset produces a visible
+  `[Figure n: <caption>]` (or `[Figure: <caption>]`) marker instead of a silent gap.
 - Equations are converted locally: `latex2mathml` produces MathML,
   `mathml2omml` converts it to Office Math, and the `<m:oMath>` element is appended
   to the paragraph. The conversion output has no `m` namespace declaration, so it is

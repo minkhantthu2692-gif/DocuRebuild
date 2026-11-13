@@ -175,9 +175,20 @@ def _inline_text(nodes: list[dict[str, Any]] | None) -> str:
 
 def _figure_marker(node: dict[str, Any], *, markdown: bool) -> str:
     attrs = node.get("attrs") or {}
-    caption = attrs.get("caption") or attrs.get("alt") or _FIGURE_FALLBACK
-    caption = str(caption).strip() or _FIGURE_FALLBACK
-    if markdown:
+    raw_caption = str(attrs.get("caption") or attrs.get("alt") or "").strip()
+    caption = raw_caption or _FIGURE_FALLBACK
+    numbered = _is_numbered_figure(node)
+    if numbered:
+        label = f"Figure {_FIGURE_NUMBER_TOKEN}"
+        if markdown:
+            marker = (
+                f"\\[{label}: {_escape_inline(caption)}\\]"
+                if raw_caption
+                else f"\\[{label}\\]"
+            )
+        else:
+            marker = f"[{label}: {caption}]" if raw_caption else f"[{label}]"
+    elif markdown:
         marker = f"\\[Figure: {_escape_inline(caption)}\\]"
     else:
         marker = f"[Figure: {caption}]"
@@ -202,9 +213,15 @@ def _equation_latex(node: dict[str, Any]) -> str:
 # Numbered display equations get a placeholder during traversal and are numbered
 # afterwards in document order. The token cannot collide with prose or LaTeX.
 _EQUATION_NUMBER_TOKEN = "\x00equation-number\x00"
+# Figures use their own token so equation and figure counters never mix.
+_FIGURE_NUMBER_TOKEN = "\x00figure-number\x00"
 
 
 def _is_numbered_equation(node: dict[str, Any]) -> bool:
+    return bool((node.get("attrs") or {}).get("numbered"))
+
+
+def _is_numbered_figure(node: dict[str, Any]) -> bool:
     return bool((node.get("attrs") or {}).get("numbered"))
 
 
@@ -214,6 +231,15 @@ def _apply_equation_numbers(rendered: str) -> str:
     while _EQUATION_NUMBER_TOKEN in rendered:
         number += 1
         rendered = rendered.replace(_EQUATION_NUMBER_TOKEN, f"({number})", 1)
+    return rendered
+
+
+def _apply_figure_numbers(rendered: str) -> str:
+    """Replace numbered-figure tokens with ``1``, ``2``, … in order."""
+    number = 0
+    while _FIGURE_NUMBER_TOKEN in rendered:
+        number += 1
+        rendered = rendered.replace(_FIGURE_NUMBER_TOKEN, str(number), 1)
     return rendered
 
 
@@ -513,13 +539,17 @@ def _blocks_text(nodes: list[dict[str, Any]]) -> str:
 
 def render_markdown(content: dict[str, Any]) -> str:
     """Render a Tiptap document as Markdown, ending with a single newline."""
-    body = _apply_equation_numbers(_blocks_markdown(content.get("content") or []))
+    body = _apply_figure_numbers(
+        _apply_equation_numbers(_blocks_markdown(content.get("content") or []))
+    )
     return f"{body}\n" if body else ""
 
 
 def render_text(content: dict[str, Any]) -> str:
     """Render a Tiptap document as plain text, ending with a single newline."""
-    body = _apply_equation_numbers(_blocks_text(content.get("content") or []))
+    body = _apply_figure_numbers(
+        _apply_equation_numbers(_blocks_text(content.get("content") or []))
+    )
     return f"{body}\n" if body else ""
 
 
@@ -581,6 +611,7 @@ class _DocxRenderer:
         self.document = document
         self.project_dir = project_dir
         self.equation_number = 0
+        self.figure_number = 0
         self._omml_cache: dict[str, str | None] = {}
 
     # -- equations -----------------------------------------------------
@@ -832,19 +863,41 @@ class _DocxRenderer:
 
     def _figure(self, container: Any, node: dict[str, Any]) -> None:
         attrs = node.get("attrs") or {}
-        caption = str(attrs.get("caption") or attrs.get("alt") or _FIGURE_FALLBACK)
-        caption = caption.strip() or _FIGURE_FALLBACK
+        raw_caption = str(attrs.get("caption") or attrs.get("alt") or "").strip()
+        caption = raw_caption or _FIGURE_FALLBACK
         alt = str(attrs.get("alt") or "")
+        numbered = _is_numbered_figure(node)
+        number: int | None = None
+        if numbered:
+            self.figure_number += 1
+            number = self.figure_number
+
         shown = self._add_picture(container, attrs.get("src"), alt)
 
         if shown:
+            if number is not None:
+                caption_text = (
+                    f"Figure {number}. {raw_caption}"
+                    if raw_caption
+                    else f"Figure {number}"
+                )
+            else:
+                caption_text = caption
             caption_paragraph = self._new_paragraph(container, "Caption")
             caption_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            caption_paragraph.add_run(caption)
+            caption_paragraph.add_run(caption_text)
         else:
+            if number is not None:
+                marker_text = (
+                    f"[Figure {number}: {raw_caption}]"
+                    if raw_caption
+                    else f"[Figure {number}]"
+                )
+            else:
+                marker_text = f"[Figure: {caption}]"
             marker = container.add_paragraph()
             marker.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            marker.add_run(f"[Figure: {caption}]")
+            marker.add_run(marker_text)
 
         note = attrs.get("note")
         if isinstance(note, str):

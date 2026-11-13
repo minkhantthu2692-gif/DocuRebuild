@@ -211,6 +211,40 @@ def test_text_export_is_plain_and_omits_asset_paths() -> None:
     assert "/api/" not in text
 
 
+def test_numbered_figures_export_in_document_order() -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {"type": "figure", "attrs": {"caption": "First", "numbered": True}},
+            {"type": "figure", "attrs": {"caption": "Second"}},
+            {"type": "figure", "attrs": {"caption": "Third", "numbered": True}},
+        ],
+    }
+    markdown = render_markdown(content)
+    assert "\\[Figure 1: First\\]" in markdown
+    assert "\\[Figure: Second\\]" in markdown
+    assert "\\[Figure 2: Third\\]" in markdown
+    # The number is resolved before return; no placeholder reaches the file.
+    assert "\x00" not in markdown
+
+    text = render_text(content)
+    assert "[Figure 1: First]" in text
+    assert "[Figure: Second]" in text
+    assert "[Figure 2: Third]" in text
+    assert "\x00" not in text
+
+
+def test_numbered_figure_without_caption_stays_a_marker() -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {"type": "figure", "attrs": {"src": "/api/projects/p/assets/a/file", "numbered": True}},
+        ],
+    }
+    assert render_markdown(content) == "\\[Figure 1\\]\n"
+    assert render_text(content) == "[Figure 1]\n"
+
+
 def test_markdown_export_omits_asset_paths() -> None:
     assert "/api/" not in render_markdown(_doc())
 
