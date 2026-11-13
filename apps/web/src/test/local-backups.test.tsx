@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   },
   create: vi.fn(),
   download: vi.fn(),
+  deleteCopy: vi.fn(),
   saveBlob: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -29,6 +30,11 @@ vi.mock("@/hooks/use-projects", () => ({
     isPending: false,
     variables: undefined,
     mutate: mocks.download,
+  }),
+  useDeleteProjectBackupCopy: () => ({
+    isPending: false,
+    variables: undefined,
+    mutate: mocks.deleteCopy,
   }),
 }));
 
@@ -56,6 +62,7 @@ beforeEach(() => {
   };
   mocks.create.mockReset();
   mocks.download.mockReset();
+  mocks.deleteCopy.mockReset();
   mocks.saveBlob.mockReset();
   mocks.toast.success.mockReset();
   mocks.toast.error.mockReset();
@@ -81,7 +88,7 @@ describe("LocalBackupsDialog", () => {
     expect(screen.getByText("Book-20261113-101500.zip")).toBeInTheDocument();
     expect(screen.getByText(/1\.5 KB/)).toBeInTheDocument();
     expect(
-      screen.getByText(/The newest 5 copies are kept/),
+      screen.getByText(/Copies are pruned automatically/),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Download backup copy" }));
@@ -108,6 +115,36 @@ describe("LocalBackupsDialog", () => {
 
     await waitFor(() => expect(mocks.create).toHaveBeenCalled());
     expect(mocks.toast.success).toHaveBeenCalledWith("Backup copy created");
+  });
+
+  it("asks for confirmation before deleting one copy", async () => {
+    mocks.backups.data = [
+      {
+        filename: "Book-20261113-101500.zip",
+        byte_size: 1536,
+        created_at: "2026-11-13T10:15:00+00:00",
+      },
+    ];
+    mocks.deleteCopy.mockImplementation(
+      (_filename: string, options: { onSuccess: () => void }) =>
+        options.onSuccess(),
+    );
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete backup copy" }));
+
+    expect(screen.getByText("Delete this backup copy?")).toBeInTheDocument();
+    expect(mocks.deleteCopy).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete copy" }));
+
+    await waitFor(() =>
+      expect(mocks.deleteCopy).toHaveBeenCalledWith(
+        "Book-20261113-101500.zip",
+        expect.any(Object),
+      ),
+    );
+    expect(mocks.toast.success).toHaveBeenCalledWith("Backup copy deleted");
   });
 
   it("shows an error when the list cannot be loaded", () => {

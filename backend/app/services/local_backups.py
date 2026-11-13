@@ -130,6 +130,49 @@ def resolve_copy(project_id: str, filename: str) -> Path:
     return path
 
 
+def delete_copy(project_id: str, filename: str) -> dict[str, object]:
+    """Remove one stored copy after the user explicitly asks for it."""
+    path = resolve_copy(project_id, filename)
+    try:
+        path.unlink()
+    except FileNotFoundError as exc:
+        raise AppError(
+            404, "backup_not_found", "That backup copy does not exist."
+        ) from exc
+    except OSError as exc:
+        logger.warning("Could not delete backup copy %s", path, exc_info=True)
+        raise AppError(
+            500, "backup_delete_failed", "The backup copy could not be deleted."
+        ) from exc
+    return {"ok": True, "filename": filename}
+
+
+def trash_project_vault(project_id: str, base_name: str | None = None) -> Path | None:
+    """Move a deleted project's vault folder into the local trash.
+
+    The copies are preserved rather than destroyed, but they stop appearing under
+    the deleted project id. A move failure is logged and never blocks deletion.
+    """
+    folder = vault_dir(project_id)
+    if not folder.is_dir():
+        return None
+    settings = get_settings()
+    settings.trash_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    name = base_name or f"{project_id}-{stamp}"
+    target = settings.trash_dir / f"{name}-vault"
+    counter = 1
+    while target.exists():
+        target = settings.trash_dir / f"{name}-vault-{counter}"
+        counter += 1
+    try:
+        shutil.move(str(folder), str(target))
+    except OSError:
+        logger.warning("Could not move vault for project %s to trash", project_id, exc_info=True)
+        return None
+    return target
+
+
 def is_due(
     project_id: str,
     interval_hours: int,

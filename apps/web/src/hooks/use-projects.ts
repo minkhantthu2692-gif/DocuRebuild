@@ -94,6 +94,16 @@ export function useDownloadProjectBackupCopy() {
   });
 }
 
+export function useDeleteProjectBackupCopy(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (filename: string) => api.deleteProjectBackupCopy(projectId, filename),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["project-backups", projectId] });
+    },
+  });
+}
+
 export function useRestoreProjectBackup() {
   const queryClient = useQueryClient();
   return useMutation({

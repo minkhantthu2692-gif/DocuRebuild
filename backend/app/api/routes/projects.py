@@ -132,6 +132,12 @@ def download_local_backup(project: ProjectDep, filename: str) -> FileResponse:
     )
 
 
+@router.delete("/{project_id}/backups/{filename}")
+def delete_local_backup(project: ProjectDep, filename: str) -> dict[str, Any]:
+    """Delete one stored copy that the user explicitly selected."""
+    return local_backups.delete_copy(project.id, filename)
+
+
 @router.post(
     "/restore",
     response_model=ProjectDetail,
@@ -198,6 +204,8 @@ def open_project(
 @router.delete("/{project_id}")
 def delete_project(project: ProjectDep, session: DbSession) -> dict[str, Any]:
     trash_path = project_service.delete_project(session, project)
+    base_name = Path(trash_path).name if trash_path else None
+    local_backups.trash_project_vault(project.id, base_name)
     return {"ok": True, "trash_path": trash_path}
 
 

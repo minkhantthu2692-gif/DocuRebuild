@@ -150,6 +150,11 @@ export const api = {
     request<ProjectBackupSummary>(`/projects/${projectId}/backups`, { method: "POST" }),
   downloadProjectBackupCopy: (projectId: string, filename: string) =>
     download(`/projects/${projectId}/backups/${encodeURIComponent(filename)}`),
+  deleteProjectBackupCopy: (projectId: string, filename: string) =>
+    request<{ ok: boolean; filename: string }>(
+      `/projects/${projectId}/backups/${encodeURIComponent(filename)}`,
+      { method: "DELETE" },
+    ),
   restoreProjectBackup: (file: File) => {
     const form = new FormData();
     form.append("file", file);

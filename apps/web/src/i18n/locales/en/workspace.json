@@ -629,14 +629,20 @@
     "open": "Local backups",
     "title": "Local backup copies",
     "description": "Verified full copies of this project are kept on this device. Download one or create another before a risky change.",
-    "retention": "The newest 5 copies are kept. Creating another copy removes the oldest.",
+    "retention": "Copies are pruned automatically when the limit set in Settings is reached.",
     "create": "Create copy",
     "created": "Backup copy created",
     "downloaded": "Backup copy downloaded",
     "loading": "Loading backup copies",
     "empty": "No local copies yet",
     "emptyHint": "Create a copy to keep a verified snapshot of this project on this device.",
-    "download": "Download backup copy"
+    "download": "Download backup copy",
+    "deleteCopy": "Delete backup copy",
+    "deleteTitle": "Delete this backup copy?",
+    "deleteDescription": "{{filename}} will be removed from the local vault. This cannot be undone from DocuRebuild.",
+    "deleteConfirm": "Delete copy",
+    "deleting": "Deleting…",
+    "deleted": "Backup copy deleted"
   },
   "panels": {
     "collapseLeft": "Hide source panel",

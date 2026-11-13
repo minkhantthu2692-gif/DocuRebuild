@@ -6,6 +6,7 @@ from urllib.parse import quote
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.config import get_settings
 from app.core.errors import AppError
 from app.services import local_backups
 
@@ -128,3 +129,36 @@ def test_opening_a_project_creates_a_due_automatic_copy(
 def test_automatic_copies_stay_off_by_default(client: TestClient, project: dict) -> None:
     assert client.post(f"/api/projects/{project['id']}/open").status_code == 200
     assert client.get(f"/api/projects/{project['id']}/backups").json() == []
+
+
+def test_one_copy_can_be_deleted_explicitly(client: TestClient, project: dict) -> None:
+    project_id = project["id"]
+    created = client.post(f"/api/projects/{project_id}/backups")
+    assert created.status_code == 201, created.text
+    filename = created.json()["filename"]
+
+    deleted = client.delete(f"/api/projects/{project_id}/backups/{quote(filename)}")
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json() == {"ok": True, "filename": filename}
+    assert client.get(f"/api/projects/{project_id}/backups").json() == []
+
+    again = client.delete(f"/api/projects/{project_id}/backups/{quote(filename)}")
+    assert again.status_code == 404
+    assert again.json()["detail"]["code"] == "backup_not_found"
+
+
+def test_deleting_a_project_moves_its_vault_to_trash(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    assert client.post(f"/api/projects/{project_id}/backups").status_code == 201
+    vault = local_backups.vault_dir(project_id)
+    assert list(vault.glob("*.zip"))
+
+    deleted = client.delete(f"/api/projects/{project_id}")
+    assert deleted.status_code == 200, deleted.text
+    assert not vault.exists()
+
+    moved = list(get_settings().trash_dir.glob("*-vault"))
+    assert len(moved) == 1
+    assert list(moved[0].glob("*.zip"))

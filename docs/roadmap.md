@@ -460,16 +460,18 @@ headers/footers, page numbers, DOCX export and OMML validation.
   for the filter mapping/search and CSV/JSON building and component tests for labels,
   details, empty, error, unknown-event, filtered, no-match and export states.
 - Local backup vault: `GET /api/projects/{id}/backups` lists verified copies newest
-  first, `POST` creates one from the same validated archive builder, and
-  `GET .../backups/{filename}` streams a stored copy. Copies live in
+  first, `POST` creates one from the same validated archive builder,
+  `GET .../backups/{filename}` streams a stored copy, and
+  `DELETE .../backups/{filename}` removes one copy after confirmation. Copies live in
   `data_dir/backups/<project_id>/`, are created on request, and older copies are
   pruned after a successful write. Retention is configurable (`backups.keep_copies`,
   default 5, backend range 1–50; the UI offers 3, 5, 10 and 20) and applies to manual
   and automatic copies. Same-second collisions get a numeric suffix, unsafe filenames
-  are rejected, and a vault download never deletes the copy. The workspace project
-  menu opens a dialog that lists time and size, creates a copy, downloads one, and
-  shows empty, loading and error states. Creating a copy is recorded in the activity
-  log.
+  are rejected, and a vault download never deletes the copy. Deleting a project moves
+  its vault folder to the local trash as `*-vault`, preserving the archives. The
+  workspace project menu opens a dialog that lists time and size, creates a copy,
+  downloads or deletes one with confirmation, and shows empty, loading and error
+  states. Creating a copy is recorded in the activity log.
 - Opt-in automatic copies: a new Settings → Backups section controls
   `backups.auto_on_open` (default off), `interval_hours` (6 hours to 7 days in the UI,
   1–720 accepted) and `keep_copies`. When enabled, `POST /projects/{id}/open`
@@ -478,18 +480,18 @@ headers/footers, page numbers, DOCX export and OMML validation.
   snapshots from simultaneous opens, and a failed copy is logged without blocking the
   open. There is no background scheduler; a copy is attempted only after an open
   request.
-- Backend vault tests for create/list/download, retention pruning, missing projects,
-  unsafe names, due checks, configurable retention and automatic-on-open (including
-  the off-by-default and not-due paths), plus component tests for listing, downloading,
-  creating from the empty state, load errors and the Settings controls. The dialog,
-  settings and strings exist in English and Burmese.
+- Backend vault tests for create/list/download/delete, retention pruning, missing
+  projects, unsafe names, due checks, configurable retention, automatic-on-open
+  (including the off-by-default and not-due paths) and moving a deleted project's
+  vault to trash, plus component tests for listing, downloading, deleting with
+  confirmation, creating from the empty state, load errors and the Settings controls.
+  The dialog, settings and strings exist in English and Burmese.
 
 **Pending**
 
 - Selective restore (single page, asset or version from an archive), scheduled or
-  background backups while the app is closed, and backup encryption. Vault cleanup
-  after a project is deleted is also pending; copies are intentionally kept today.
-  Editor undo/redo stays separate from revision history.
+  background backups while the app is closed, and backup encryption. Editor undo/redo
+  stays separate from revision history.
 
 ## Phase 10 — Desktop, PWA and mobile distribution (planned)
 

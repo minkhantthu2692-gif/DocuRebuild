@@ -168,6 +168,7 @@ GET    /api/projects/{id}/backup
 GET    /api/projects/{id}/backups
 POST   /api/projects/{id}/backups
 GET    /api/projects/{id}/backups/{filename}
+DELETE /api/projects/{id}/backups/{filename}
 POST   /api/projects/restore
 GET    /api/projects/{id}/document
 PUT    /api/projects/{id}/document
@@ -646,6 +647,13 @@ src/
   `Cache-Control: private, no-store`. Creating a copy records a
   `project_backup_created` history event through `create_backup()`, so it appears in
   the activity log; downloads do not.
+- `DELETE /projects/{id}/backups/{filename}` removes exactly one archive after
+  passing the same name checks; a missing file returns `backup_not_found` and an OS
+  failure returns `backup_delete_failed`. The frontend requires an explicit
+  confirmation naming the archive. Deleting a project moves
+  `backups/<project_id>/` to `trash/<project-folder-name>-vault`, so the copies are
+  preserved but no longer appear under the project id. The move is best-effort: a
+  failure is logged and never blocks or reverses the project deletion.
 
 ### Local AI cleanup
 
@@ -787,14 +795,14 @@ src/
 - Project backups are created and validated entirely on the local machine. The
   archive is written under the local data directory, streamed to the browser and
   deleted; restore files are staged there and removed after validation or failure.
-  User-created copies in `backups/<project_id>/` stay on disk until pruned. Deleting a
-  project moves its project folder to the local trash but deliberately does not delete
-  its vault copies; they remain in the vault folder. Opt-in automatic copies run in
-  the same local backend process only after a project is opened, and no backup work
-  happens while it is stopped. No backup content is uploaded, and the app does not
-  sync archives to GitHub. An archive contains the original documents and extracted
-  text, so it must be stored like the project folder itself; it is not encrypted by
-  the app.
+  User-created copies in `backups/<project_id>/` stay on disk until pruned or deleted
+  explicitly. Deleting a project moves its project folder to the local trash and also
+  moves its vault folder beside it in the trash; neither is destroyed automatically.
+  Opt-in automatic copies run in the same local backend process only after a project
+  is opened, and no backup work happens while it is stopped. No backup content is
+  uploaded, and the app does not sync archives to GitHub. An archive contains the
+  original documents and extracted text, so it must be stored like the project folder
+  itself; it is not encrypted by the app.
 - Document links are validated to `http`, `https` or `mailto` before they enter the
   document, and Markdown export repeats that check. A stored `javascript:` or
   `data:` target is never emitted as a link; only its text is kept.

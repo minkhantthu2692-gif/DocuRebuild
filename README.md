@@ -119,8 +119,9 @@ data on your device, and treats every AI result as a reviewable proposal.
   workspace project menu. Copies are created when you ask, or after opening a project
   when you opt in and the newest copy is older than the configured interval. The
   number kept is configurable (five by default) and the oldest is pruned after a new
-  copy is written. Any copy can be downloaded again, and downloading never removes
-  it. The vault is not encrypted and is not synced anywhere.
+  copy is written. Any copy can be downloaded again or deleted explicitly;
+  downloading never removes it. Deleting a project moves its vault copies to the local
+  trash. The vault is not encrypted and is not synced anywhere.
 - **Manual tables** — insert an empty table from the editor toolbar with 1–10
   rows and columns and an optional header row, then add or delete rows and columns,
   toggle the header, or delete the table. Every cell is typed by hand; no cell text
@@ -505,16 +506,18 @@ Backups are local files, not a cloud service and not a GitHub upload:
   accepted by the backend; default 5), and the oldest archives are pruned after a
   successful new copy. The name is sanitised
   to a filesystem-safe stem (Unicode is kept), and same-second copies get a numeric
-  suffix. A vault download streams the stored file without deleting it. Copies are
-  excluded from new backups, so they can never nest archive inside archive, and
-  deleting a project does not delete its vault copies.
+  suffix. A vault download streams the stored file without deleting it. Deleting a
+  copy requires confirmation and removes only that archive. Copies are excluded from
+  new backups, so they can never nest archive inside archive; deleting a project moves
+  its vault folder into the local trash rather than destroying it.
 
 ```text
-GET  /api/projects/{project_id}/backup      # application/zip attachment
-GET  /api/projects/{project_id}/backups     # ProjectBackupSummary[]
-POST /api/projects/{project_id}/backups     # create one verified copy → 201 summary
-GET  /api/projects/{project_id}/backups/{filename}  # application/zip attachment
-POST /api/projects/restore                  # multipart field: file → 201 ProjectDetail
+GET    /api/projects/{project_id}/backup      # application/zip attachment
+GET    /api/projects/{project_id}/backups     # ProjectBackupSummary[]
+POST   /api/projects/{project_id}/backups     # create one verified copy → 201 summary
+GET    /api/projects/{project_id}/backups/{filename}  # application/zip attachment
+DELETE /api/projects/{project_id}/backups/{filename}  # delete one copy
+POST   /api/projects/restore                  # multipart field: file → 201 ProjectDetail
 ```
 
 Restore error codes: `backup_invalid`, `backup_missing_files`,
@@ -608,7 +611,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
     backups/             reserved; archives live in the shared vault below
     trash/               per-project runtime trash
   backups/<project-id>/  verified backup copies (configurable retention)
-  trash/                 deleted project folders
+  trash/                 deleted project folders and their vault copies
   tmp/                   short-lived backup archives and restore staging
 ```
 
