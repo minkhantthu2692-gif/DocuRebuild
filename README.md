@@ -10,8 +10,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 > The workspace, local project storage, image and PDF import, non-destructive
 > image adjustments, the rich-text editor, local Tesseract OCR, manual region
 > extraction, an optional local-AI OCR text cleanup, optional vision region
-> proposals, local Markdown/TXT document export and document version history are
-> implemented. Imports run
+> proposals, local Markdown/TXT/Word document export and document version history
+> are implemented. Imports run
 > as background jobs with page-level progress, cancellation and localized failures.
 > PDF pages are rendered locally and embedded text layers are stored as reviewable
 > proposals; image-only PDF pages can be processed with OCR. OCR and PDF import are
@@ -19,9 +19,9 @@ data on your device, and treats every AI result as a reviewable proposal.
 > talks to an Ollama or OpenAI-compatible server that the user configures and tests;
 > loopback addresses are the default, and any other host needs explicit remote
 > consent. Every result is a proposal that must be accepted or rejected. Cloud
-> providers, free-tier adapters, paid usage, image generation, structured
-> table/figure/equation reconstruction and DOCX export are **not
-> implemented yet** and are clearly marked as unavailable in the UI. Nothing in this
+> providers, free-tier adapters, paid usage, image generation and structured
+> table/figure/equation reconstruction are **not implemented yet** and are clearly
+> marked as unavailable in the UI. Nothing in this
 > repository fakes those features.
 
 ---
@@ -98,13 +98,15 @@ data on your device, and treats every AI result as a reviewable proposal.
   replace-all. Matches can span inline formatting but never jump between
   paragraphs or hard breaks. Selecting a figure lets you correct its caption and alt
   text while the image and its source note stay untouched.
-- **Local Markdown and TXT export** — the editor header downloads the saved
-  document as Markdown or plain text. The export is generated on this device by
-  the backend from the same document the editor autosaves; unsaved changes are
-  flushed first, and the download is refused if that save fails. Extracted text is
-  escaped so it can never turn into Markdown structure, figure assets stay in
-  the project instead of being copied into the file, and equations are written as
-  their LaTeX source with any numbering kept after the equation.
+- **Local Markdown, TXT and Word export** — the editor header downloads the saved
+  document as Markdown, plain text or a Word file. The export is generated on this
+  device by the backend from the same document the editor autosaves; unsaved changes
+  are flushed first, and the download is refused if that save fails. Extracted text
+  is escaped so it can never turn into Markdown structure, and equations are written
+  as their LaTeX source with any numbering kept after the equation. Word output
+  embeds the project's own figure images and converts equations to native Word
+  equations, keeping the LaTeX as a visible fallback when a formula cannot be
+  converted.
 - **Document versions** — the editor header keeps a local version history. Automatic
   versions are captured when the document changes, a manual checkpoint can be saved
   at any time, restoring a version always keeps the state it replaces, so a restore
@@ -127,16 +129,17 @@ data on your device, and treats every AI result as a reviewable proposal.
   rows and columns and an optional header row, then add or delete rows and columns,
   toggle the header, or delete the table. Every cell is typed by hand; no cell text
   is generated from a source image. Tables are part of the saved document, version
-  history, backups and Markdown/TXT export.
+  history, backups and Markdown/TXT/Word export.
 - **Equations** — insert a display equation or an inline formula from the toolbar
   dialog and check the local KaTeX preview before inserting it. Empty or invalid
   LaTeX is refused rather than saved. Display equations can be given an optional
-  number: the editor shows it from document order, and Markdown/TXT export writes the
-  same `(n)` label after the equation, while the saved LaTeX never contains it.
+  number: the editor shows it from document order, and Markdown/TXT/Word export
+  writes the same `(n)` label after the equation, while the saved LaTeX never
+  contains it.
   Only the LaTeX source is stored, so equations work offline and are part of the
-  document, versions, backups, Markdown (`$$` blocks and `$...$` formulas) and plain
-  text. Equations are typed by you; OCR or AI equation recognition is not
-  implemented.
+  document, versions, backups, Markdown (`$$` blocks and `$...$` formulas), plain
+  text and Word export (native equations). Equations are typed by you; OCR or AI
+  equation recognition is not implemented.
 - **Project activity log** — the workspace project menu lists local events newest
   first: imports, page processing, region extraction, OCR, document exports and
   backups. Entries are metadata only (counts, formats, sizes, ids and timestamps);
@@ -153,8 +156,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 Structured element reconstruction (automatic table-cell extraction, automatic
 equation transcription, generative figure detection), cloud/free-tier AI providers,
 image-generation profiles, scheduled or background backups, selective restore from an
-archive, backup encryption, DOCX export, desktop packaging and PWA install support
-are planned but not implemented. OCR extracts text blocks,
+archive, backup encryption, PDF layout export, desktop packaging and PWA install
+support are planned but not implemented. OCR extracts text blocks,
 reading order and conservative layout hints; it does not build table structure or
 transcribe equations. Region extraction produces exact pixel crops and can read
 their plain text locally; it does not build structured table cells or equation
@@ -187,6 +190,7 @@ See [`docs/roadmap.md`](docs/roadmap.md).
 | Web client | React 18, TypeScript, Vite, Tailwind CSS, Radix UI primitives |
 | Editor | Tiptap 3 (ProseMirror) |
 | Equations | KaTeX (bundled locally, MIT) |
+| Word export | python-docx, latex2mathml, mathml2omml (all run locally) |
 | i18n | i18next / react-i18next (English default, Burmese secondary) |
 | Local API | Python, FastAPI, SQLAlchemy, Alembic, SQLite |
 | Image processing | Pillow |
@@ -389,11 +393,11 @@ Tables are reconstructed manually, cell by cell:
 
 ### Document export
 
-Markdown and plain-text export are local and need no provider, account or
+Markdown, plain-text and Word export are local and need no provider, account or
 extension:
 
 - Open the workspace and use the download button in the document header, then
-  choose **Markdown (.md)** or **Plain text (.txt)**.
+  choose **Markdown (.md)**, **Plain text (.txt)** or **Word document (.docx)**.
 - Unsaved editor changes are saved first. If that save fails, nothing is
   downloaded and the editor shows the usual save error, so the file cannot
   silently lag behind the screen.
@@ -402,17 +406,26 @@ extension:
   Extracted text is escaped, so a line that happens to look like `# heading` or
   `- list` stays literal text.
 - Figures are written as an explicit `[Figure: <caption>]` marker plus their
-  source note. The image itself is not embedded, because it remains a local
-  project asset that has no meaning outside the app.
+  source note in Markdown and plain text. The image itself is not embedded there,
+  because it remains a local project asset that has no meaning outside the app.
+  Word export embeds the image instead, with the caption below it and the source
+  note kept as recorded.
 - Tables export as GitHub-flavoured Markdown. A literal `|` is escaped, multiple
   paragraphs in one cell are joined with `<br>`, and a table without a header gets
   a blank structural header row. If merged cells are present, the table is written
   as HTML instead so `colspan`/`rowspan` content is neither duplicated nor dropped.
-  Plain-text export keeps every cell with ` | ` separators.
+  Plain-text export keeps every cell with ` | ` separators. Word export uses a
+  native table and reproduces merged cells, so its columns stay editable.
+- Equations export as native Word equations in DOCX: the LaTeX is converted
+  locally to MathML and then to Office Math, so Word can edit the formula. If a
+  formula cannot be converted, its LaTeX source is written in italics instead of
+  being dropped. Inline formulas stay inside their sentence, and a numbered display
+  equation keeps its `(n)` label after the equation.
 - The download name comes from the project name. Burmese names are sent with
   RFC 5987 encoding and get a safe ASCII fallback.
 
-DOCX export, OMML equations and PDF layout export are not implemented yet.
+PDF layout export is not implemented yet. Word export follows the saved document
+flow; it does not reconstruct the original page layout.
 
 ### Document versions
 
@@ -450,7 +463,7 @@ in this project:
 
 - The list is newest first and covers project creation, imports (including a
   cancelled import), page processing and deletion, region extraction and text
-  corrections, local OCR runs, Markdown/TXT exports, backups and restores.
+  corrections, local OCR runs, Markdown/TXT/Word exports, backups and restores.
 - Each entry shows a localized event label, a local timestamp and, when relevant,
   the recorded detail: page count, export format and size, backup archive size, OCR
   languages, mean confidence, block count or error code.
@@ -682,6 +695,13 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   per-cell alignment beyond paragraph alignment and no column resizing. Automatic
   table structure from OCR or vision is still not produced. A table is only as
   accurate as the cell text you type.
+- Word export converts equations locally through MathML, so a formula using LaTeX
+  constructs that the converter does not support is written as its italic LaTeX
+  source instead of a native equation. Figures are embedded from this project's
+  assets and scaled to fit the page width; a figure whose asset is missing becomes a
+  visible `[Figure: <caption>]` marker rather than disappearing. Word export keeps
+  the document flow, not the original page geometry, and PDF layout export is not
+  implemented.
 - Autosave is debounced and best-effort when leaving the page. Document versions
   protect the saved document, but they live in the same project database and are
   not a backup. Use **Download backup** or **Local backups** for a complete copy;
@@ -766,8 +786,8 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions and user-typed display and inline equations with local preview and optional equation numbering, plus faithful table/equation export; automatic table/equation extraction and figure numbering pending |
-| 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display and inline equations and local Markdown and TXT export; DOCX and page layout pending |
+| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions and user-typed display and inline equations with local preview and optional equation numbering, plus faithful table/equation export to Markdown, TXT and Word; automatic table/equation extraction and figure numbering pending |
+| 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display and inline equations and local Markdown, TXT and Word export; footnotes and PDF page layout pending |
 | 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download, additive restore from upload or a stored vault copy, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |

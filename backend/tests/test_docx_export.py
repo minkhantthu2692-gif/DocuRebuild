@@ -1,0 +1,345 @@
+from __future__ import annotations
+
+import io
+from pathlib import Path
+
+from docx import Document
+from fastapi.testclient import TestClient
+
+from app.core.config import get_settings
+from app.services.document_export import render_docx
+from tests.conftest import upload_pages
+
+
+def _open(data: bytes) -> Document:
+    return Document(io.BytesIO(data))
+
+
+def _body_xml(document: Document) -> str:
+    return document.element.body.xml
+
+
+def _paragraph_texts(document: Document) -> list[str]:
+    return [paragraph.text for paragraph in document.paragraphs]
+
+
+def _content() -> dict:
+    return {
+        "type": "doc",
+        "content": [
+            {
+                "type": "heading",
+                "attrs": {"level": 1},
+                "content": [{"type": "text", "text": "Quantum Mechanics"}],
+            },
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "The "},
+                    {
+                        "type": "text",
+                        "text": "Schrödinger",
+                        "marks": [{"type": "bold"}],
+                    },
+                    {"type": "text", "text": " equation."},
+                ],
+            },
+            {
+                "type": "bulletList",
+                "content": [
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [{"type": "text", "text": "First"}],
+                            }
+                        ],
+                    },
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [{"type": "text", "text": "Second"}],
+                            }
+                        ],
+                    },
+                ],
+            },
+            {
+                "type": "orderedList",
+                "attrs": {"start": 3},
+                "content": [
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [{"type": "text", "text": "Third"}],
+                            }
+                        ],
+                    }
+                ],
+            },
+            {
+                "type": "paragraph",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Docs",
+                        "marks": [
+                            {
+                                "type": "link",
+                                "attrs": {"href": "https://example.com/a"},
+                            }
+                        ],
+                    }
+                ],
+            },
+        ],
+    }
+
+
+def test_docx_export_keeps_structure_and_formatting(tmp_path: Path) -> None:
+    data = render_docx(_content(), tmp_path, "Quantum Mechanics")
+    assert data[:2] == b"PK"
+
+    document = _open(data)
+    texts = _paragraph_texts(document)
+    assert "Quantum Mechanics" in texts
+    assert "• First" in texts
+    assert "• Second" in texts
+    assert "3. Third" in texts
+
+    body = _body_xml(document)
+    assert "Heading1" in body or "Heading 1" in body
+    # Lists keep visible markers and nested indentation.
+    assert "w:ind" in body
+
+    hyperlink = next(
+        rel
+        for rel in document.part.rels.values()
+        if rel.reltype.endswith("/hyperlink")
+    )
+    assert hyperlink.target_ref == "https://example.com/a"
+    assert "w:hyperlink" in body
+    # The local machine's identity is not written into the file.
+    assert document.core_properties.author == ""
+    assert document.core_properties.title == "Quantum Mechanics"
+
+
+def test_docx_export_writes_native_equations(tmp_path: Path) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "blockMath",
+                "attrs": {"latex": r"\frac{a}{b} = \sum_{i=1}^{n} x_i^2", "numbered": True},
+            },
+            {"type": "blockMath", "attrs": {"latex": "c = d"}},
+            {
+                "type": "blockMath",
+                "attrs": {"latex": "e = f", "numbered": True},
+            },
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "Inline "},
+                    {"type": "inlineMath", "attrs": {"latex": "E = mc^2"}},
+                    {"type": "text", "text": " stays editable."},
+                ],
+            },
+        ],
+    }
+    document = _open(render_docx(content, tmp_path))
+    body = _body_xml(document)
+    assert body.count("<m:oMath>") == 4
+    assert "m:f" in body and "m:nary" in body
+
+    texts = _paragraph_texts(document)
+    assert any("(1)" in text for text in texts)
+    assert any("(2)" in text for text in texts)
+    # The number is a label next to the equation, never part of its source.
+    assert all("a = b (1)" not in text for text in texts)
+
+
+def test_docx_export_falls_back_to_latex_when_conversion_fails(tmp_path: Path) -> None:
+    content = {
+        "type": "doc",
+        "content": [{"type": "blockMath", "attrs": {"latex": r"\frac{"}}],
+    }
+    document = _open(render_docx(content, tmp_path))
+    assert "\\frac{" in _paragraph_texts(document)
+
+
+def test_docx_export_embeds_project_figures(
+    client: TestClient, project: dict
+) -> None:
+    page = upload_pages(client, project["id"], ["figure.png"])[0]
+    asset_id = page["display_asset_id"] or page["original_asset_id"]
+    src = f"/api/projects/{project['id']}/assets/{asset_id}/file"
+
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "figure",
+                "attrs": {
+                    "src": src,
+                    "alt": "Wave function",
+                    "caption": "Figure 1. Wavefunction",
+                    "note": "Source: page 2",
+                },
+            }
+        ],
+    }
+    directory = get_settings().projects_dir / project["id"]
+    document = _open(render_docx(content, directory, project["name"]))
+
+    assert len(document.inline_shapes) == 1
+    shape = document.inline_shapes[0]
+    assert shape.width <= 6 * 914400  # 6 inches in EMU
+    assert shape._inline.docPr.get("descr") == "Wave function"
+
+    texts = _paragraph_texts(document)
+    assert "Figure 1. Wavefunction" in texts
+    assert "Source: page 2" in texts
+    # The local API path never leaks into the exported file.
+    assert asset_id not in _body_xml(document)
+
+
+def test_docx_export_marks_a_missing_figure_instead_of_dropping_it(
+    client: TestClient, project: dict
+) -> None:
+    missing = "00000000-0000-0000-0000-000000000000"
+    src = f"/api/projects/{project['id']}/assets/{missing}/file"
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "figure",
+                "attrs": {"src": src, "caption": "Figure 2. Missing"},
+            }
+        ],
+    }
+    directory = get_settings().projects_dir / project["id"]
+    document = _open(render_docx(content, directory))
+    assert "[Figure: Figure 2. Missing]" in _paragraph_texts(document)
+    assert len(document.inline_shapes) == 0
+
+
+def test_docx_export_merges_table_cells(tmp_path: Path) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "table",
+                "content": [
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            {
+                                "type": "tableHeader",
+                                "attrs": {"colspan": 2, "rowspan": 1},
+                                "content": [
+                                    {
+                                        "type": "paragraph",
+                                        "content": [{"type": "text", "text": "Merged"}],
+                                    }
+                                ],
+                            },
+                            {
+                                "type": "tableCell",
+                                "attrs": {"colspan": 1, "rowspan": 2},
+                                "content": [
+                                    {
+                                        "type": "paragraph",
+                                        "content": [{"type": "text", "text": "Side"}],
+                                    }
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            {
+                                "type": "tableCell",
+                                "attrs": {"colspan": 1, "rowspan": 1},
+                                "content": [
+                                    {
+                                        "type": "paragraph",
+                                        "content": [{"type": "text", "text": "A"}],
+                                    }
+                                ],
+                            },
+                            {
+                                "type": "tableCell",
+                                "attrs": {"colspan": 1, "rowspan": 1},
+                                "content": [
+                                    {
+                                        "type": "paragraph",
+                                        "content": [{"type": "text", "text": "B"}],
+                                    }
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            }
+        ],
+    }
+    document = _open(render_docx(content, tmp_path))
+    table = document.tables[0]
+    assert len(table.rows) == 2
+    assert len(table.columns) == 3
+    # The header spans both top columns and the side cell spans both rows.
+    assert table.cell(0, 0)._tc is table.cell(0, 1)._tc
+    assert table.cell(0, 2)._tc is table.cell(1, 2)._tc
+    assert table.cell(0, 0).text == "Merged"
+    assert table.cell(1, 0).text == "A"
+    assert table.cell(1, 1).text == "B"
+
+
+def test_export_endpoint_returns_docx(client: TestClient, project: dict) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Body text."}],
+            },
+            {"type": "blockMath", "attrs": {"latex": "a = b"}},
+        ],
+    }
+    saved = client.put(
+        f"/api/projects/{project['id']}/document",
+        json={"content": content, "plain_text": "Body text."},
+    )
+    assert saved.status_code == 200, saved.text
+
+    response = client.get(
+        f"/api/projects/{project['id']}/document/export",
+        params={"format": "docx"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert 'filename="Quantum-Mechanics.docx"' in response.headers[
+        "content-disposition"
+    ]
+    assert response.content[:2] == b"PK"
+
+    document = Document(io.BytesIO(response.content))
+    assert any("Body text." in text for text in _paragraph_texts(document))
+    assert "oMath" in _body_xml(document)
+
+    history = client.get(f"/api/projects/{project['id']}/history").json()
+    exported = [
+        event for event in history if event.get("event_type") == "document_exported"
+    ]
+    assert exported
+    assert exported[0]["payload"]["format"] == "docx"
+    assert exported[0]["payload"]["byte_size"] == len(response.content)

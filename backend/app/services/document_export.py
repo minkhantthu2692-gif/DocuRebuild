@@ -1,7 +1,7 @@
-"""Deterministic TXT and Markdown export for the Tiptap document.
+"""Deterministic TXT, Markdown and Word export for the Tiptap document.
 
 The document is stored as Tiptap JSON. This module renders that JSON without
-any external dependency, so export works fully offline. It is intentionally
+any external service, so export works fully offline. It is intentionally
 lossless-first: every text node is preserved and only the presentation is
 converted. Content that cannot be represented exactly (for example an
 extracted figure stored as a local asset) is written as an explicit marker
@@ -11,24 +11,47 @@ Markdown output is escaped so extracted text can never become markup: a
 heading-like line inside a paragraph stays literal text, and raw HTML is
 neutralised. Figure image sources are never included because they are local
 API paths that are meaningless outside the app.
+
+Word output embeds the project's own figure images and converts equations to
+OMML, so Word can edit them as real equations. Conversion happens locally; the
+LaTeX source is kept as a visible fallback if a formula cannot be converted.
 """
 
 from __future__ import annotations
 
 import html
+import io
 import re
 from pathlib import Path
 from typing import Any, Literal
 
-from app.services import documents
+import latex2mathml.converter
+import mathml2omml
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
+from docx.oxml import OxmlElement, parse_xml
+from docx.oxml.ns import nsdecls, qn
+from docx.shared import Inches, Pt
+from PIL import Image
 
-ExportFormat = Literal["markdown", "txt"]
+from app.services import documents, pages
+
+ExportFormat = Literal["markdown", "txt", "docx"]
+TextExportFormat = Literal["markdown", "txt"]
 
 CONTENT_TYPES: dict[ExportFormat, str] = {
     "markdown": "text/markdown; charset=utf-8",
     "txt": "text/plain; charset=utf-8",
+    "docx": (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ),
 }
-EXTENSIONS: dict[ExportFormat, str] = {"markdown": "md", "txt": "txt"}
+EXTENSIONS: dict[ExportFormat, str] = {
+    "markdown": "md",
+    "txt": "txt",
+    "docx": "docx",
+}
 
 _MARKDOWN_SPECIALS = frozenset("\\`*_[]<>")
 _SAFE_LINK_PATTERN = re.compile(r"^(https?://|mailto:)", re.IGNORECASE)
@@ -500,7 +523,7 @@ def render_text(content: dict[str, Any]) -> str:
     return f"{body}\n" if body else ""
 
 
-def render(content: dict[str, Any], fmt: ExportFormat) -> str:
+def render(content: dict[str, Any], fmt: TextExportFormat) -> str:
     return render_markdown(content) if fmt == "markdown" else render_text(content)
 
 
@@ -518,10 +541,501 @@ def download_filename(name: str, fmt: ExportFormat) -> str:
     return f"{cleaned}.{EXTENSIONS[fmt]}"
 
 
+# --- Word (.docx) export -------------------------------------------------
+
+# Figure sources are local API paths such as
+# /api/projects/<id>/assets/<asset-id>/file?v=... The asset id is resolved
+# against this project's own database, so a document can never pull an image
+# from another project or from the filesystem.
+_ASSET_SRC = re.compile(r"/assets/([0-9A-Fa-f-]{36})/file")
+_MAX_IMAGE_WIDTH = Inches(6.0)
+_ALIGNMENTS = {
+    "left": WD_ALIGN_PARAGRAPH.LEFT,
+    "center": WD_ALIGN_PARAGRAPH.CENTER,
+    "right": WD_ALIGN_PARAGRAPH.RIGHT,
+    "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
+}
+_LIST_TYPES = frozenset({"bulletList", "orderedList"})
+
+
+def _int_attr(node: dict[str, Any], name: str, default: int) -> int:
+    value = (node.get("attrs") or {}).get(name)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _span_attr(value: Any, maximum: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = 1
+    return max(1, min(number, maximum))
+
+
+class _DocxRenderer:
+    """Turn the stored Tiptap JSON into native Word content."""
+
+    def __init__(self, document: Any, project_dir: Path) -> None:
+        self.document = document
+        self.project_dir = project_dir
+        self.equation_number = 0
+        self._omml_cache: dict[str, str | None] = {}
+
+    # -- equations -----------------------------------------------------
+
+    def _omml(self, latex: str) -> str | None:
+        if latex in self._omml_cache:
+            return self._omml_cache[latex]
+        source: str | None
+        try:
+            mathml = latex2mathml.converter.convert(latex)
+            source = mathml2omml.convert(mathml)
+        except Exception:
+            # A formula that cannot be converted keeps its LaTeX below.
+            source = None
+        self._omml_cache[latex] = source
+        return source
+
+    def _add_math(self, paragraph: Any, latex: str) -> bool:
+        source = self._omml(latex)
+        if not source:
+            return False
+        try:
+            element = parse_xml(f"<root {nsdecls('m')}>{source}</root>")[0]
+        except Exception:
+            return False
+        paragraph._p.append(element)
+        return True
+
+    def _block_math(self, container: Any, node: dict[str, Any]) -> None:
+        latex = _equation_latex(node)
+        if not latex:
+            return
+        paragraph = container.add_paragraph()
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        if not self._add_math(paragraph, latex):
+            run = paragraph.add_run(latex)
+            run.italic = True
+        if _is_numbered_equation(node):
+            self.equation_number += 1
+            paragraph.add_run(f" ({self.equation_number})")
+
+    # -- inline content -------------------------------------------------
+
+    def _style_run(self, run: Any, marks: dict[str, Any]) -> None:
+        if "bold" in marks:
+            run.bold = True
+        if "italic" in marks:
+            run.italic = True
+        if "strike" in marks:
+            run.font.strike = True
+        if "underline" in marks:
+            run.underline = True
+        if "code" in marks:
+            run.font.name = "Consolas"
+            run.font.size = Pt(10)
+
+    def _add_hyperlink(
+        self, paragraph: Any, text: str, url: str, marks: dict[str, Any]
+    ) -> None:
+        relationship_id = paragraph.part.relate_to(url, RT.HYPERLINK, is_external=True)
+        hyperlink = OxmlElement("w:hyperlink")
+        hyperlink.set(qn("r:id"), relationship_id)
+        run = OxmlElement("w:r")
+        properties = OxmlElement("w:rPr")
+        if "bold" in marks:
+            properties.append(OxmlElement("w:b"))
+        if "italic" in marks:
+            properties.append(OxmlElement("w:i"))
+        if "strike" in marks:
+            properties.append(OxmlElement("w:strike"))
+        color = OxmlElement("w:color")
+        color.set(qn("w:val"), "0563C1")
+        properties.append(color)
+        underline = OxmlElement("w:u")
+        underline.set(qn("w:val"), "single")
+        properties.append(underline)
+        run.append(properties)
+        value = OxmlElement("w:t")
+        value.text = text
+        value.set(qn("xml:space"), "preserve")
+        run.append(value)
+        hyperlink.append(run)
+        paragraph._p.append(hyperlink)
+
+    def _add_inline(self, paragraph: Any, nodes: list[dict[str, Any]] | None) -> None:
+        for node in nodes or []:
+            if not isinstance(node, dict):
+                continue
+            kind = node.get("type")
+            if kind == "text":
+                text = node.get("text")
+                if not isinstance(text, str):
+                    continue
+                marks = {
+                    str(mark.get("type")): (mark.get("attrs") or {})
+                    for mark in node.get("marks") or []
+                    if isinstance(mark, dict)
+                }
+                href = _safe_link((marks.get("link") or {}).get("href"))
+                if href:
+                    self._add_hyperlink(paragraph, text, href, marks)
+                else:
+                    run = paragraph.add_run(text)
+                    self._style_run(run, marks)
+            elif kind == "inlineMath":
+                latex = _equation_latex(node)
+                if latex and not self._add_math(paragraph, latex):
+                    paragraph.add_run(latex).italic = True
+            elif kind == "hardBreak":
+                paragraph.add_run().add_break()
+            elif kind == "figure":
+                # A figure inside a sentence has no place in Word's flow; keep
+                # its caption so no information disappears.
+                attrs = node.get("attrs") or {}
+                caption = attrs.get("caption") or attrs.get("alt") or _FIGURE_FALLBACK
+                paragraph.add_run(f"[Figure: {caption}]")
+            else:
+                self._add_inline(paragraph, node.get("content"))
+
+    # -- blocks ---------------------------------------------------------
+
+    def add_blocks(
+        self,
+        container: Any,
+        nodes: list[dict[str, Any]] | None,
+        depth: int = 0,
+        quote: bool = False,
+    ) -> None:
+        for node in nodes or []:
+            if isinstance(node, dict):
+                self.add_block(container, node, depth, quote)
+
+    def add_block(
+        self,
+        container: Any,
+        node: dict[str, Any],
+        depth: int = 0,
+        quote: bool = False,
+        prefix: str | None = None,
+    ) -> None:
+        kind = node.get("type")
+        if kind == "paragraph":
+            self._paragraph(container, node, depth, quote, prefix)
+        elif kind == "heading":
+            self._heading(container, node, depth)
+        elif kind in _LIST_TYPES:
+            self._list(container, node, depth, quote)
+        elif kind == "blockquote":
+            self.add_blocks(container, node.get("content"), depth + 1, True)
+        elif kind == "codeBlock":
+            self._code_block(container, node)
+        elif kind == "horizontalRule":
+            self._rule(container)
+        elif kind == "figure":
+            self._figure(container, node)
+        elif kind == "blockMath":
+            self._block_math(container, node)
+        elif kind == "table":
+            self._table(container, node)
+        elif kind == "hardBreak":
+            return
+        else:
+            self.add_blocks(container, node.get("content"), depth, quote)
+
+    def _paragraph(
+        self,
+        container: Any,
+        node: dict[str, Any],
+        depth: int,
+        quote: bool,
+        prefix: str | None = None,
+    ) -> None:
+        paragraph = self._new_paragraph(container, "Quote" if quote else None)
+        self._align(paragraph, node.get("attrs") or {})
+        if depth or prefix:
+            formatter = paragraph.paragraph_format
+            formatter.left_indent = Inches(0.3 * depth)
+            if prefix:
+                formatter.first_line_indent = Inches(-0.3)
+                paragraph.add_run(f"{prefix} ")
+        self._add_inline(paragraph, node.get("content"))
+
+    def _heading(self, container: Any, node: dict[str, Any], depth: int) -> None:
+        level = min(max(_int_attr(node, "level", 1), 1), 6)
+        paragraph = self._new_paragraph(container, f"Heading {level}")
+        if depth:
+            paragraph.paragraph_format.left_indent = Inches(0.3 * depth)
+        self._add_inline(paragraph, node.get("content"))
+
+    def _list(
+        self,
+        container: Any,
+        node: dict[str, Any],
+        depth: int,
+        quote: bool,
+    ) -> None:
+        ordered = node.get("type") == "orderedList"
+        start = _int_attr(node, "start", 1)
+        for index, item in enumerate(node.get("content") or []):
+            if not isinstance(item, dict):
+                continue
+            marker = f"{start + index}." if ordered else "\u2022"
+            children = [
+                child for child in item.get("content") or [] if isinstance(child, dict)
+            ]
+            first = True
+            for child in children:
+                if child.get("type") in _LIST_TYPES:
+                    self.add_block(container, child, depth + 1, quote)
+                    continue
+                self.add_block(
+                    container,
+                    child,
+                    depth + 1,
+                    quote,
+                    marker if first else None,
+                )
+                first = False
+            if first:
+                paragraph = self._new_paragraph(container, "Quote" if quote else None)
+                formatter = paragraph.paragraph_format
+                formatter.left_indent = Inches(0.3 * (depth + 1))
+                formatter.first_line_indent = Inches(-0.3)
+                paragraph.add_run(marker)
+
+    def _code_block(self, container: Any, node: dict[str, Any]) -> None:
+        text = _inline_text(node.get("content"))
+        paragraph = container.add_paragraph()
+        self._shade(paragraph, "F5F5F5")
+        lines = text.split("\n")
+        for index, line in enumerate(lines):
+            run = paragraph.add_run(line)
+            run.font.name = "Consolas"
+            run.font.size = Pt(9.5)
+            if index < len(lines) - 1:
+                run.add_break()
+
+    def _rule(self, container: Any) -> None:
+        paragraph = container.add_paragraph()
+        properties = paragraph._p.get_or_add_pPr()
+        borders = OxmlElement("w:pBdr")
+        bottom = OxmlElement("w:bottom")
+        bottom.set(qn("w:val"), "single")
+        bottom.set(qn("w:sz"), "6")
+        bottom.set(qn("w:space"), "1")
+        bottom.set(qn("w:color"), "auto")
+        borders.append(bottom)
+        properties.append(borders)
+
+    def _figure(self, container: Any, node: dict[str, Any]) -> None:
+        attrs = node.get("attrs") or {}
+        caption = str(attrs.get("caption") or attrs.get("alt") or _FIGURE_FALLBACK)
+        caption = caption.strip() or _FIGURE_FALLBACK
+        alt = str(attrs.get("alt") or "")
+        shown = self._add_picture(container, attrs.get("src"), alt)
+
+        if shown:
+            caption_paragraph = self._new_paragraph(container, "Caption")
+            caption_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            caption_paragraph.add_run(caption)
+        else:
+            marker = container.add_paragraph()
+            marker.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            marker.add_run(f"[Figure: {caption}]")
+
+        note = attrs.get("note")
+        if isinstance(note, str):
+            lines = [line for line in note.splitlines() if line.strip()]
+            if lines:
+                note_paragraph = self._new_paragraph(container, None)
+                note_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                run = note_paragraph.add_run("\n".join(lines))
+                run.italic = True
+                run.font.size = Pt(9)
+
+    def _add_picture(self, container: Any, src: Any, alt: str) -> bool:
+        if not isinstance(src, str):
+            return False
+        match = _ASSET_SRC.search(src)
+        if not match:
+            return False
+        try:
+            path, _mime = pages.get_asset_file(self.project_dir, match.group(1))
+        except Exception:
+            # A damaged project or missing asset must not abort the export.
+            return False
+        try:
+            data = path.read_bytes()
+        except OSError:
+            return False
+
+        paragraph = container.add_paragraph()
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = paragraph.add_run()
+        shape = None
+        try:
+            # A stream gives the image part a generic name, so the local asset
+            # id never appears in the exported package.
+            shape = run.add_picture(io.BytesIO(data))
+        except Exception:
+            # Word cannot read some formats the project accepts (for example
+            # WebP). Convert locally through Pillow instead of dropping the
+            # figure; the pixels are unchanged.
+            try:
+                with Image.open(io.BytesIO(data)) as image:
+                    buffer = io.BytesIO()
+                    image.convert("RGB").save(buffer, format="PNG")
+                    buffer.seek(0)
+                shape = run.add_picture(buffer)
+            except Exception:
+                shape = None
+        if shape is None:
+            paragraph._p.getparent().remove(paragraph._p)
+            return False
+
+        name = alt.strip() or "Figure"
+        shape._inline.graphic.graphicData.pic.nvPicPr.cNvPr.set("name", name)
+        if alt:
+            shape._inline.docPr.set("descr", alt)
+        if shape.width > _MAX_IMAGE_WIDTH:
+            ratio = _MAX_IMAGE_WIDTH / shape.width
+            shape.width = int(shape.width * ratio)
+            shape.height = int(shape.height * ratio)
+        return True
+
+    def _table(self, container: Any, node: dict[str, Any]) -> None:
+        rows = [
+            row
+            for row in node.get("content") or []
+            if isinstance(row, dict) and row.get("type") == "tableRow"
+        ]
+        if not rows:
+            return
+        column_count = 0
+        for row in rows:
+            total = 0
+            for cell in row.get("content") or []:
+                if isinstance(cell, dict):
+                    total += _span_attr((cell.get("attrs") or {}).get("colspan"), 1000)
+            column_count = max(column_count, total)
+        if column_count == 0:
+            return
+
+        grid: list[list[tuple[int, int] | None]] = [
+            [None] * column_count for _ in rows
+        ]
+        placements: list[tuple[int, int, int, int, dict[str, Any]]] = []
+        for row_index, row in enumerate(rows):
+            column = 0
+            for cell in row.get("content") or []:
+                if not isinstance(cell, dict):
+                    continue
+                while column < column_count and grid[row_index][column] is not None:
+                    column += 1
+                if column >= column_count:
+                    break
+                attrs = cell.get("attrs") or {}
+                colspan = _span_attr(attrs.get("colspan"), column_count - column)
+                rowspan = _span_attr(attrs.get("rowspan"), len(rows) - row_index)
+                while rowspan > 1 and any(
+                    grid[row_index + rowspan - 1][offset] is not None
+                    for offset in range(column, column + colspan)
+                ):
+                    rowspan -= 1
+                for covered_row in range(row_index, row_index + rowspan):
+                    for covered_column in range(column, column + colspan):
+                        grid[covered_row][covered_column] = (row_index, column)
+                placements.append((row_index, column, rowspan, colspan, cell))
+                column += colspan
+
+        table = container.add_table(rows=len(rows), cols=column_count)
+        try:
+            table.style = "Table Grid"
+        except KeyError:
+            pass
+        for row_index, column, rowspan, colspan, cell in placements:
+            target = table.cell(row_index, column)
+            if rowspan > 1 or colspan > 1:
+                target = target.merge(
+                    table.cell(row_index + rowspan - 1, column + colspan - 1)
+                )
+            self._fill_cell(target, cell)
+            if cell.get("type") == "tableHeader":
+                self._header_cell(target)
+
+    def _fill_cell(self, target: Any, cell: dict[str, Any]) -> None:
+        for block in cell.get("content") or []:
+            if isinstance(block, dict):
+                self.add_block(target, block)
+        paragraphs = target.paragraphs
+        if paragraphs and (len(paragraphs) > 1 or target.tables):
+            first = paragraphs[0]
+            if not first.text and not first.runs:
+                first._p.getparent().remove(first._p)
+
+    def _header_cell(self, target: Any) -> None:
+        for paragraph in target.paragraphs:
+            for run in paragraph.runs:
+                run.bold = True
+        properties = target._tc.get_or_add_tcPr()
+        shade = OxmlElement("w:shd")
+        shade.set(qn("w:val"), "clear")
+        shade.set(qn("w:color"), "auto")
+        shade.set(qn("w:fill"), "F2F2F2")
+        properties.append(shade)
+
+    # -- shared formatting ---------------------------------------------
+
+    def _new_paragraph(self, container: Any, style: str | None) -> Any:
+        if not style:
+            return container.add_paragraph()
+        try:
+            return container.add_paragraph(style=style)
+        except KeyError:
+            return container.add_paragraph()
+
+    def _align(self, paragraph: Any, attrs: dict[str, Any]) -> None:
+        value = attrs.get("textAlign")
+        if isinstance(value, str) and value in _ALIGNMENTS:
+            paragraph.alignment = _ALIGNMENTS[value]
+
+    def _shade(self, paragraph: Any, fill: str) -> None:
+        properties = paragraph._p.get_or_add_pPr()
+        shade = OxmlElement("w:shd")
+        shade.set(qn("w:val"), "clear")
+        shade.set(qn("w:color"), "auto")
+        shade.set(qn("w:fill"), fill)
+        properties.append(shade)
+
+
+def render_docx(
+    content: dict[str, Any], project_dir: Path, project_name: str = ""
+) -> bytes:
+    """Render the document as a Word file, embedding local figures and OMML."""
+    document = Document()
+    properties = document.core_properties
+    properties.title = project_name
+    # Do not copy the exporting machine's identity into the file.
+    properties.author = ""
+    properties.last_modified_by = ""
+    properties.comments = ""
+    renderer = _DocxRenderer(document, project_dir)
+    renderer.add_blocks(document, content.get("content") or [])
+    buffer = io.BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
 def export_document(
     project_dir: Path, project_name: str, fmt: ExportFormat
-) -> tuple[str, str, str]:
+) -> tuple[bytes, str, str]:
     """Return ``(body, filename, content_type)`` for the stored document."""
     document = documents.read_document(project_dir)
-    body = render(document["content"], fmt)
+    if fmt == "docx":
+        body = render_docx(document["content"], project_dir, project_name)
+    else:
+        body = render(document["content"], fmt).encode("utf-8")
     return body, download_filename(project_name, fmt), CONTENT_TYPES[fmt]

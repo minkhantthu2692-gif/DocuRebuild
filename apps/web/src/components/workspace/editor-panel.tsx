@@ -149,7 +149,9 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [savedRevision, setSavedRevision] = useState(0);
   const [plainText, setPlainText] = useState("");
   const [saveError, setSaveError] = useState(false);
-  const [exporting, setExporting] = useState<"markdown" | "txt" | null>(null);
+  const [exporting, setExporting] = useState<"markdown" | "txt" | "docx" | null>(
+    null,
+  );
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
   const [replaceQuery, setReplaceQuery] = useState("");
@@ -280,7 +282,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   }, [editor, initialized, saveDocument]);
 
   const exportDocument = useCallback(
-    async (format: "markdown" | "txt") => {
+    async (format: "markdown" | "txt" | "docx") => {
       if (!editor || !initialized || exporting) return;
       setExporting(format);
       try {
@@ -716,6 +718,13 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
               >
                 <span>{t("export.txt")}</span>
                 <span className="text-2xs text-muted-foreground">{t("export.txtHint")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => void exportDocument("docx")}
+                className="flex-col items-start gap-0.5"
+              >
+                <span>{t("export.docx")}</span>
+                <span className="text-2xs text-muted-foreground">{t("export.docxHint")}</span>
               </DropdownMenuItem>
               <DropdownMenuLabel className="max-w-64 whitespace-normal text-2xs font-normal leading-relaxed text-muted-foreground">
                 {t("export.note")}

@@ -42,7 +42,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.pdf` | PDF open/validation, page rendering, embedded text extraction, capability detection |
 | `services.layout` | Shared deterministic block classification (heading, list, caption, equation, table-like grid, running header/footer, page number) for OCR and embedded PDF text |
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps, coalesced revision snapshots, manual checkpoints and restore |
-| `services.document_export` | Deterministic Tiptap-to-Markdown/TXT rendering, escaping and download names |
+| `services.document_export` | Deterministic Tiptap-to-Markdown/TXT/DOCX rendering, escaping, OMML equations, figure embedding and download names |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
@@ -173,7 +173,7 @@ POST   /api/projects/{id}/backups/{filename}/restore
 POST   /api/projects/restore
 GET    /api/projects/{id}/document
 PUT    /api/projects/{id}/document
-GET    /api/projects/{id}/document/export?format=markdown|txt
+GET    /api/projects/{id}/document/export?format=markdown|txt|docx
 GET    /api/projects/{id}/document/revisions?limit=50
 POST   /api/projects/{id}/document/revisions
 GET    /api/projects/{id}/document/revisions/{revision_id}
@@ -485,17 +485,21 @@ src/
 - The document is exported by the backend from the stored Tiptap JSON, not by the
   browser, so the file matches what autosave persisted and no second editor
   serializer can drift from it.
-- `GET /api/projects/{project_id}/document/export?format=markdown|txt` reads the
-  document row and returns a UTF-8 attachment. `format` is a required enum with a
+- `GET /api/projects/{project_id}/document/export?format=markdown|txt|docx` reads
+  the document row and returns an attachment. `format` is a required enum with a
   `markdown` default; unknown values are rejected by request validation (`422`).
-  The response uses `text/markdown` or `text/plain` with `charset=utf-8` and a
-  `Content-Disposition` header containing both an ASCII fallback filename and an
-  RFC 5987 `filename*` for Unicode project names.
+  Text formats use `text/markdown` or `text/plain` with `charset=utf-8`; DOCX uses
+  the WordprocessingML content type. Every response carries a `Content-Disposition`
+  header containing both an ASCII fallback filename and an RFC 5987 `filename*` for
+  Unicode project names.
+- `export_document` returns `(bytes, filename, content_type)` for all formats, so the
+  route can record the exact byte size and the response can serve a binary body.
 - `services.document_export` maps every known node deterministically: doc,
   paragraph, heading (levels 1–6, clamped), bullet/ordered lists (including
   `start`), listItem, blockquote, codeBlock (fence widened when the code contains
   backticks), horizontalRule, hardBreak, table, text marks, the custom `figure`
-  atom and the math nodes.
+  atom and the math nodes. Markdown and TXT share that traversal; DOCX uses a
+  separate `_DocxRenderer` over the same JSON.
 - Markdown output escapes `` \ ` * _ [ ] < > `` and line-start markers (`#`,
   `-`, `+`, `>`, `1.`/`1)` and `---`), so extracted OCR text cannot become
   structure or raw HTML. Code spans are built from raw text so their content stays
@@ -521,6 +525,39 @@ src/
   stale file is never produced. `export` in `/api/meta` advertises the feature.
 - A successful export also records a `document_exported` activity entry with the
   format and byte size. The exported text is not stored in the log.
+
+#### Word (.docx) rendering
+
+- `render_docx` builds the file with python-docx from the stored JSON and returns
+  bytes. Headings keep their style names (`Heading 1`–`6`), lists are written with
+  explicit `•`/`n.` markers and negative first-line indentation instead of a Word
+  numbering definition, so a nested list restarts correctly and stays editable.
+  Paragraph alignment, blockquotes, code blocks (shaded Consolas), horizontal rules,
+  links (real hyperlink relationships), hard breaks, bold, italic, strike and
+  underline are mapped one-to-one.
+- Figure images are read from the project's own assets through
+  `pages.get_asset_file`, so a document can only embed an asset that belongs to its
+  own project. The bytes are passed to python-docx as a stream, which gives the
+  media part a generic name and keeps local asset ids out of the package. Formats
+  Word cannot read (for example WebP) are converted to PNG in memory with Pillow;
+  the pixels are unchanged. Wide images are scaled to 6 inches, the caption is
+  written as a centered `Caption` paragraph, the source note stays as recorded, and
+  the alt text becomes the drawing description. A missing asset produces a visible
+  `[Figure: <caption>]` marker instead of a silent gap.
+- Equations are converted locally: `latex2mathml` produces MathML,
+  `mathml2omml` converts it to Office Math, and the `<m:oMath>` element is appended
+  to the paragraph. The conversion output has no `m` namespace declaration, so it is
+  parsed inside a temporary `<root xmlns:m="…">` wrapper. Display equations are
+  centered and numbered with the same document-order counter used by Markdown/TXT;
+  inline math stays inline. When either converter rejects the source, the LaTeX is
+  written in italics so the formula is still readable.
+- Tables are native Word tables with the `Table Grid` style. Column spans and row
+  spans are computed on a grid first, then the target cells are merged, so merged
+  content is neither duplicated nor dropped. Header cells are bold and shaded.
+- Core properties keep the project title but clear author, last-modified-by and
+  comments, so the exporting machine's identity is not written into the file.
+- The Word file is produced only from local libraries and project data; no provider
+  is contacted, and PDF page layout is not reconstructed.
 
 ### Document versions
 
@@ -805,9 +842,10 @@ src/
   files are never uploaded; the backend reads the project's own source/display
   assets and invokes local libraries. Missing engine/language packs are reported,
   never bypassed with a cloud fallback.
-- Markdown and TXT export run in the local backend from the project database. The
-  generated file contains no asset URLs, credentials or provider metadata and is
-  only sent to the browser that requested it.
+- Markdown, TXT and Word export run in the local backend from the project database.
+  The generated file contains no asset URLs, credentials or provider metadata and is
+  only sent to the browser that requested it. DOCX embeds only this project's own
+  figure bytes.
 - Document versions are stored in the project database. Saving, listing and
   restoring them never contacts a provider or the network: no AI call is made and
   no text leaves the machine. Versions are not a substitute for an external backup.

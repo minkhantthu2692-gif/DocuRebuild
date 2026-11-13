@@ -170,7 +170,7 @@ export const api = {
 
   getDocument: (projectId: string) =>
     request<DocumentRecord>(`/projects/${projectId}/document`),
-  documentExportUrl: (projectId: string, format: "markdown" | "txt") =>
+  documentExportUrl: (projectId: string, format: "markdown" | "txt" | "docx") =>
     `${API_BASE}/projects/${projectId}/document/export?format=${format}`,
   saveDocument: (projectId: string, content: JSONContent, plainText: string) =>
     request<DocumentRecord>(`/projects/${projectId}/document`, {

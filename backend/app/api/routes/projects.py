@@ -248,7 +248,7 @@ def export_document_file(
     project: ProjectDep,
     export_format: Annotated[ExportFormat, Query(alias="format")] = "markdown",
 ) -> Response:
-    """Return the stored document as a UTF-8 attachment (Markdown or TXT)."""
+    """Return the stored document as an attachment (Markdown, TXT or DOCX)."""
     directory = project_service.ensure_project_storage(project)
     body, filename, content_type = export_document(directory, project.name, export_format)
     ascii_name = safe_filename(project.name, export_format)
@@ -256,7 +256,7 @@ def export_document_file(
         directory,
         "document_exported",
         f"Exported {export_format}",
-        {"format": export_format, "byte_size": len(body.encode("utf-8"))},
+        {"format": export_format, "byte_size": len(body)},
     )
     disposition = (
         f'attachment; filename="{ascii_name}"; '
