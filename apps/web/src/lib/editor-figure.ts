@@ -6,6 +6,8 @@ import type { EditorState } from "@tiptap/pm/state";
 import type { JSONContent } from "@docurebuild/shared-types";
 
 export interface FigureContent {
+  /** Stable node id used by figure references; generated on insertion. */
+  figureId?: string | null;
   src: string;
   alt: string;
   caption: string;
@@ -19,6 +21,7 @@ export interface FigureContent {
 /** A figure the cursor has selected, with the position needed to edit it. */
 export interface SelectedFigure {
   pos: number;
+  id: string | null;
   caption: string;
   alt: string;
   note: string | null;
@@ -28,11 +31,23 @@ export interface SelectedFigure {
 function readFigure(node: PMNode, pos: number): SelectedFigure {
   return {
     pos,
+    id: typeof node.attrs.id === "string" && node.attrs.id ? node.attrs.id : null,
     caption: String(node.attrs.caption ?? ""),
     alt: String(node.attrs.alt ?? ""),
     note: node.attrs.note ? String(node.attrs.note) : null,
     numbered: Boolean(node.attrs.numbered),
   };
+}
+
+/**
+ * A stable id for a new figure. `crypto.randomUUID` is available in browsers and
+ * modern jsdom; the fallback keeps insertion working in older test environments.
+ */
+export function createFigureId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `figure-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
@@ -78,6 +93,12 @@ export const FigureNode = Node.create({
 
   addAttributes() {
     return {
+      id: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-figure-id"),
+        renderHTML: (attributes) =>
+          attributes.id ? { "data-figure-id": String(attributes.id) } : {},
+      },
       src: {
         default: null,
         parseHTML: (element) => element.querySelector("img")?.getAttribute("src") ?? null,
@@ -126,7 +147,6 @@ export const FigureNode = Node.create({
   renderHTML({ HTMLAttributes }) {
     const { src, alt, caption, note, width, height } =
       HTMLAttributes as FigureContent;
-
     const image: Record<string, string> = {
       src: src ?? "",
       alt: alt ?? "",
@@ -178,6 +198,7 @@ export function figureInsertionContent(figure: FigureContent): JSONContent[] {
     {
       type: "figure",
       attrs: {
+        id: figure.figureId ?? createFigureId(),
         src: figure.src,
         alt: figure.alt,
         caption: figure.caption,

@@ -245,6 +245,65 @@ def test_numbered_figure_without_caption_stays_a_marker() -> None:
     assert render_text(content) == "[Figure 1]\n"
 
 
+def test_figure_references_resolve_to_document_order() -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {"type": "figure", "attrs": {"id": "fig-a", "caption": "First", "numbered": True}},
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "See "},
+                    {"type": "figureReference", "attrs": {"targetId": "fig-b"}},
+                    {"type": "text", "text": " and "},
+                    {"type": "figureReference", "attrs": {"targetId": "fig-a"}},
+                    {"type": "text", "text": "."},
+                ],
+            },
+            {"type": "figure", "attrs": {"id": "fig-b", "caption": "Second", "numbered": True}},
+        ],
+    }
+    markdown = render_markdown(content)
+    assert "See Figure 2 and Figure 1." in markdown
+    assert "\x00" not in markdown
+
+    text = render_text(content)
+    assert "See Figure 2 and Figure 1." in text
+    assert "\x00" not in text
+
+
+def test_figure_reference_to_missing_target_is_explicit() -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "figureReference", "attrs": {"targetId": "gone"}},
+                ],
+            }
+        ],
+    }
+    # A reference never silently becomes a different figure number.
+    assert render_markdown(content) == "Figure (missing)\n"
+    assert render_text(content) == "Figure (missing)\n"
+
+
+def test_unnumbered_figure_cannot_be_referenced() -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {"type": "figure", "attrs": {"id": "fig-a", "caption": "First"}},
+            {
+                "type": "paragraph",
+                "content": [{"type": "figureReference", "attrs": {"targetId": "fig-a"}}],
+            },
+        ],
+    }
+    assert "Figure (missing)" in render_markdown(content)
+    assert "Figure (missing)" in render_text(content)
+
+
 def test_markdown_export_omits_asset_paths() -> None:
     assert "/api/" not in render_markdown(_doc())
 

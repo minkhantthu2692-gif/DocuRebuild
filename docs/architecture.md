@@ -388,6 +388,17 @@ src/
   figure that already has a typed number keeps it exactly; the dialog says so. The
   label cannot be selected or edited as content, and numbering follows document
   order across inserts, deletes and moves.
+- A numbered figure can be cited from prose with the inline atom `figureReference`.
+  The node stores only `targetId`, the stable figure id generated on insertion. The
+  visible `Figure n` label is resolved on every transaction by
+  `numberedFigureTargets`, which walks the document, counts numbered figures and
+  maps each id to its current number. Moving or renumbering a figure therefore
+  updates every citation without touching stored text, and the number is never
+  written into the citation node. A target that was deleted, unnumbered or is
+  otherwise absent renders as `Figure (missing)` (localized) with a destructive
+  style instead of silently becoming a different figure's number. The id is stored
+  on the figure attrs; a numbered figure created before ids existed still consumes a
+  number, so ids and numbers cannot drift apart.
 - No external detector or AI model is invoked. Region text uses the same local
   Tesseract adapter as page OCR; `element_extraction` in `/api/meta` reports the
   manual region and local text paths.
@@ -505,9 +516,9 @@ src/
 - `services.document_export` maps every known node deterministically: doc,
   paragraph, heading (levels 1–6, clamped), bullet/ordered lists (including
   `start`), listItem, blockquote, codeBlock (fence widened when the code contains
-  backticks), horizontalRule, hardBreak, table, text marks, the custom `figure`
-  atom and the math nodes. Markdown and TXT share that traversal; DOCX uses a
-  separate `_DocxRenderer` over the same JSON.
+  backticks), horizontalRule, hardBreak, table, text marks, the custom `figure` and
+  `figureReference` atoms and the math nodes. Markdown and TXT share that traversal;
+  DOCX uses a separate `_DocxRenderer` over the same JSON.
 - Markdown output escapes `` \ ` * _ [ ] < > `` and line-start markers (`#`,
   `-`, `+`, `>`, `1.`/`1)` and `---`), so extracted OCR text cannot become
   structure or raw HTML. Code spans are built from raw text so their content stays
@@ -518,6 +529,10 @@ src/
   figure becomes `[Figure n: <caption>]`, counted in document order with the same
   token approach as equations. The project asset itself remains untouched and
   reinsertable.
+- Figure references are resolved before the file is returned. A pre-pass maps every
+  numbered figure id to its document-order number, then `\x00figure-ref:<id>\x00`
+  tokens written during traversal are replaced with `Figure n`. A missing or
+  unnumbered target becomes `Figure (missing)`; no token byte reaches the file.
 - Equations export as source, never as rendered HTML: a block equation becomes a
   fenced `$$` block, an inline equation `$...$`, and plain text keeps the exact
   LaTeX. Backslashes are not escaped as prose, and an equation without source is
@@ -556,6 +571,9 @@ src/
   `Figure n.` prefix in its caption paragraph, counted in document order; the caption
   text itself is unchanged. A missing asset produces a visible
   `[Figure n: <caption>]` (or `[Figure: <caption>]`) marker instead of a silent gap.
+  A figure reference in running text is written as the same resolved `Figure n`
+  label (or `Figure (missing)`), using the precomputed id-to-number map; it is
+  static text, not a Word cross-reference field.
 - Equations are converted locally: `latex2mathml` produces MathML,
   `mathml2omml` converts it to Office Math, and the `<m:oMath>` element is appended
   to the paragraph. The conversion output has no `m` namespace declaration, so it is
@@ -592,9 +610,11 @@ src/
   `GET .../revisions/{id}` returns the exact stored content for the restore
   preview. Unknown ids return `revision_not_found` (404).
 - Summaries and the read-only line comparison are built from `plain_text`, which
-  contains prose but not LaTeX. An equation-only change is still snapshotted and
-  restores correctly, but the text preview and diff may not show it; the stored
-  content always does.
+  contains prose but not LaTeX or generated figure labels. An equation-only change
+  is still snapshotted and restores correctly, but the text preview and diff may not
+  show it; the stored content always does. A figure citation is an inline atom with
+  no text of its own, so a change that only adds or removes a citation is likewise
+  saved and restorable but may not appear in the text diff.
 - `POST .../document` creates a manual checkpoint of the current saved document and
   deduplicates against the newest revision. `POST .../revisions/{id}/restore`
   validates the id, writes the revision content and plain text through the same

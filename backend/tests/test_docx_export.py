@@ -195,6 +195,31 @@ def test_docx_export_numbers_figures_in_document_order(tmp_path: Path) -> None:
     assert "[Figure 2: Third]" in texts
 
 
+def test_docx_export_resolves_figure_references(tmp_path: Path) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {"type": "figure", "attrs": {"id": "fig-a", "caption": "First", "numbered": True}},
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "See "},
+                    {"type": "figureReference", "attrs": {"targetId": "fig-a"}},
+                    {"type": "text", "text": " and "},
+                    {"type": "figureReference", "attrs": {"targetId": "gone"}},
+                    {"type": "text", "text": "."},
+                ],
+            },
+            {"type": "figure", "attrs": {"id": "fig-b", "caption": "Second", "numbered": True}},
+        ],
+    }
+    document = _open(render_docx(content, tmp_path))
+    texts = _paragraph_texts(document)
+    assert "See Figure 1 and Figure (missing)." in texts
+    # A reference never writes a placeholder byte into the Word text.
+    assert all("\x00" not in text for text in texts)
+
+
 def test_docx_export_embeds_project_figures(
     client: TestClient, project: dict
 ) -> None:

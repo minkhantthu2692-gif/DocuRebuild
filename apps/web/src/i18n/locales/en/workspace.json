@@ -129,6 +129,15 @@
       "altHint": "Used when the image cannot be shown, for example by a screen reader.",
       "numbered": "Show a figure number",
       "numberedHint": "Numbers follow document order and are written on export. The caption is kept exactly as typed, so leave the number out of it.",
+      "referenceLabel": "Figure {{n}}",
+      "referenceMissing": "Figure (missing)",
+      "reference": {
+        "insert": "Insert figure reference",
+        "title": "Insert figure reference",
+        "description": "Insert a reference to a numbered figure at the cursor. The number is read from the document, so moving or renumbering the figure updates the reference.",
+        "empty": "No numbered figure yet. Open a figure and turn on \"Show a figure number\" first.",
+        "untitled": "Untitled figure"
+      },
       "source": "Source note",
       "note": "The source note is kept exactly as recorded, so the figure still shows where its pixels came from.",
       "gone": "This figure is no longer in the document.",

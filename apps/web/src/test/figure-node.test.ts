@@ -77,10 +77,15 @@ describe("figure editor node", () => {
   it("finds a figure only when the whole node is selected", () => {
     editor = createEditor();
     const pos = insertFigure(editor);
+    const id = editor
+      .getJSON()
+      .content?.find((node) => node.type === "figure")?.attrs?.id;
+    expect(typeof id).toBe("string");
 
     // Inserting the figure leaves it selected, so it can be edited right away.
     expect(selectedFigure(editor.state)).toEqual({
       pos,
+      id,
       caption: "Figure 1. Phase diagram",
       alt: "Figure 1",
       note: "Source: page 4 · manual region · Unverified",

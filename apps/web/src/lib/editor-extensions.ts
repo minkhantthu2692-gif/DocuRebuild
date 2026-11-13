@@ -6,6 +6,7 @@ import StarterKit from "@tiptap/starter-kit";
 
 import { NumberedBlockMath } from "./editor-equation";
 import { FigureNode } from "./editor-figure";
+import { FigureReference } from "./editor-reference";
 import { normalizeLinkUrl } from "./link";
 
 /**
@@ -40,6 +41,10 @@ export function createEditorExtensions(placeholder: () => string) {
       },
     }),
     FigureNode,
+    // Inline references resolve to a numbered figure by id. The stored node keeps
+    // only the target id; the visible "Figure n" is computed, so a moved figure
+    // renumbers its references and a deleted one becomes an explicit missing marker.
+    FigureReference,
     // Display equations only. The saved document keeps the LaTeX source and an
     // optional number flag; numbering is rendered from document order, and a
     // single block atom avoids dollar-sign input rules rewriting currency text.

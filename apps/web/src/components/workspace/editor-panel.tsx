@@ -15,6 +15,7 @@ import {
   Code2,
   Download,
   FileText,
+  Hash,
   History,
   Italic,
   List,
@@ -74,7 +75,12 @@ import {
   type EquationKind,
   type SelectedEquation,
 } from "@/lib/editor-equation";
-import { figureInsertionContent, figureAt, selectedFigure, type SelectedFigure } from "@/lib/editor-figure";
+import { figureInsertionContent, createFigureId, figureAt, selectedFigure, type SelectedFigure } from "@/lib/editor-figure";
+import {
+  figureReferenceContent,
+  numberedFigureTargets,
+  type FigureTarget,
+} from "@/lib/editor-reference";
 import { findMatches } from "@/lib/editor-search";
 import { resolveLocale } from "@/lib/format";
 import { normalizeLinkUrl } from "@/lib/link";
@@ -167,6 +173,8 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [figureCaption, setFigureCaption] = useState("");
   const [figureAlt, setFigureAlt] = useState("");
   const [figureNumbered, setFigureNumbered] = useState(false);
+  const [referenceOpen, setReferenceOpen] = useState(false);
+  const [referenceTargets, setReferenceTargets] = useState<FigureTarget[]>([]);
   const [equationSelection, setEquationSelection] = useState<SelectedEquation | null>(null);
   const [equationOpen, setEquationOpen] = useState(false);
   const [equationLatex, setEquationLatex] = useState("");
@@ -440,6 +448,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
       .focus()
       .setNodeSelection(figureSelection.pos)
       .updateAttributes("figure", {
+        id: figureSelection.id ?? createFigureId(),
         caption: figureCaption.trim(),
         alt: figureAlt.trim(),
         numbered: figureNumbered,
@@ -447,6 +456,21 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
       .run();
     setFigureOpen(false);
   }, [editor, figureSelection, figureCaption, figureAlt, figureNumbered, t]);
+
+  const openReferenceDialog = useCallback(() => {
+    if (!editor) return;
+    setReferenceTargets(numberedFigureTargets(editor.state.doc));
+    setReferenceOpen(true);
+  }, [editor]);
+
+  const insertReference = useCallback(
+    (targetId: string) => {
+      if (!editor) return;
+      editor.chain().focus().insertContent(figureReferenceContent(targetId)).run();
+      setReferenceOpen(false);
+    },
+    [editor],
+  );
 
   const equationPreview = useMemo(
     () => renderEquationPreview(equationLatex, equationKind),
@@ -893,6 +917,13 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
         />
 
         <ToolbarButton
+          label={t("editor.figure.reference.insert")}
+          icon={Hash}
+          disabled={!editor?.isEditable}
+          onClick={openReferenceDialog}
+        />
+
+        <ToolbarButton
           label={t("editor.equation.label")}
           icon={Sigma}
           active={equationSelection?.kind === "block"}
@@ -1258,6 +1289,50 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
               <Button type="submit">{t("editor.figure.apply")}</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={referenceOpen} onOpenChange={setReferenceOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("editor.figure.reference.title")}</DialogTitle>
+            <DialogDescription>
+              {t("editor.figure.reference.description")}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-4">
+            {referenceTargets.length === 0 ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {t("editor.figure.reference.empty")}
+              </p>
+            ) : (
+              <ul className="max-h-72 space-y-1.5 overflow-y-auto">
+                {referenceTargets.map((target) => (
+                  <li key={target.id}>
+                    <button
+                      type="button"
+                      className="flex w-full flex-col items-start gap-0.5 rounded-md border border-border/60 bg-background/50 px-3 py-2 text-left text-xs transition-colors hover:border-border hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => insertReference(target.id)}
+                    >
+                      <span className="font-medium">
+                        {t("editor.figure.referenceLabel", { n: target.number })}
+                      </span>
+                      <span className="line-clamp-2 text-muted-foreground">
+                        {target.caption || t("editor.figure.reference.untitled")}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setReferenceOpen(false)}>
+              {tCommon("actions.cancel")}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

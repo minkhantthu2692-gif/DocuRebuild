@@ -98,7 +98,8 @@ data on your device, and treats every AI result as a reviewable proposal.
   replace-all. Matches can span inline formatting but never jump between
   paragraphs or hard breaks. Selecting a figure lets you correct its caption and alt
   text while the image and its source note stay untouched, and you can give a figure
-  an optional generated number.
+  an optional generated number. Numbered figures can be cited from the text; the
+  citation shows the figure's live number and follows it when it moves.
 - **Local Markdown, TXT and Word export** — the editor header downloads the saved
   document as Markdown, plain text or a Word file. The export is generated on this
   device by the backend from the same document the editor autosaves; unsaved changes
@@ -412,6 +413,11 @@ extension:
   remains a local project asset that has no meaning outside the app. Word export
   embeds the image instead, with the caption below it and the source note kept as
   recorded; a numbered caption gains a `Figure n.` prefix.
+- Figure citations are exported as their resolved label, `Figure n`, at the place
+  in the sentence where they appear. A citation whose figure was deleted or is no
+  longer numbered is written as `Figure (missing)` rather than silently becoming a
+  different number. The stored document keeps only the target id, so renumbering a
+  figure updates every citation in every format.
 - Tables export as GitHub-flavoured Markdown. A literal `|` is escaped, multiple
   paragraphs in one cell are joined with `<br>`, and a table without a header gets
   a blank structural header row. If merged cells are present, the table is written
@@ -682,10 +688,14 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 - The editor covers core rich text, manual tables and equations, not the full
   target model (footnotes and page layout are pending). Figures are supported as
   block image nodes from the region library; their caption and alt text can be
-  edited and an optional figure number can be generated, but cross-references to a
-  figure are not implemented. The number is a position-derived label, never written
-  into the caption, so a caption that already contains a typed number keeps it and
-  would show both; leave the number out of the caption when you enable it.
+  edited, an optional figure number can be generated, and numbered figures can be
+  cited from the text. A citation is a resolved `Figure n` label, not a clickable
+  link or a Word cross-reference field, and only numbered figures can be cited. The
+  number is a position-derived label, never written into the caption, so a caption
+  that already contains a typed number keeps it and would show both; leave the
+  number out of the caption when you enable it. Deleting or unnumbering a cited
+  figure leaves an explicit `Figure (missing)` marker that can be fixed by hand or
+  by restoring the figure.
 - Equations are typed as LaTeX; OCR and AI do not transcribe or suggest them.
   Invalid LaTeX is refused before insertion, but the editor cannot verify that the
   equation matches the source page. Display equations can be numbered per equation;
@@ -694,7 +704,8 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   exports display equations as a `$$` block and inline formulas as `$...$`; plain
   text keeps the LaTeX source. The version preview and line diff are text-based, so
   an equation-only change is stored and restorable but may not appear in the
-  comparison.
+  comparison; the same applies to figure citations, whose generated label is not
+  part of the preview text.
 - Table limits: inserting offers 1–10 rows and columns, and merged cells can be
   created by selecting multiple cells and choosing merge/split. There is no
   per-cell alignment beyond paragraph alignment and no column resizing. Automatic
@@ -791,7 +802,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions with optional figure numbering, and user-typed display and inline equations with local preview and optional equation numbering, plus faithful table/equation export to Markdown, TXT and Word; automatic table/equation extraction and figure cross-references pending |
+| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview and optional equation numbering, plus faithful table/equation export to Markdown, TXT and Word; automatic table/equation extraction pending |
 | 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display and inline equations and local Markdown, TXT and Word export; footnotes and PDF page layout pending |
 | 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download, additive restore from upload or a stored vault copy, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned |

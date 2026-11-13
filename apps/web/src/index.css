@@ -132,6 +132,16 @@
     @apply rounded-md outline outline-2 outline-offset-4 outline-primary/50;
   }
 
+  /* A figure reference shows the live number; the target id is never visible. */
+  .doc-content .ProseMirror .figure-reference {
+    @apply cursor-default whitespace-nowrap rounded-sm bg-primary/10 px-1 py-0.5 text-xs font-medium text-primary;
+  }
+
+  /* A deleted target must stay obvious instead of becoming another number. */
+  .doc-content .ProseMirror .figure-reference[data-missing="true"] {
+    @apply bg-destructive/10 text-destructive;
+  }
+
   /* Equations and figures share the editor root so their numbers follow
      document order and update on insert, delete or move. */
   .doc-content .ProseMirror {

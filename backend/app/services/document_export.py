@@ -142,6 +142,8 @@ def _inline_markdown(nodes: list[dict[str, Any]] | None) -> str:
             parts.append("  \n")
         elif kind == "figure":
             parts.append(_figure_marker(node, markdown=True))
+        elif kind == "figureReference":
+            parts.append(_figure_reference_marker(node))
         elif kind == "inlineMath":
             parts.append(_equation_marker(node, markdown=True, block=False))
         else:
@@ -166,6 +168,8 @@ def _inline_text(nodes: list[dict[str, Any]] | None) -> str:
             parts.append("\n")
         elif kind == "figure":
             parts.append(_figure_marker(node, markdown=False))
+        elif kind == "figureReference":
+            parts.append(_figure_reference_marker(node))
         elif kind == "inlineMath":
             parts.append(_equation_marker(node, markdown=False, block=False))
         else:
@@ -241,6 +245,47 @@ def _apply_figure_numbers(rendered: str) -> str:
         number += 1
         rendered = rendered.replace(_FIGURE_NUMBER_TOKEN, str(number), 1)
     return rendered
+
+
+# A cross-reference stores only its target id. The number is resolved from the
+# document, so a moved figure renumbers its references and a deleted one becomes
+# an explicit marker instead of silently pointing at a different figure.
+_FIGURE_REFERENCE_TOKEN = re.compile(r"\x00figure-ref:([^\x00]*)\x00")
+_FIGURE_REFERENCE_MISSING = "Figure (missing)"
+
+
+def _figure_number_map(content: dict[str, Any]) -> dict[str, int]:
+    """Map each numbered figure id to its document-order number."""
+    numbers: dict[str, int] = {}
+    number = 0
+    stack: list[dict[str, Any]] = [content]
+    while stack:
+        node = stack.pop()
+        if node.get("type") == "figure" and _is_numbered_figure(node):
+            number += 1
+            ident = (node.get("attrs") or {}).get("id")
+            if isinstance(ident, str) and ident.strip():
+                numbers.setdefault(ident.strip(), number)
+        children = node.get("content")
+        if isinstance(children, list):
+            stack.extend(
+                child for child in reversed(children) if isinstance(child, dict)
+            )
+    return numbers
+
+
+def _figure_reference_marker(node: dict[str, Any]) -> str:
+    target = (node.get("attrs") or {}).get("targetId")
+    ident = target.strip() if isinstance(target, str) else ""
+    return f"\x00figure-ref:{ident}\x00"
+
+
+def _resolve_figure_references(rendered: str, numbers: dict[str, int]) -> str:
+    def replace(match: re.Match[str]) -> str:
+        number = numbers.get(match.group(1))
+        return f"Figure {number}" if number else _FIGURE_REFERENCE_MISSING
+
+    return _FIGURE_REFERENCE_TOKEN.sub(replace, rendered)
 
 
 def _equation_marker(node: dict[str, Any], *, markdown: bool, block: bool) -> str:
@@ -539,16 +584,24 @@ def _blocks_text(nodes: list[dict[str, Any]]) -> str:
 
 def render_markdown(content: dict[str, Any]) -> str:
     """Render a Tiptap document as Markdown, ending with a single newline."""
-    body = _apply_figure_numbers(
-        _apply_equation_numbers(_blocks_markdown(content.get("content") or []))
+    numbers = _figure_number_map(content)
+    body = _resolve_figure_references(
+        _apply_figure_numbers(
+            _apply_equation_numbers(_blocks_markdown(content.get("content") or []))
+        ),
+        numbers,
     )
     return f"{body}\n" if body else ""
 
 
 def render_text(content: dict[str, Any]) -> str:
     """Render a Tiptap document as plain text, ending with a single newline."""
-    body = _apply_figure_numbers(
-        _apply_equation_numbers(_blocks_text(content.get("content") or []))
+    numbers = _figure_number_map(content)
+    body = _resolve_figure_references(
+        _apply_figure_numbers(
+            _apply_equation_numbers(_blocks_text(content.get("content") or []))
+        ),
+        numbers,
     )
     return f"{body}\n" if body else ""
 
@@ -612,6 +665,7 @@ class _DocxRenderer:
         self.project_dir = project_dir
         self.equation_number = 0
         self.figure_number = 0
+        self.figure_numbers: dict[str, int] = {}
         self._omml_cache: dict[str, str | None] = {}
 
     # -- equations -----------------------------------------------------
@@ -728,6 +782,13 @@ class _DocxRenderer:
                 attrs = node.get("attrs") or {}
                 caption = attrs.get("caption") or attrs.get("alt") or _FIGURE_FALLBACK
                 paragraph.add_run(f"[Figure: {caption}]")
+            elif kind == "figureReference":
+                target = (node.get("attrs") or {}).get("targetId")
+                ident = target.strip() if isinstance(target, str) else ""
+                number = self.figure_numbers.get(ident)
+                paragraph.add_run(
+                    f"Figure {number}" if number else _FIGURE_REFERENCE_MISSING
+                )
             else:
                 self._add_inline(paragraph, node.get("content"))
 
@@ -1076,6 +1137,7 @@ def render_docx(
     properties.last_modified_by = ""
     properties.comments = ""
     renderer = _DocxRenderer(document, project_dir)
+    renderer.figure_numbers = _figure_number_map(content)
     renderer.add_blocks(document, content.get("content") or [])
     buffer = io.BytesIO()
     document.save(buffer)
