@@ -14,6 +14,7 @@ import type {
   AppMeta,
   AppSettings,
   AppearanceSettings,
+  BackupSettings,
   DocumentRecord,
   DocumentRevision,
   DocumentRevisionSummary,
@@ -113,6 +114,7 @@ export interface SettingsPatch {
   appearance?: Partial<AppearanceSettings>;
   editor?: Partial<EditorSettings>;
   ai?: Partial<AiSettings>;
+  backups?: Partial<BackupSettings>;
 }
 
 export interface ProjectCreatePayload {

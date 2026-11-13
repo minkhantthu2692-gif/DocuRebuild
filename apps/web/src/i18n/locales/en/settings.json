@@ -11,6 +11,7 @@
     "editor": "Editor",
     "ocr": "Local OCR",
     "ai": "Local AI",
+    "backups": "Backups",
     "storage": "Storage",
     "about": "About"
   },
@@ -154,6 +155,33 @@
     "enabledHint": "AI cleanup is available in the OCR review dialog.",
     "notConfigured": "Choose a model to enable AI cleanup.",
     "privacy": "By default only a loopback server on this device is allowed. If you enable remote consent, the selected text block is sent to the URL you configure. No cloud account, API key or paid API is used. Every response stays a proposal until you accept it."
+  },
+  "backups": {
+    "title": "Backup copies",
+    "description": "Keep verified copies of each project on this device. Automatic copies are opt-in and run only after you open a project.",
+    "auto": "Automatic copies",
+    "autoDescription": "When enabled, opening a project creates a copy only if the newest one is older than the interval below. Nothing runs while the app is closed.",
+    "autoLabel": "Create a backup copy after opening a project when one is due",
+    "interval": "Minimum interval",
+    "intervalDescription": "How old the newest copy must be before opening the project creates another.",
+    "intervalValues": {
+      "6": "6 hours",
+      "12": "12 hours",
+      "24": "1 day",
+      "72": "3 days",
+      "168": "7 days"
+    },
+    "customInterval": "{{count}} hours",
+    "keep": "Copies kept",
+    "keepDescription": "Applies to automatic and manual copies. Creating another copy removes the oldest beyond this limit.",
+    "keepValues": {
+      "3": "3 copies",
+      "5": "5 copies",
+      "10": "10 copies",
+      "20": "20 copies"
+    },
+    "customKeep": "{{count}} copies",
+    "privacy": "Copies are written to the local data folder. They are not encrypted, uploaded or synced to GitHub. Automatic copies are a convenience, not a replacement for your own off-device backup."
   },
   "storage": {
     "title": "Local storage",

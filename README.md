@@ -116,10 +116,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   always creates a new project and never overwrites existing work. Everything is
   written and read on this device; nothing is uploaded.
 - **Local backup vault** — keep verified copies of a project on this device from the
-  workspace project menu. Copies are created only when you ask; the newest five are
-  kept and the oldest is pruned after a new copy is written. Any copy can be
-  downloaded again, and downloading never removes it. The vault is not encrypted and
-  is not synced anywhere.
+  workspace project menu. Copies are created when you ask, or after opening a project
+  when you opt in and the newest copy is older than the configured interval. The
+  number kept is configurable (five by default) and the oldest is pruned after a new
+  copy is written. Any copy can be downloaded again, and downloading never removes
+  it. The vault is not encrypted and is not synced anywhere.
 - **Manual tables** — insert an empty table from the editor toolbar with 1–10
   rows and columns and an optional header row, then add or delete rows and columns,
   toggle the header, or delete the table. Every cell is typed by hand; no cell text
@@ -146,7 +147,7 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 Structured element reconstruction (automatic table-cell extraction, automatic
 equation transcription, generative figure detection), cloud/free-tier AI providers,
-image-generation profiles, scheduled or automatic backups, selective restore from an
+image-generation profiles, scheduled or background backups, selective restore from an
 archive, backup encryption, DOCX export, desktop packaging and PWA install support
 are planned but not implemented. OCR extracts text blocks,
 reading order and conservative layout hints; it does not build table structure or
@@ -496,10 +497,14 @@ Backups are local files, not a cloud service and not a GitHub upload:
   the local data directory and are cleaned up afterwards. Nothing leaves the device.
 - **Local backup copies** keep verified archives in the data directory at
   `backups/<project_id>/<project-name>-YYYYMMDD-HHMMSS.zip`. The workspace project
-  menu lists them newest first with time and size. Creating a copy is explicit and
-  user-initiated; there is no background scheduler. After a successful new copy the
-  oldest archives are pruned so at most five remain. The name is sanitised to a
-  filesystem-safe stem (Unicode is kept), and same-second copies get a numeric
+  menu lists them newest first with time and size. A copy is created when you press
+  **Create copy**, or automatically after opening a project if you enabled automatic
+  copies in Settings and the newest copy is older than the chosen interval (6 hours to
+  7 days). The copy is created after the project-open response; no backup runs while
+  the app is closed. The number kept is set in Settings (presets from 3 to 20, 1–50
+  accepted by the backend; default 5), and the oldest archives are pruned after a
+  successful new copy. The name is sanitised
+  to a filesystem-safe stem (Unicode is kept), and same-second copies get a numeric
   suffix. A vault download streams the stored file without deleting it. Copies are
   excluded from new backups, so they can never nest archive inside archive, and
   deleting a project does not delete its vault copies.
@@ -602,7 +607,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
     exports/             reserved for server-side export output (current exports stream)
     backups/             reserved; archives live in the shared vault below
     trash/               per-project runtime trash
-  backups/<project-id>/  verified user-created backup copies (newest five)
+  backups/<project-id>/  verified backup copies (configurable retention)
   trash/                 deleted project folders
   tmp/                   short-lived backup archives and restore staging
 ```
@@ -667,9 +672,10 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 - Autosave is debounced and best-effort when leaving the page. Document versions
   protect the saved document, but they live in the same project database and are
   not a backup. Use **Download backup** or **Local backups** for a complete copy;
-  backups are manual, scheduled or automatic backups are not implemented, and an
-  archive is not encrypted, so it is only as safe as the folder you store it in.
-  The vault keeps at most five copies per project and is not a substitute for an
+  copies can be automatic after opening a project if you enable that setting, but
+  scheduled/background backups are not implemented, and an archive is not encrypted,
+  so it is only as safe as the folder you store it in. The vault keeps a configurable
+  number of copies per project (five by default) and is not a substitute for an
   off-device backup.
 - A backup can only be restored by the same or a newer DocuRebuild build that
   understands its format; a backup created by a newer build is rejected as
@@ -749,7 +755,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions and user-typed display and inline equations with local preview, plus faithful table/equation export; automatic table/equation extraction and figure numbering pending |
 | 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display and inline equations and local Markdown and TXT export; DOCX and page layout pending |
-| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download, additive restore and a user-initiated local backup vault with five-copy retention; selective restore, scheduled backups and encryption pending |
+| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download, additive restore, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
 

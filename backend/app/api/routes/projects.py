@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, File, Query, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
@@ -44,6 +44,7 @@ from app.services import pages as page_service
 from app.services import project_backup
 from app.services.document_export import ExportFormat, export_document, safe_filename
 from app.services.projects import touch_project
+from app.services.settings import get_app_settings
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -106,9 +107,10 @@ def list_local_backups(project: ProjectDep) -> list[dict[str, Any]]:
     response_model=ProjectBackupSummary,
     status_code=status.HTTP_201_CREATED,
 )
-def create_local_backup(project: ProjectDep) -> dict[str, Any]:
+def create_local_backup(project: ProjectDep, session: DbSession) -> dict[str, Any]:
     """Write one verified backup copy into the local vault."""
-    return local_backups.create_copy(project)
+    keep = get_app_settings(session).backups.keep_copies
+    return local_backups.create_copy(project, keep=keep)
 
 
 @router.get("/{project_id}/backups/{filename}")
@@ -181,9 +183,15 @@ async def restore_project_backup(
 
 
 @router.post("/{project_id}/open", response_model=ProjectDetail)
-def open_project(project: ProjectDep, session: DbSession) -> dict[str, Any]:
+def open_project(
+    project: ProjectDep, session: DbSession, background: BackgroundTasks
+) -> dict[str, Any]:
     project_service.ensure_project_storage(project)
     opened = project_service.mark_opened(session, project)
+    # Opt-in only: the copy runs after the response so opening never waits for
+    # an archive, and the background task re-reads the settings in its own session.
+    if get_app_settings(session).backups.auto_on_open:
+        background.add_task(local_backups.auto_copy_for_project, project.id)
     return _detail(opened)
 
 

@@ -54,6 +54,26 @@ class EditorPatch(BaseModel):
     document_font: DocumentFont | None = None
 
 
+class BackupSettings(BaseModel):
+    """Local backup vault preferences. Automatic copies run only when opted in."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    auto_on_open: bool = False
+    # Minimum age of the newest copy before opening a project creates another.
+    interval_hours: int = Field(default=24, ge=1, le=24 * 30)
+    # Newest copies kept per project, for manual and automatic copies alike.
+    keep_copies: int = Field(default=5, ge=1, le=50)
+
+
+class BackupPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    auto_on_open: bool | None = None
+    interval_hours: int | None = Field(default=None, ge=1, le=24 * 30)
+    keep_copies: int | None = Field(default=None, ge=1, le=50)
+
+
 def _validate_base_url(value: str) -> str:
     """Accept an empty value or a credential-free http(s) base URL."""
     cleaned = value.strip().rstrip("/")
@@ -147,6 +167,7 @@ class AppSettings(BaseModel):
     appearance: AppearanceSettings = Field(default_factory=AppearanceSettings)
     editor: EditorSettings = Field(default_factory=EditorSettings)
     ai: AiSettings = Field(default_factory=AiSettings)
+    backups: BackupSettings = Field(default_factory=BackupSettings)
 
 
 class SettingsUpdate(BaseModel):
@@ -156,3 +177,4 @@ class SettingsUpdate(BaseModel):
     appearance: AppearancePatch | None = None
     editor: EditorPatch | None = None
     ai: AiPatch | None = None
+    backups: BackupPatch | None = None

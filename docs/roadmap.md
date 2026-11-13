@@ -17,7 +17,7 @@ presented in the UI until it actually works.
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions, user-typed display and inline equations with local KaTeX preview and faithful Markdown/TXT export; automatic table/equation extraction and figure numbering pending |
 | 8. Document editor and export | In progress | Core editor plus manual tables, figures, display and inline equations and local Markdown and TXT export; footnotes, DOCX and page layout pending |
-| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download, additive (new-project) restore, and a user-initiated local backup vault with five-copy retention; selective restore, scheduled backups and encryption pending |
+| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download, additive (new-project) restore, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
 
@@ -462,22 +462,34 @@ headers/footers, page numbers, DOCX export and OMML validation.
 - Local backup vault: `GET /api/projects/{id}/backups` lists verified copies newest
   first, `POST` creates one from the same validated archive builder, and
   `GET .../backups/{filename}` streams a stored copy. Copies live in
-  `data_dir/backups/<project_id>/`, are created only on request, and the newest five
-  are kept (`KEEP_COPIES = 5`); older copies are pruned after a successful write.
-  Same-second collisions get a numeric suffix, unsafe filenames are rejected, and a
-  vault download never deletes the copy. The workspace project menu opens a dialog
-  that lists time and size, creates a copy, downloads one, and shows empty, loading
-  and error states. Creating a copy is recorded in the activity log.
-- Backend vault tests for create/list/download, retention pruning, missing projects
-  and unsafe names, plus component tests for listing, downloading, creating from the
-  empty state and load errors. The dialog and strings exist in English and Burmese.
+  `data_dir/backups/<project_id>/`, are created on request, and older copies are
+  pruned after a successful write. Retention is configurable (`backups.keep_copies`,
+  default 5, backend range 1–50; the UI offers 3, 5, 10 and 20) and applies to manual
+  and automatic copies. Same-second collisions get a numeric suffix, unsafe filenames
+  are rejected, and a vault download never deletes the copy. The workspace project
+  menu opens a dialog that lists time and size, creates a copy, downloads one, and
+  shows empty, loading and error states. Creating a copy is recorded in the activity
+  log.
+- Opt-in automatic copies: a new Settings → Backups section controls
+  `backups.auto_on_open` (default off), `interval_hours` (6 hours to 7 days in the UI,
+  1–720 accepted) and `keep_copies`. When enabled, `POST /projects/{id}/open`
+  schedules a background copy only if the newest vault copy is older than the
+  interval. The task re-reads settings in its own session, a lock prevents duplicate
+  snapshots from simultaneous opens, and a failed copy is logged without blocking the
+  open. There is no background scheduler; a copy is attempted only after an open
+  request.
+- Backend vault tests for create/list/download, retention pruning, missing projects,
+  unsafe names, due checks, configurable retention and automatic-on-open (including
+  the off-by-default and not-due paths), plus component tests for listing, downloading,
+  creating from the empty state, load errors and the Settings controls. The dialog,
+  settings and strings exist in English and Burmese.
 
 **Pending**
 
 - Selective restore (single page, asset or version from an archive), scheduled or
-  automatic backups, backup encryption and configurable retention beyond the fixed
-  five copies. Vault cleanup after a project is deleted is also pending; copies are
-  intentionally kept today. Editor undo/redo stays separate from revision history.
+  background backups while the app is closed, and backup encryption. Vault cleanup
+  after a project is deleted is also pending; copies are intentionally kept today.
+  Editor undo/redo stays separate from revision history.
 
 ## Phase 10 — Desktop, PWA and mobile distribution (planned)
 
@@ -512,8 +524,9 @@ headers/footers, page numbers, DOCX export and OMML validation.
   critical advisories after the Tiptap 3 and Vitest 5 upgrades.
 - **Version history is not a backup.** Document versions live in the same project
   database, so deleting the project folder, disk failure or database corruption
-  removes them too. Project backup download, additive restore and the local vault are
-  manual safeguards: the vault keeps only five copies, is not encrypted and is not
+  removes them too. Project backup download, additive restore and the local vault
+  remain manual/opt-in safeguards: automatic copies run only after opening a project,
+  the vault keeps a configurable limited number of copies, is not encrypted and is not
   synced off-device, so it is not a substitute for your own off-device backup.
 
 ## Phase 3 definition of done (met)

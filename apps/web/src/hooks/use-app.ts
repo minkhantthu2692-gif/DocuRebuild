@@ -49,6 +49,7 @@ function mergeSettings(current: AppSettings | undefined, patch: SettingsPatch): 
       vision_model: "",
       request_limit: 0,
     },
+    backups: { auto_on_open: false, interval_hours: 24, keep_copies: 5 },
   };
   return {
     ...base,
@@ -56,6 +57,7 @@ function mergeSettings(current: AppSettings | undefined, patch: SettingsPatch): 
     appearance: { ...base.appearance, ...patch.appearance },
     editor: { ...base.editor, ...patch.editor },
     ai: { ...base.ai, ...patch.ai },
+    backups: { ...base.backups, ...patch.backups },
   };
 }
 

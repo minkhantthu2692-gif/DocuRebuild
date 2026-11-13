@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 import pytest
@@ -42,10 +43,9 @@ def test_backup_copy_can_be_created_listed_and_downloaded(
     assert again.json() == [copy]
 
 
-def test_vault_keeps_only_the_newest_copies(
-    client: TestClient, project: dict, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(local_backups, "KEEP_COPIES", 2)
+def test_vault_keeps_only_the_newest_copies(client: TestClient, project: dict) -> None:
+    saved = client.patch("/api/settings", json={"backups": {"keep_copies": 2}})
+    assert saved.status_code == 200, saved.text
     names = []
     for _ in range(3):
         response = client.post(f"/api/projects/{project['id']}/backups")
@@ -74,3 +74,57 @@ def test_non_archive_names_are_rejected(project: dict) -> None:
         with pytest.raises(AppError) as exc:
             local_backups.resolve_copy(project["id"], name)
         assert exc.value.status_code == 404
+
+
+def test_due_check_uses_the_newest_copy(client: TestClient, project: dict) -> None:
+    project_id = project["id"]
+    assert local_backups.is_due(project_id, 24)
+
+    created = client.post(f"/api/projects/{project_id}/backups")
+    assert created.status_code == 201, created.text
+
+    assert not local_backups.is_due(project_id, 24)
+    later = datetime.now(timezone.utc) + timedelta(hours=25)
+    assert local_backups.is_due(project_id, 24, now=later)
+
+
+def test_manual_copies_respect_the_saved_retention(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    saved = client.patch("/api/settings", json={"backups": {"keep_copies": 2}})
+    assert saved.status_code == 200, saved.text
+
+    for _ in range(3):
+        response = client.post(f"/api/projects/{project_id}/backups")
+        assert response.status_code == 201, response.text
+
+    listing = client.get(f"/api/projects/{project_id}/backups").json()
+    assert len(listing) == 2
+
+
+def test_opening_a_project_creates_a_due_automatic_copy(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    saved = client.patch(
+        "/api/settings",
+        json={"backups": {"auto_on_open": True, "interval_hours": 24}},
+    )
+    assert saved.status_code == 200, saved.text
+
+    opened = client.post(f"/api/projects/{project_id}/open")
+    assert opened.status_code == 200, opened.text
+
+    listing = client.get(f"/api/projects/{project_id}/backups").json()
+    assert len(listing) == 1
+
+    # A second open inside the interval must not create another copy.
+    again = client.post(f"/api/projects/{project_id}/open")
+    assert again.status_code == 200, again.text
+    assert len(client.get(f"/api/projects/{project_id}/backups").json()) == 1
+
+
+def test_automatic_copies_stay_off_by_default(client: TestClient, project: dict) -> None:
+    assert client.post(f"/api/projects/{project['id']}/open").status_code == 200
+    assert client.get(f"/api/projects/{project['id']}/backups").json() == []

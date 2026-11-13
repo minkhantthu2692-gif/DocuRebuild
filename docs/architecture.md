@@ -57,7 +57,7 @@ to the same local API; the API is not intended to be exposed publicly.
 The application database (`app.db`) contains only global state:
 
 - `projects` — id, name, description, directory, timestamps
-- `app_settings` — key/value JSON (appearance, language, editor, local AI profile, vision model and request limit)
+- `app_settings` — key/value JSON (appearance, language, editor, local AI profile, vision model, request limit and local backup preferences)
 - `ai_usage` — local AI request metadata: provider, model, task, outcome, error code, project/page/block ids and timestamp; never document text
 - `schema_migrations` — created by Alembic
 
@@ -624,11 +624,21 @@ src/
   one-off download: `create_copy()` builds the same verified archive through
   `project_backup.create_backup()` and moves it to
   `backups/<project_id>/<unicode-name>.zip` instead of streaming it. Nothing is
-  written until `POST /projects/{id}/backups` is called; there is no scheduler.
-  `KEEP_COPIES = 5` and the oldest archives are unlinked after a successful move.
-  Same-second copies get `-2`, `-3`, … suffixes, so a create never overwrites an
-  existing copy. Listing is newest-first by `st_mtime_ns`. Downloads stream the
-  stored file and never delete it.
+  written until `POST /projects/{id}/backups` is called or an opted-in automatic copy
+  runs. Retention is `backups.keep_copies` (default 5, backend range 1–50), and the
+  oldest archives are unlinked after a successful move. Same-second copies get `-2`,
+  `-3`, … suffixes, so a create never overwrites an existing copy. Listing is
+  newest-first by `st_mtime_ns`. Downloads stream the stored file and never delete it.
+- Automatic copies are opt-in (`backups.auto_on_open`, default `false`) and only run
+  after `POST /projects/{id}/open`. The route checks the setting, then schedules
+  `auto_copy_for_project()` as a FastAPI background task, so opening never waits for
+  an archive. That task opens its own session, re-reads `backups.interval_hours`
+  (1–720, default 24) and `keep_copies`, and skips the copy unless the newest vault
+  copy is at least that old. A process-wide lock re-checks due state, so two
+  simultaneous opens cannot write duplicate snapshots. An import in progress makes
+  `create_backup()` refuse; the failure is logged and the project still opens. There
+  is no background scheduler: a copy is attempted only as part of an open request,
+  and no setting change triggers a copy by itself.
 - Vault filenames are treated as untrusted input: the service rejects empty names,
   path separators, `..`, non-`.zip` suffixes, symlinks and non-files with
   `backup_not_found`. The route also sets an ASCII `filename` fallback derived with
@@ -779,10 +789,12 @@ src/
   deleted; restore files are staged there and removed after validation or failure.
   User-created copies in `backups/<project_id>/` stay on disk until pruned. Deleting a
   project moves its project folder to the local trash but deliberately does not delete
-  its vault copies; they remain in the vault folder. No backup content is uploaded,
-  and the app does not sync archives to GitHub. An archive contains the original
-  documents and extracted text, so it must be stored like the project folder itself;
-  it is not encrypted by the app.
+  its vault copies; they remain in the vault folder. Opt-in automatic copies run in
+  the same local backend process only after a project is opened, and no backup work
+  happens while it is stopped. No backup content is uploaded, and the app does not
+  sync archives to GitHub. An archive contains the original documents and extracted
+  text, so it must be stored like the project folder itself; it is not encrypted by
+  the app.
 - Document links are validated to `http`, `https` or `mailto` before they enter the
   document, and Markdown export repeats that check. A stored `javascript:` or
   `data:` target is never emitted as a link; only its text is kept.

@@ -10,19 +10,26 @@ from __future__ import annotations
 
 import logging
 import shutil
-from datetime import datetime, timezone
+import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.db.models import Project
+from app.db.session import get_session_factory
 from app.services import project_backup
+from app.services.settings import get_app_settings
 
 logger = logging.getLogger(__name__)
 
-# Small on purpose: archives contain every source asset, so an unbounded vault
-# could fill the disk. The newest copies are kept.
+# Default retention when no saved preference is supplied. The UI and settings
+# can raise or lower it, but an unbounded vault could fill the disk.
 KEEP_COPIES = 5
+
+# Serializes automatic copies so two simultaneous opens cannot both decide that
+# a copy is due and write the same snapshot twice.
+_auto_lock = threading.Lock()
 
 
 def vault_dir(project_id: str) -> Path:
@@ -121,3 +128,56 @@ def resolve_copy(project_id: str, filename: str) -> Path:
     if path.is_symlink() or not path.is_file():
         raise AppError(404, "backup_not_found", "That backup copy does not exist.")
     return path
+
+
+def is_due(
+    project_id: str,
+    interval_hours: int,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    """True when the vault has no copy or its newest copy is old enough."""
+    copies = list_copies(project_id)
+    if not copies:
+        return True
+    try:
+        newest = datetime.fromisoformat(str(copies[0]["created_at"]))
+    except ValueError:
+        return True
+    current = now or datetime.now(timezone.utc)
+    return current - newest >= timedelta(hours=interval_hours)
+
+
+def auto_copy(
+    project: Project,
+    interval_hours: int,
+    keep: int,
+) -> dict[str, object] | None:
+    """Create one copy when due, serialized with other automatic copies."""
+    with _auto_lock:
+        if not is_due(project.id, interval_hours):
+            return None
+        return create_copy(project, keep=keep)
+
+
+def auto_copy_for_project(project_id: str) -> None:
+    """Background entry point: re-read preferences and copy only when opted in.
+
+    Runs in a fresh session because the request session is already closed. A
+    failure is logged and never affects the project that was just opened.
+    """
+    session = get_session_factory()()
+    try:
+        project = session.get(Project, project_id)
+        if project is None:
+            return
+        prefs = get_app_settings(session).backups
+        if not prefs.auto_on_open:
+            return
+        created = auto_copy(project, prefs.interval_hours, prefs.keep_copies)
+        if created is not None:
+            logger.info("Created automatic backup copy %s", created["filename"])
+    except Exception:
+        logger.warning("Automatic backup copy failed for project %s", project_id, exc_info=True)
+    finally:
+        session.close()

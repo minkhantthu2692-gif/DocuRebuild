@@ -1,4 +1,5 @@
 import {
+  Archive,
   ArrowLeft,
   Brain,
   Check,
@@ -25,6 +26,7 @@ import type {
   AiProfileSettings,
   AiProbeResponse,
   AiProviderKind,
+  BackupSettings,
   BlurLevel,
   Density,
   DocumentFont,
@@ -39,6 +41,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAiProviders, useAiUsage, useProbeAiProvider } from "@/hooks/use-ai";
@@ -84,6 +93,20 @@ const DEFAULT_AI_PROFILE: AiProfileSettings = {
   model: "",
   allow_remote: false,
 };
+
+const DEFAULT_BACKUPS: BackupSettings = {
+  auto_on_open: false,
+  interval_hours: 24,
+  keep_copies: 5,
+};
+
+const BACKUP_INTERVALS = [6, 12, 24, 72, 168] as const;
+const BACKUP_KEEP_COPIES = [3, 5, 10, 20] as const;
+
+/** Include a value saved outside the presets so the select never shows blank. */
+function withCurrentValue(options: readonly number[], current: number): number[] {
+  return Array.from(new Set([...options, current])).sort((a, b) => a - b);
+}
 
 interface SettingsSectionProps {
   id: string;
@@ -167,6 +190,9 @@ export function SettingsPage() {
   const aiSaved = settings?.ai?.text ?? DEFAULT_AI_PROFILE;
   const aiVisionSaved = settings?.ai?.vision_model ?? "";
   const aiLimitSaved = settings?.ai?.request_limit ?? 0;
+  const backupPrefs = settings?.backups ?? DEFAULT_BACKUPS;
+  const intervalOptions = withCurrentValue(BACKUP_INTERVALS, backupPrefs.interval_hours);
+  const keepOptions = withCurrentValue(BACKUP_KEEP_COPIES, backupPrefs.keep_copies);
   const aiDraft = aiDraftOverride ?? aiSaved;
   const aiVisionValue = aiVisionDraft ?? aiVisionSaved;
   const aiLimitValue = aiLimitDraft ?? String(aiLimitSaved);
@@ -249,6 +275,7 @@ export function SettingsPage() {
     { id: "editor", label: t("sections.editor") },
     { id: "ocr", label: t("sections.ocr") },
     { id: "ai", label: t("sections.ai") },
+    { id: "backups", label: t("sections.backups") },
     { id: "storage", label: t("sections.storage") },
     { id: "about", label: t("sections.about") },
   ];
@@ -848,6 +875,81 @@ export function SettingsPage() {
               <div className="flex gap-2 rounded-lg border border-border/60 bg-background/50 p-3 text-2xs leading-relaxed text-muted-foreground">
                 <ShieldCheck className="mt-0.5 size-icon-sm shrink-0 text-success" aria-hidden="true" />
                 <p>{t("ai.privacy")}</p>
+              </div>
+            </SettingsSection>
+
+            <SettingsSection id="backups" icon={Archive} title={t("sections.backups")}>
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold">{t("backups.title")}</h3>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("backups.description")}
+                </p>
+              </div>
+
+              <SettingRow title={t("backups.auto")} description={t("backups.autoDescription")}>
+                <label className="flex items-start gap-2 text-xs leading-relaxed">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 size-3.5 shrink-0 accent-primary"
+                    checked={backupPrefs.auto_on_open}
+                    onChange={(event) =>
+                      change({ backups: { auto_on_open: event.target.checked } })
+                    }
+                  />
+                  <span>{t("backups.autoLabel")}</span>
+                </label>
+              </SettingRow>
+
+              <SettingRow
+                title={t("backups.interval")}
+                description={t("backups.intervalDescription")}
+              >
+                <Select
+                  value={String(backupPrefs.interval_hours)}
+                  onValueChange={(value) =>
+                    change({ backups: { interval_hours: Number(value) } })
+                  }
+                >
+                  <SelectTrigger aria-label={t("backups.interval")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {intervalOptions.map((hours) => (
+                      <SelectItem key={hours} value={String(hours)}>
+                        {t(`backups.intervalValues.${hours}`, {
+                          defaultValue: t("backups.customInterval", { count: hours }),
+                        })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </SettingRow>
+
+              <SettingRow title={t("backups.keep")} description={t("backups.keepDescription")}>
+                <Select
+                  value={String(backupPrefs.keep_copies)}
+                  onValueChange={(value) =>
+                    change({ backups: { keep_copies: Number(value) } })
+                  }
+                >
+                  <SelectTrigger aria-label={t("backups.keep")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {keepOptions.map((count) => (
+                      <SelectItem key={count} value={String(count)}>
+                        {t(`backups.keepValues.${count}`, {
+                          defaultValue: t("backups.customKeep", { count }),
+                        })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </SettingRow>
+
+              <div className="flex gap-2 rounded-lg border border-border/60 bg-background/50 p-3 text-2xs leading-relaxed text-muted-foreground">
+                <ShieldCheck className="mt-0.5 size-icon-sm shrink-0 text-success" aria-hidden="true" />
+                <p>{t("backups.privacy")}</p>
               </div>
             </SettingsSection>
 

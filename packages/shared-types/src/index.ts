@@ -38,11 +38,18 @@ export interface EditorSettings {
   document_font: DocumentFont;
 }
 
+export interface BackupSettings {
+  auto_on_open: boolean;
+  interval_hours: number;
+  keep_copies: number;
+}
+
 export interface AppSettings {
   language: LanguageCode;
   appearance: AppearanceSettings;
   editor: EditorSettings;
   ai: AiSettings;
+  backups: BackupSettings;
 }
 
 /* -------------------------------------------------------------------------- */

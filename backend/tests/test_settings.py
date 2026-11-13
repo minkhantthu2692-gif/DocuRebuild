@@ -9,6 +9,11 @@ def test_default_settings(client: TestClient) -> None:
     assert settings["appearance"]["theme"] == "system"
     assert settings["appearance"]["accent"] == "indigo"
     assert settings["editor"]["document_font"] == "serif"
+    assert settings["backups"] == {
+        "auto_on_open": False,
+        "interval_hours": 24,
+        "keep_copies": 5,
+    }
 
 
 def test_partial_settings_update_persists(client: TestClient) -> None:
@@ -30,4 +35,10 @@ def test_invalid_settings_are_rejected(client: TestClient) -> None:
     assert response.status_code == 422
 
     response = client.patch("/api/settings", json={"appearance": {"accent": "neon"}})
+    assert response.status_code == 422
+
+    response = client.patch("/api/settings", json={"backups": {"keep_copies": 0}})
+    assert response.status_code == 422
+
+    response = client.patch("/api/settings", json={"backups": {"interval_hours": 0}})
     assert response.status_code == 422
