@@ -1,9 +1,10 @@
 import Placeholder from "@tiptap/extension-placeholder";
-import { BlockMath, InlineMath } from "@tiptap/extension-mathematics";
+import { InlineMath } from "@tiptap/extension-mathematics";
 import { TableKit } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
 import StarterKit from "@tiptap/starter-kit";
 
+import { NumberedBlockMath } from "./editor-equation";
 import { FigureNode } from "./editor-figure";
 import { normalizeLinkUrl } from "./link";
 
@@ -39,10 +40,11 @@ export function createEditorExtensions(placeholder: () => string) {
       },
     }),
     FigureNode,
-    // Display equations only. The saved document keeps the LaTeX source, and a
+    // Display equations only. The saved document keeps the LaTeX source and an
+    // optional number flag; numbering is rendered from document order, and a
     // single block atom avoids dollar-sign input rules rewriting currency text.
     // Invalid LaTeX is shown as its source instead of disappearing silently.
-    BlockMath.configure({
+    NumberedBlockMath.configure({
       katexOptions: { throwOnError: true, strict: "ignore" },
     }),
     // Inline math is inserted only from the dialog. The extension's automatic

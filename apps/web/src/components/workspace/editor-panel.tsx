@@ -167,6 +167,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [equationSelection, setEquationSelection] = useState<SelectedEquation | null>(null);
   const [equationOpen, setEquationOpen] = useState(false);
   const [equationLatex, setEquationLatex] = useState("");
+  const [equationNumbered, setEquationNumbered] = useState(false);
   // Used when inserting; an edited equation takes its kind from the node.
   const [equationKind, setEquationKind] = useState<EquationKind>("block");
 
@@ -454,6 +455,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
       // Editing keeps the selected node's kind; a new equation uses the button.
       setEquationKind(selected?.kind ?? kind);
       setEquationLatex(selected?.latex ?? "");
+      setEquationNumbered(selected?.numbered ?? false);
       setEquationOpen(true);
     },
     [editor],
@@ -476,13 +478,36 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
       if (equationSelection.kind === "inline") {
         chain.updateInlineMath({ latex, pos: equationSelection.pos }).run();
       } else {
-        chain.updateBlockMath({ latex, pos: equationSelection.pos }).run();
+        chain
+          .command(({ tr }) => {
+            const node = tr.doc.nodeAt(equationSelection.pos);
+            if (!node || node.type.name !== "blockMath") return false;
+            tr.setNodeMarkup(equationSelection.pos, undefined, {
+              ...node.attrs,
+              latex,
+              numbered: equationNumbered,
+            });
+            return true;
+          })
+          .run();
       }
     } else {
-      editor.chain().focus().insertContent(equationContent(latex, equationKind)).run();
+      editor
+        .chain()
+        .focus()
+        .insertContent(equationContent(latex, equationKind, equationNumbered))
+        .run();
     }
     setEquationOpen(false);
-  }, [editor, equationKind, equationLatex, equationPreview.error, equationSelection, t]);
+  }, [
+    editor,
+    equationKind,
+    equationLatex,
+    equationNumbered,
+    equationPreview.error,
+    equationSelection,
+    t,
+  ]);
 
   const removeEquation = useCallback(() => {
     if (!editor || !equationSelection) return;
@@ -1280,6 +1305,23 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
                   ? t("editor.equation.inlineNote")
                   : t("editor.equation.note")}
               </p>
+
+              {equationKind === "block" ? (
+                <label className="flex items-start gap-2 text-2xs leading-relaxed text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 size-3.5 accent-primary"
+                    checked={equationNumbered}
+                    onChange={(event) => setEquationNumbered(event.target.checked)}
+                  />
+                  <span>
+                    <span className="block text-xs text-foreground">
+                      {t("editor.equation.numbered")}
+                    </span>
+                    {t("editor.equation.numberedHint")}
+                  </span>
+                </label>
+              ) : null}
             </div>
 
             <DialogFooter>

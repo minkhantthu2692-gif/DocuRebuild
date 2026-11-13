@@ -443,11 +443,12 @@ src/
 
 ### Equations
 
-- `BlockMath` and `InlineMath` from `@tiptap/extension-mathematics` add
-  `blockMath` and `inlineMath` atoms with one `latex` attribute each. Only the
-  LaTeX source is stored in the document; the editor renders it with KaTeX in a
-  node view. KaTeX and its stylesheet are bundled locally, so rendering works
-  offline and makes no request.
+- `NumberedBlockMath` (an extension of `BlockMath`) and `InlineMath` from
+  `@tiptap/extension-mathematics` add the `blockMath` and `inlineMath` atoms.
+  Block math stores `latex` plus an optional `numbered` flag; inline math stores only
+  `latex`. Only source and the flag are stored in the document; the editor renders
+  the source with KaTeX in a node view. KaTeX and its stylesheet are bundled locally,
+  so rendering works offline and makes no request.
 - The toolbar has one button for a display equation and one for an inline formula.
   The shared dialog is the only insertion path: it previews the typed source
   through `renderEquationPreview` with `throwOnError: true` and `trust: false`
@@ -467,6 +468,17 @@ src/
   backups and restore need no equation-specific handling. The dialog and node views
   use existing design tokens and locale strings; block and inline math have
   separate node-view styling.
+- Equation numbers are display-only. A block equation stores `numbered: true` and
+  the node view adds a `numbered-equation` class; the label comes from a CSS counter
+  that resets on the editor root and increments only on numbered equations, so
+  inserting, deleting or moving equations renumbers the document without touching
+  any stored source. The label is `pointer-events-none`, so it cannot be selected or
+  edited as content, and inline math never carries the flag.
+- Export preserves that numbering deterministically: while traversing, a numbered
+  display equation emits a NUL-delimited token, and `render_markdown` /
+  `render_text` replace the tokens in document order with `(1)`, `(2)`, … after the
+  `$$` block or LaTeX line. Unnumbered equations export unchanged, and the token is
+  resolved before the string is returned, so no control character reaches the file.
 
 ### Document export
 
@@ -495,8 +507,9 @@ src/
 - Equations export as source, never as rendered HTML: a block equation becomes a
   fenced `$$` block, an inline equation `$...$`, and plain text keeps the exact
   LaTeX. Backslashes are not escaped as prose, and an equation without source is
-  skipped. The export depends only on the saved JSON, so it stays deterministic and
-  offline.
+  skipped. A numbered display equation gains `(n)` after the block in both formats,
+  numbered in document order. The export depends only on the saved JSON, so it stays
+  deterministic and offline.
 - Tables render as GFM tables. Literal `|` is escaped, multi-block cells are joined
   with `<br>`, and a missing header row gets a blank structural one because GFM
   requires a separator. When `colspan`/`rowspan` greater than 1 are present, the

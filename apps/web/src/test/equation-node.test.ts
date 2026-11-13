@@ -63,6 +63,7 @@ describe("equation editor node", () => {
       pos,
       latex: "a^2 + b^2 = c^2",
       kind: "block",
+      numbered: false,
     });
   });
 
@@ -90,6 +91,85 @@ describe("equation editor node", () => {
 
     const equation = editor.getJSON().content?.find((node) => node.type === "blockMath");
     expect(equation?.attrs).toMatchObject({ latex: "\\int_0^1 x^2\\,dx" });
+  });
+
+  it("stores an optional number flag and marks the equation in the editor", () => {
+    editor = createEditor();
+    editor.commands.insertContent(equationContent("a = b", "block", true));
+
+    const equation = editor.getJSON().content?.find((node) => node.type === "blockMath");
+    expect(equation?.attrs).toMatchObject({ latex: "a = b", numbered: true });
+
+    // The flag is part of the saved document, the number itself never is.
+    const html = editor.getHTML();
+    expect(html).toContain('data-numbered="true"');
+    expect(html).not.toContain("(1)");
+
+    const nodeView = editor.view.dom.querySelector(
+      '[data-type="block-math"]',
+    ) as HTMLElement | null;
+    expect(nodeView?.classList.contains("numbered-equation")).toBe(true);
+    expect(nodeView?.dataset.numbered).toBe("true");
+  });
+
+  it("leaves an unnumbered equation unmarked", () => {
+    editor = createEditor();
+    editor.commands.insertContent(equationContent("a = b"));
+
+    const doc = editor.getJSON();
+    const block = doc.content?.find((node) => node.type === "blockMath");
+    expect(block?.attrs).toMatchObject({ latex: "a = b", numbered: false });
+
+    expect(editor.getHTML()).not.toContain('data-numbered="true"');
+    expect(
+      editor.view.dom.querySelectorAll(".numbered-equation"),
+    ).toHaveLength(0);
+  });
+
+  it("never numbers inline math", () => {
+    editor = createEditor();
+    editor.commands.insertContent(equationContent("x^2", "inline", true));
+
+    const inlinePos = findNodePos(editor, "inlineMath");
+    expect(equationAt(editor.state, inlinePos)).toEqual({
+      pos: inlinePos,
+      latex: "x^2",
+      kind: "inline",
+      numbered: false,
+    });
+    expect(JSON.stringify(editor.getJSON())).not.toContain('"numbered":true');
+    expect(editor.getHTML()).not.toContain('data-numbered="true"');
+  });
+
+  it("toggles the number on an existing display equation", () => {
+    editor = createEditor();
+    const pos = insertEquation(editor, "x = 1");
+
+    const setNumbered = (numbered: boolean) => {
+      editor
+        ?.chain()
+        .command(({ tr }) => {
+          const node = tr.doc.nodeAt(pos);
+          if (!node || node.type.name !== "blockMath") return false;
+          tr.setNodeMarkup(pos, undefined, { ...node.attrs, numbered });
+          return true;
+        })
+        .run();
+    };
+
+    setNumbered(true);
+    expect(equationAt(editor.state, pos)?.numbered).toBe(true);
+    expect(
+      (editor.view.dom.querySelector('[data-type="block-math"]') as HTMLElement)
+        .classList.contains("numbered-equation"),
+    ).toBe(true);
+
+    setNumbered(false);
+    expect(equationAt(editor.state, pos)?.numbered).toBe(false);
+    expect(
+      (editor.view.dom.querySelector('[data-type="block-math"]') as HTMLElement)
+        .classList.contains("numbered-equation"),
+    ).toBe(false);
   });
 
   it("previews valid LaTeX locally and rejects invalid source", () => {
@@ -126,6 +206,7 @@ describe("equation editor node", () => {
       pos,
       latex: "E = mc^2",
       kind: "inline",
+      numbered: false,
     });
     const html = editor.getHTML();
     expect(html).toContain('data-type="inline-math"');
@@ -142,7 +223,12 @@ describe("equation editor node", () => {
       .updateInlineMath({ latex: "x^2", pos })
       .run();
 
-    expect(equationAt(editor.state, pos)).toEqual({ pos, latex: "x^2", kind: "inline" });
+    expect(equationAt(editor.state, pos)).toEqual({
+      pos,
+      latex: "x^2",
+      kind: "inline",
+      numbered: false,
+    });
     expect(editor.state.doc.textContent).toBe("");
   });
 

@@ -176,15 +176,37 @@ def _equation_latex(node: dict[str, Any]) -> str:
     return latex.strip() if isinstance(latex, str) else ""
 
 
+# Numbered display equations get a placeholder during traversal and are numbered
+# afterwards in document order. The token cannot collide with prose or LaTeX.
+_EQUATION_NUMBER_TOKEN = "\x00equation-number\x00"
+
+
+def _is_numbered_equation(node: dict[str, Any]) -> bool:
+    return bool((node.get("attrs") or {}).get("numbered"))
+
+
+def _apply_equation_numbers(rendered: str) -> str:
+    """Replace numbered-equation tokens with ``(1)``, ``(2)``, … in order."""
+    number = 0
+    while _EQUATION_NUMBER_TOKEN in rendered:
+        number += 1
+        rendered = rendered.replace(_EQUATION_NUMBER_TOKEN, f"({number})", 1)
+    return rendered
+
+
 def _equation_marker(node: dict[str, Any], *, markdown: bool, block: bool) -> str:
     latex = _equation_latex(node)
     if not latex:
         return ""
     if not markdown:
         # Plain text keeps the exact LaTeX source the user typed.
-        return latex
-    # Math must never be escaped as prose, or its backslashes break.
-    return f"$$\n{latex}\n$$" if block else f"${latex}$"
+        marker = latex
+    else:
+        # Math must never be escaped as prose, or its backslashes break.
+        marker = f"$$\n{latex}\n$$" if block else f"${latex}$"
+    if block and _is_numbered_equation(node):
+        marker = f"{marker} {_EQUATION_NUMBER_TOKEN}"
+    return marker
 
 
 def _cell_parts(node: dict[str, Any], *, markdown: bool) -> list[str]:
@@ -468,13 +490,13 @@ def _blocks_text(nodes: list[dict[str, Any]]) -> str:
 
 def render_markdown(content: dict[str, Any]) -> str:
     """Render a Tiptap document as Markdown, ending with a single newline."""
-    body = _blocks_markdown(content.get("content") or [])
+    body = _apply_equation_numbers(_blocks_markdown(content.get("content") or []))
     return f"{body}\n" if body else ""
 
 
 def render_text(content: dict[str, Any]) -> str:
     """Render a Tiptap document as plain text, ending with a single newline."""
-    body = _blocks_text(content.get("content") or [])
+    body = _apply_equation_numbers(_blocks_text(content.get("content") or []))
     return f"{body}\n" if body else ""
 
 

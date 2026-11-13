@@ -126,8 +126,24 @@
   }
 
   /* Equations: the node view renders KaTeX locally from stored LaTeX. */
+  .doc-content .ProseMirror {
+    counter-reset: equation;
+  }
+
   .doc-content .ProseMirror .tiptap-mathematics-render[data-type="block-math"] {
     @apply my-4 overflow-x-auto rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-center;
+  }
+
+  /* Numbered display equations are counted in document order, so the label
+     follows an insert, delete or move without rewriting the stored LaTeX. */
+  .doc-content .ProseMirror .tiptap-mathematics-render.numbered-equation {
+    @apply relative pr-10;
+  }
+
+  .doc-content .ProseMirror .tiptap-mathematics-render.numbered-equation::after {
+    counter-increment: equation;
+    content: "(" counter(equation) ")";
+    @apply pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs tabular-nums text-muted-foreground;
   }
 
   .doc-content .ProseMirror .tiptap-mathematics-render[data-type="inline-math"] {

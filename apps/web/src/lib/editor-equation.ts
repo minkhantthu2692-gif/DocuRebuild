@@ -1,9 +1,13 @@
+import type {
+  JSONContent,
+  NodeViewRenderer,
+  NodeViewRendererProps,
+} from "@tiptap/core";
+import { BlockMath } from "@tiptap/extension-mathematics";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import type { EditorState } from "@tiptap/pm/state";
 import katex from "katex";
-
-import type { JSONContent } from "@tiptap/core";
 
 export type EquationKind = "block" | "inline";
 
@@ -22,6 +26,8 @@ export interface SelectedEquation {
   pos: number;
   latex: string;
   kind: EquationKind;
+  /** Display equations only; inline math is never numbered. */
+  numbered: boolean;
 }
 
 function equationKind(node: PMNode): EquationKind | null {
@@ -31,7 +37,12 @@ function equationKind(node: PMNode): EquationKind | null {
 }
 
 function readEquation(node: PMNode, pos: number, kind: EquationKind): SelectedEquation {
-  return { pos, latex: String(node.attrs.latex ?? ""), kind };
+  return {
+    pos,
+    latex: String(node.attrs.latex ?? ""),
+    kind,
+    numbered: kind === "block" && Boolean(node.attrs.numbered),
+  };
 }
 
 /** Read the selected equation, if the selection is exactly one math node. */
@@ -61,10 +72,11 @@ export function equationAt(state: EditorState, pos: number): SelectedEquation | 
 export function equationContent(
   latex: string,
   kind: EquationKind = "block",
+  numbered = false,
 ): JSONContent {
   return kind === "inline"
     ? { type: "inlineMath", attrs: { latex } }
-    : { type: "blockMath", attrs: { latex } };
+    : { type: "blockMath", attrs: { latex, numbered } };
 }
 
 /**
@@ -93,3 +105,43 @@ export function renderEquationPreview(
     return { html: null, error: true };
   }
 }
+
+/**
+ * Display math with an optional equation number. Only the LaTeX source and the
+ * `numbered` flag are stored; the number is drawn from a CSS counter in document
+ * order, so it updates automatically when equations are added, removed or moved.
+ * Numbers are display-only and never leak into the saved LaTeX.
+ */
+export const NumberedBlockMath = BlockMath.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      numbered: {
+        default: false,
+        parseHTML: (element) => element.getAttribute("data-numbered") === "true",
+        renderHTML: (attributes) =>
+          attributes.numbered ? { "data-numbered": "true" } : {},
+      },
+    };
+  },
+
+  addNodeView() {
+    const parentAddNodeView = this.parent?.() as
+      | NodeViewRenderer
+      | null
+      | undefined;
+    return (props: NodeViewRendererProps) => {
+      const view = parentAddNodeView?.(props);
+      if (!view) {
+        // The parent renderer always exists; a plain element keeps a future
+        // upstream change from crashing the editor.
+        return { dom: document.createElement("div") };
+      }
+      const dom = view.dom as HTMLElement;
+      const numbered = Boolean(props.node.attrs.numbered);
+      dom.classList.toggle("numbered-equation", numbered);
+      dom.dataset.numbered = numbered ? "true" : "false";
+      return view;
+    };
+  },
+});

@@ -147,6 +147,8 @@
       "invalid": "This LaTeX could not be rendered. Check the syntax and try again.",
       "note": "Markdown export writes the equation as $$...$$ and plain text keeps the LaTeX source. The equation is saved with the document and its versions.",
       "inlineNote": "Markdown export writes the formula as $...$ inside the sentence. It is saved with the document and its versions.",
+      "numbered": "Show an equation number",
+      "numberedHint": "Numbers follow document order and are written on export. The saved LaTeX never contains the number.",
       "remove": "Remove equation",
       "update": "Save equation",
       "insert": "Insert equation",

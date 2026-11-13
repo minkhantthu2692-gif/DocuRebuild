@@ -15,7 +15,7 @@ presented in the UI until it actually works.
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions, user-typed display and inline equations with local KaTeX preview and faithful Markdown/TXT export; automatic table/equation extraction and figure numbering pending |
+| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions, user-typed display and inline equations with local KaTeX preview, optional equation numbering and faithful Markdown/TXT export; automatic table/equation extraction and figure numbering pending |
 | 8. Document editor and export | In progress | Core editor plus manual tables, figures, display and inline equations and local Markdown and TXT export; footnotes, DOCX and page layout pending |
 | 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download, additive (new-project) restore from an upload or a stored vault copy, and a local backup vault with opt-in automatic copies on project open and configurable retention; selective restore, background scheduling and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
@@ -336,6 +336,10 @@ the user must review every region before extracting it.
   bundled; Markdown export writes a `$$` block or a `$...$` formula and plain text
   keeps the LaTeX. An equation-only change is stored in the document and versions,
   though the text-based version diff may not display it.
+- Optional equation numbering for display equations: a checkbox in the dialog stores
+  a `numbered` flag on the node, the editor shows `(n)` from a CSS counter in document
+  order, and Markdown/TXT export appends the same label after the equation. Numbers
+  are never written into the LaTeX source, and inline formulas cannot be numbered.
 
 **Pending**
 

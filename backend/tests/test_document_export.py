@@ -261,6 +261,50 @@ def test_export_skips_equations_without_latex() -> None:
     assert render_text(content) == ""
 
 
+def test_numbered_equations_export_in_document_order() -> None:
+    content = _math_doc(
+        _paragraph("First,"),
+        {"type": "blockMath", "attrs": {"latex": "a = b", "numbered": True}},
+        _paragraph("then an unnumbered one,"),
+        {"type": "blockMath", "attrs": {"latex": "c = d"}},
+        {"type": "blockMath", "attrs": {"latex": "e = f", "numbered": True}},
+    )
+    markdown = render_markdown(content)
+    assert "$$\na = b\n$$ (1)" in markdown
+    assert "$$\nc = d\n$$" in markdown
+    assert "$$\ne = f\n$$ (2)" in markdown
+    # The numbering must never be part of the LaTeX source itself.
+    assert "a = b (1)" not in markdown
+    assert "\x00" not in markdown
+
+
+def test_text_export_numbers_display_equations() -> None:
+    content = _math_doc(
+        {"type": "blockMath", "attrs": {"latex": "a = b", "numbered": True}},
+        {"type": "blockMath", "attrs": {"latex": "c = d"}},
+        {"type": "blockMath", "attrs": {"latex": "e = f", "numbered": True}},
+    )
+    text = render_text(content)
+    assert "a = b (1)" in text
+    assert "c = d" in text
+    assert "e = f (2)" in text
+    assert "\x00" not in text
+
+
+def test_unnumbered_equations_stay_unchanged() -> None:
+    content = _math_doc(
+        {"type": "blockMath", "attrs": {"latex": "a = b", "numbered": False}},
+        {
+            "type": "paragraph",
+            "content": [{"type": "inlineMath", "attrs": {"latex": "x^2"}}],
+        },
+    )
+    markdown = render_markdown(content)
+    assert markdown == "$$\na = b\n$$\n\n$x^2$\n"
+    assert "(1)" not in markdown
+    assert render_text(content) == "a = b\n\nx^2\n"
+
+
 def _paragraph(text: str) -> dict:
     return {
         "type": "paragraph",
