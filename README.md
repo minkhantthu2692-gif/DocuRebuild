@@ -33,7 +33,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 - **Local project management** — create, rename, reopen and delete projects. Deleted
   projects are moved to a local trash folder rather than destroyed.
 - **Per-project storage** — each project gets its own SQLite database, manifest,
-  source files, processed copies, thumbnails, exports and backups folders.
+  source files, processed copies, thumbnails, exports and working folders, plus a
+  shared local vault for user-created backup copies.
 - **Image import** — drag and drop or file picker; JPG, PNG, WebP, BMP and TIFF.
   Limits and validation errors come from the backend, not hardcoded UI values.
 - **PDF import** — text-based, image-based and mixed PDFs. The original PDF is
@@ -114,6 +115,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   thumbnails, exports) from the dashboard or the workspace. Restoring a backup
   always creates a new project and never overwrites existing work. Everything is
   written and read on this device; nothing is uploaded.
+- **Local backup vault** — keep verified copies of a project on this device from the
+  workspace project menu. Copies are created only when you ask; the newest five are
+  kept and the oldest is pruned after a new copy is written. Any copy can be
+  downloaded again, and downloading never removes it. The vault is not encrypted and
+  is not synced anywhere.
 - **Manual tables** — insert an empty table from the editor toolbar with 1–10
   rows and columns and an optional header row, then add or delete rows and columns,
   toggle the header, or delete the table. Every cell is typed by hand; no cell text
@@ -140,9 +146,9 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 Structured element reconstruction (automatic table-cell extraction, automatic
 equation transcription, generative figure detection), cloud/free-tier AI providers,
-image-generation profiles,
-DOCX export, desktop packaging and PWA install support are planned but not
-implemented. OCR extracts text blocks,
+image-generation profiles, scheduled or automatic backups, selective restore from an
+archive, backup encryption, DOCX export, desktop packaging and PWA install support
+are planned but not implemented. OCR extracts text blocks,
 reading order and conservative layout hints; it does not build table structure or
 transcribe equations. Region extraction produces exact pixel crops and can read
 their plain text locally; it does not build structured table cells or equation
@@ -488,9 +494,21 @@ Backups are local files, not a cloud service and not a GitHub upload:
   upload and expanded size) and is reported to the UI through `/api/meta`.
 - Archive reading, extraction and database checks run in a temporary folder under
   the local data directory and are cleaned up afterwards. Nothing leaves the device.
+- **Local backup copies** keep verified archives in the data directory at
+  `backups/<project_id>/<project-name>-YYYYMMDD-HHMMSS.zip`. The workspace project
+  menu lists them newest first with time and size. Creating a copy is explicit and
+  user-initiated; there is no background scheduler. After a successful new copy the
+  oldest archives are pruned so at most five remain. The name is sanitised to a
+  filesystem-safe stem (Unicode is kept), and same-second copies get a numeric
+  suffix. A vault download streams the stored file without deleting it. Copies are
+  excluded from new backups, so they can never nest archive inside archive, and
+  deleting a project does not delete its vault copies.
 
 ```text
 GET  /api/projects/{project_id}/backup      # application/zip attachment
+GET  /api/projects/{project_id}/backups     # ProjectBackupSummary[]
+POST /api/projects/{project_id}/backups     # create one verified copy → 201 summary
+GET  /api/projects/{project_id}/backups/{filename}  # application/zip attachment
 POST /api/projects/restore                  # multipart field: file → 201 ProjectDetail
 ```
 
@@ -582,8 +600,9 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
     processed/           non-destructive display copies (rotations, PDF page renders)
     thumbnails/          cached WebP thumbnails
     exports/             reserved for server-side export output (current exports stream)
-    backups/             reserved; downloaded archives are not kept here
+    backups/             reserved; archives live in the shared vault below
     trash/               per-project runtime trash
+  backups/<project-id>/  verified user-created backup copies (newest five)
   trash/                 deleted project folders
   tmp/                   short-lived backup archives and restore staging
 ```
@@ -647,9 +666,11 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   accurate as the cell text you type.
 - Autosave is debounced and best-effort when leaving the page. Document versions
   protect the saved document, but they live in the same project database and are
-  not a backup. Use **Download backup** for a complete copy; backups are manual,
-  scheduled or automatic backups are not implemented, and an archive is not
-  encrypted, so it is only as safe as the folder you store it in.
+  not a backup. Use **Download backup** or **Local backups** for a complete copy;
+  backups are manual, scheduled or automatic backups are not implemented, and an
+  archive is not encrypted, so it is only as safe as the folder you store it in.
+  The vault keeps at most five copies per project and is not a substitute for an
+  off-device backup.
 - A backup can only be restored by the same or a newer DocuRebuild build that
   understands its format; a backup created by a newer build is rejected as
   `backup_incompatible`. Restore is whole-project only: individual pages, assets or
@@ -728,7 +749,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions and user-typed display and inline equations with local preview, plus faithful table/equation export; automatic table/equation extraction and figure numbering pending |
 | 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display and inline equations and local Markdown and TXT export; DOCX and page layout pending |
-| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, plus verified project backup download and additive restore; selective restore and scheduled backups pending |
+| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download, additive restore and a user-initiated local backup vault with five-copy retention; selective restore, scheduled backups and encryption pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
 

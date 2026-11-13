@@ -64,6 +64,13 @@ export interface ProjectDetail extends ProjectSummary {
   document_updated_at: string | null;
 }
 
+/** One verified backup archive kept in the local backup vault. */
+export interface ProjectBackupSummary {
+  filename: string;
+  byte_size: number;
+  created_at: string;
+}
+
 export type SourceKind = "image" | "pdf";
 export type PageStatus = "imported" | "processing" | "ready" | "failed";
 export type ImportJobStatus =

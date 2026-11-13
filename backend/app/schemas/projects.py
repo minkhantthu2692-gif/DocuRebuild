@@ -86,3 +86,9 @@ class HistoryEventOut(BaseModel):
     summary: str
     payload: dict[str, Any] = Field(default_factory=dict)
     created_at: str
+
+
+class ProjectBackupSummary(BaseModel):
+    filename: str
+    byte_size: int
+    created_at: str

@@ -28,6 +28,7 @@ import type {
   PageEdits,
   OcrRun,
   PageSummary,
+  ProjectBackupSummary,
   ProjectDetail,
   ProjectSummary,
   RegionProposals,
@@ -141,6 +142,12 @@ export const api = {
   deleteProject: (projectId: string) =>
     request<{ ok: boolean; trash_path: string }>(`/projects/${projectId}`, { method: "DELETE" }),
   downloadProjectBackup: (projectId: string) => download(`/projects/${projectId}/backup`),
+  listProjectBackups: (projectId: string) =>
+    request<ProjectBackupSummary[]>(`/projects/${projectId}/backups`),
+  createProjectBackupCopy: (projectId: string) =>
+    request<ProjectBackupSummary>(`/projects/${projectId}/backups`, { method: "POST" }),
+  downloadProjectBackupCopy: (projectId: string, filename: string) =>
+    download(`/projects/${projectId}/backups/${encodeURIComponent(filename)}`),
   restoreProjectBackup: (file: File) => {
     const form = new FormData();
     form.append("file", file);

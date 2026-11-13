@@ -87,14 +87,15 @@ projects/<project-id>/
   processed/    browser-safe display copies
   thumbnails/   WebP thumbnails
   exports/      future exports
-  backups/      reserved; backup archives are streamed, not kept here
+  backups/      reserved; archives live in the shared backup vault
   trash/        per-project runtime trash
 ```
 
-The data directory also holds `app.db`, a shared `trash/` for deleted projects and a
-short-lived `tmp/` folder used only while building or restoring a backup. Relative
-asset references are stored in SQLite so a project folder can be moved without
-rewriting paths. `resolve_within` rejects path traversal.
+The data directory also holds `app.db`, a shared `trash/` for deleted projects, a
+shared `backups/<project_id>/` vault for user-created copies and a short-lived `tmp/`
+folder used only while building or restoring a backup. Relative asset references are
+stored in SQLite so a project folder can be moved without rewriting paths.
+`resolve_within` rejects path traversal.
 
 ### Import rules
 
@@ -164,6 +165,9 @@ PATCH  /api/projects/{id}
 DELETE /api/projects/{id}
 POST   /api/projects/{id}/open
 GET    /api/projects/{id}/backup
+GET    /api/projects/{id}/backups
+POST   /api/projects/{id}/backups
+GET    /api/projects/{id}/backups/{filename}
 POST   /api/projects/restore
 GET    /api/projects/{id}/document
 PUT    /api/projects/{id}/document
@@ -616,6 +620,22 @@ src/
   blob; the Unicode name comes from RFC 5987 `filename*`, with the ASCII `filename`
   as fallback. The restore dialog checks `.zip` and `max_backup_mb` before uploading
   and explains that a new project will be created.
+- The local backup vault (`app/services/local_backups.py`) is separate from the
+  one-off download: `create_copy()` builds the same verified archive through
+  `project_backup.create_backup()` and moves it to
+  `backups/<project_id>/<unicode-name>.zip` instead of streaming it. Nothing is
+  written until `POST /projects/{id}/backups` is called; there is no scheduler.
+  `KEEP_COPIES = 5` and the oldest archives are unlinked after a successful move.
+  Same-second copies get `-2`, `-3`, … suffixes, so a create never overwrites an
+  existing copy. Listing is newest-first by `st_mtime_ns`. Downloads stream the
+  stored file and never delete it.
+- Vault filenames are treated as untrusted input: the service rejects empty names,
+  path separators, `..`, non-`.zip` suffixes, symlinks and non-files with
+  `backup_not_found`. The route also sets an ASCII `filename` fallback derived with
+  `re.sub` while the stored name keeps Unicode, and it adds
+  `Cache-Control: private, no-store`. Creating a copy records a
+  `project_backup_created` history event through `create_backup()`, so it appears in
+  the activity log; downloads do not.
 
 ### Local AI cleanup
 
@@ -757,9 +777,12 @@ src/
 - Project backups are created and validated entirely on the local machine. The
   archive is written under the local data directory, streamed to the browser and
   deleted; restore files are staged there and removed after validation or failure.
-  No backup content is uploaded, and the app does not sync archives to GitHub. An
-  archive contains the original documents and extracted text, so it must be stored
-  like the project folder itself; it is not encrypted by the app.
+  User-created copies in `backups/<project_id>/` stay on disk until pruned. Deleting a
+  project moves its project folder to the local trash but deliberately does not delete
+  its vault copies; they remain in the vault folder. No backup content is uploaded,
+  and the app does not sync archives to GitHub. An archive contains the original
+  documents and extracted text, so it must be stored like the project folder itself;
+  it is not encrypted by the app.
 - Document links are validated to `http`, `https` or `mailto` before they enter the
   document, and Markdown export repeats that check. A stored `javascript:` or
   `data:` target is never emitted as a link; only its text is kept.

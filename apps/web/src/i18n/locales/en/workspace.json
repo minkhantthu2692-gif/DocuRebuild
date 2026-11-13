@@ -625,6 +625,19 @@
     "rename": "Rename project",
     "delete": "Delete project"
   },
+  "backups": {
+    "open": "Local backups",
+    "title": "Local backup copies",
+    "description": "Verified full copies of this project are kept on this device. Download one or create another before a risky change.",
+    "retention": "The newest 5 copies are kept. Creating another copy removes the oldest.",
+    "create": "Create copy",
+    "created": "Backup copy created",
+    "downloaded": "Backup copy downloaded",
+    "loading": "Loading backup copies",
+    "empty": "No local copies yet",
+    "emptyHint": "Create a copy to keep a verified snapshot of this project on this device.",
+    "download": "Download backup copy"
+  },
   "panels": {
     "collapseLeft": "Hide source panel",
     "expandLeft": "Show source panel",

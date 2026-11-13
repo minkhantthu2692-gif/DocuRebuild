@@ -79,8 +79,18 @@ class Settings(BaseSettings):
     def tmp_dir(self) -> Path:
         return self.data_dir / "tmp"
 
+    @property
+    def backups_dir(self) -> Path:
+        return self.data_dir / "backups"
+
     def ensure_layout(self) -> None:
-        for path in (self.data_dir, self.projects_dir, self.trash_dir, self.tmp_dir):
+        for path in (
+            self.data_dir,
+            self.projects_dir,
+            self.trash_dir,
+            self.tmp_dir,
+            self.backups_dir,
+        ):
             path.mkdir(parents=True, exist_ok=True)
 
 

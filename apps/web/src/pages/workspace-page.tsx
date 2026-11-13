@@ -1,5 +1,6 @@
 import {
   Activity,
+  Archive,
   ArrowLeft,
   CircleAlert,
   FileText,
@@ -20,6 +21,7 @@ import { DeleteProjectDialog } from "@/components/projects/delete-project-dialog
 import { RenameProjectDialog } from "@/components/projects/rename-project-dialog";
 import { DownloadBackupMenuItem } from "@/components/projects/backup-actions";
 import { EditorPanel } from "@/components/workspace/editor-panel";
+import { LocalBackupsDialog } from "@/components/workspace/local-backups-dialog";
 import { ProjectActivityDialog } from "@/components/workspace/project-activity-dialog";
 import { SourcePanel } from "@/components/workspace/source-panel";
 import { WorkspaceActionsProvider } from "@/components/workspace/workspace-actions";
@@ -74,6 +76,7 @@ export function WorkspacePage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [backupsOpen, setBackupsOpen] = useState(false);
 
   useEffect(() => {
     if (!projectId || openedProjectId.current === projectId) return;
@@ -233,6 +236,10 @@ export function WorkspacePage() {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DownloadBackupMenuItem projectId={projectId} />
+              <DropdownMenuItem onSelect={() => setBackupsOpen(true)}>
+                <Archive />
+                <span>{t("backups.open")}</span>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
                 <Pencil />
@@ -346,6 +353,11 @@ export function WorkspacePage() {
         projectName={project?.name}
         open={activityOpen}
         onOpenChange={setActivityOpen}
+      />
+      <LocalBackupsDialog
+        projectId={projectId}
+        open={backupsOpen}
+        onOpenChange={setBackupsOpen}
       />
       </div>
     </WorkspaceActionsProvider>

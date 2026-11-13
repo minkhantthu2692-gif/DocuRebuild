@@ -1,0 +1,76 @@
+from __future__ import annotations
+
+from urllib.parse import quote
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.core.errors import AppError
+from app.services import local_backups
+
+
+def test_vault_starts_empty(client: TestClient, project: dict) -> None:
+    response = client.get(f"/api/projects/{project['id']}/backups")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_backup_copy_can_be_created_listed_and_downloaded(
+    client: TestClient, project: dict
+) -> None:
+    created = client.post(f"/api/projects/{project['id']}/backups")
+    assert created.status_code == 201, created.text
+    copy = created.json()
+    assert copy["filename"].endswith(".zip")
+    assert copy["byte_size"] > 0
+    assert copy["created_at"]
+
+    listing = client.get(f"/api/projects/{project['id']}/backups")
+    assert listing.status_code == 200
+    assert listing.json() == [copy]
+
+    download = client.get(
+        f"/api/projects/{project['id']}/backups/{quote(copy['filename'])}"
+    )
+    assert download.status_code == 200
+    assert download.headers["content-type"] == "application/zip"
+    assert download.content[:2] == b"PK"
+    assert "no-store" in download.headers["cache-control"]
+
+    # Downloading a copy never removes it from the vault.
+    again = client.get(f"/api/projects/{project['id']}/backups")
+    assert again.json() == [copy]
+
+
+def test_vault_keeps_only_the_newest_copies(
+    client: TestClient, project: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(local_backups, "KEEP_COPIES", 2)
+    names = []
+    for _ in range(3):
+        response = client.post(f"/api/projects/{project['id']}/backups")
+        assert response.status_code == 201, response.text
+        names.append(response.json()["filename"])
+
+    # Same-second copies get distinct names instead of overwriting each other.
+    assert len(set(names)) == 3
+    listing = client.get(f"/api/projects/{project['id']}/backups").json()
+    assert len(listing) == 2
+    kept = {entry["filename"] for entry in listing}
+    assert kept.issubset(set(names))
+    assert kept == set(names[-2:])
+    folder = local_backups.vault_dir(project["id"])
+    assert len(list(folder.glob("*.zip"))) == 2
+
+
+def test_unknown_backup_copy_is_not_found(client: TestClient, project: dict) -> None:
+    response = client.get(f"/api/projects/{project['id']}/backups/missing.zip")
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "backup_not_found"
+
+
+def test_non_archive_names_are_rejected(project: dict) -> None:
+    for name in ("project.db", "backup.tar", "", "../outside.zip", "sub/inside.zip"):
+        with pytest.raises(AppError) as exc:
+            local_backups.resolve_copy(project["id"], name)
+        assert exc.value.status_code == 404

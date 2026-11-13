@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -29,6 +30,7 @@ from app.schemas.projects import (
     DocumentRevisionOut,
     DocumentRevisionSummary,
     HistoryEventOut,
+    ProjectBackupSummary,
     ProjectCreate,
     ProjectDetail,
     ProjectSummary,
@@ -37,6 +39,7 @@ from app.schemas.projects import (
 from app.services import documents, projects as project_service
 from app.services import history as history_service
 from app.services import imports as import_service
+from app.services import local_backups
 from app.services import pages as page_service
 from app.services import project_backup
 from app.services.document_export import ExportFormat, export_document, safe_filename
@@ -89,6 +92,41 @@ def download_project_backup(project: ProjectDep) -> FileResponse:
             "Cache-Control": "private, no-store",
         },
         background=BackgroundTask(path.unlink, missing_ok=True),
+    )
+
+
+@router.get("/{project_id}/backups", response_model=list[ProjectBackupSummary])
+def list_local_backups(project: ProjectDep) -> list[dict[str, Any]]:
+    """List the local backup copies kept for this project, newest first."""
+    return local_backups.list_copies(project.id)
+
+
+@router.post(
+    "/{project_id}/backups",
+    response_model=ProjectBackupSummary,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_local_backup(project: ProjectDep) -> dict[str, Any]:
+    """Write one verified backup copy into the local vault."""
+    return local_backups.create_copy(project)
+
+
+@router.get("/{project_id}/backups/{filename}")
+def download_local_backup(project: ProjectDep, filename: str) -> FileResponse:
+    """Download a stored copy without removing it from the vault."""
+    path = local_backups.resolve_copy(project.id, filename)
+    ascii_name = re.sub(r"[^A-Za-z0-9._-]+", "-", filename).strip(" .-_") or "backup.zip"
+    disposition = (
+        f'attachment; filename="{ascii_name}"; '
+        f"filename*=UTF-8''{quote(filename, safe='')}"
+    )
+    return FileResponse(
+        path,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": disposition,
+            "Cache-Control": "private, no-store",
+        },
     )
 
 

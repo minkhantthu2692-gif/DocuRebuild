@@ -66,6 +66,34 @@ export function useDownloadProjectBackup() {
   });
 }
 
+export function useProjectBackups(projectId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["project-backups", projectId],
+    queryFn: () => api.listProjectBackups(projectId as string),
+    enabled: Boolean(projectId) && enabled,
+    retry: 1,
+  });
+}
+
+export function useCreateProjectBackupCopy(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.createProjectBackupCopy(projectId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["project-backups", projectId] });
+      // Creating a copy also records an activity event.
+      void queryClient.invalidateQueries({ queryKey: ["project-history", projectId] });
+    },
+  });
+}
+
+export function useDownloadProjectBackupCopy() {
+  return useMutation({
+    mutationFn: ({ projectId, filename }: { projectId: string; filename: string }) =>
+      api.downloadProjectBackupCopy(projectId, filename),
+  });
+}
+
 export function useRestoreProjectBackup() {
   const queryClient = useQueryClient();
   return useMutation({
