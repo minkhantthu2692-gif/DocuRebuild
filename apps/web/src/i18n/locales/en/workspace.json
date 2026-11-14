@@ -240,11 +240,14 @@
     "txtHint": "Text only, without formatting.",
     "docx": "Word document (.docx)",
     "docxHint": "Editable text with native equations and embedded figures.",
-    "note": "Writes the document on this device. Markdown and plain text keep figures as a short marker; Word embeds the images.",
+    "pdf": "PDF (.pdf)",
+    "pdfHint": "A4 pages with embedded figures; equations show their LaTeX source.",
+    "note": "Writes the document on this device. Markdown and plain text keep figures as a short marker; Word embeds images and native equations; PDF embeds images and keeps equations as LaTeX source.",
     "started": {
       "markdown": "Markdown export started.",
       "txt": "Plain text export started.",
-      "docx": "Word export started."
+      "docx": "Word export started.",
+      "pdf": "PDF export started."
     },
     "saveFailed": "The latest changes could not be saved, so nothing was exported. Try again once the save succeeds."
   },

@@ -68,6 +68,7 @@ import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAppSettings, useUpdateSettings } from "@/hooks/use-app";
 import { useDocument, useSaveDocument } from "@/hooks/use-document";
 import { api } from "@/lib/api";
+import { saveBlob } from "@/lib/download";
 import { createEditorExtensions } from "@/lib/editor-extensions";
 import {
   createEquationId,
@@ -112,6 +113,8 @@ const EMPTY_DOCUMENT: Content = {
 };
 
 const AUTOSAVE_DELAY_MS = 900;
+
+type ExportFormat = "markdown" | "txt" | "docx" | "pdf";
 
 interface EditorPanelProps {
   projectId: string;
@@ -178,9 +181,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [savedRevision, setSavedRevision] = useState(0);
   const [plainText, setPlainText] = useState("");
   const [saveError, setSaveError] = useState(false);
-  const [exporting, setExporting] = useState<"markdown" | "txt" | "docx" | null>(
-    null,
-  );
+  const [exporting, setExporting] = useState<ExportFormat | null>(null);
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
   const [replaceQuery, setReplaceQuery] = useState("");
@@ -321,7 +322,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   }, [editor, initialized, saveDocument]);
 
   const exportDocument = useCallback(
-    async (format: "markdown" | "txt" | "docx") => {
+    async (format: ExportFormat) => {
       if (!editor || !initialized || exporting) return;
       setExporting(format);
       try {
@@ -331,19 +332,18 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           toast.error(t("export.saveFailed"));
           return;
         }
-        const link = document.createElement("a");
-        link.href = api.documentExportUrl(projectId, format);
-        link.rel = "noopener";
-        link.download = "";
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
+        // Fetch the file instead of navigating to its URL so a backend failure
+        // (for example a missing Myanmar font) can be shown to the user.
+        const { blob, filename } = await api.downloadDocument(projectId, format);
+        saveBlob(blob, filename);
         toast.success(t(`export.started.${format}`));
+      } catch (error) {
+        toast.error(errorMessage(error));
       } finally {
         setExporting(null);
       }
     },
-    [editor, initialized, exporting, saveSnapshot, projectId, t],
+    [editor, initialized, exporting, saveSnapshot, projectId, t, errorMessage],
   );
 
   const matches = useMemo(() => {
@@ -854,6 +854,13 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
               >
                 <span>{t("export.docx")}</span>
                 <span className="text-2xs text-muted-foreground">{t("export.docxHint")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => void exportDocument("pdf")}
+                className="flex-col items-start gap-0.5"
+              >
+                <span>{t("export.pdf")}</span>
+                <span className="text-2xs text-muted-foreground">{t("export.pdfHint")}</span>
               </DropdownMenuItem>
               <DropdownMenuLabel className="max-w-64 whitespace-normal text-2xs font-normal leading-relaxed text-muted-foreground">
                 {t("export.note")}

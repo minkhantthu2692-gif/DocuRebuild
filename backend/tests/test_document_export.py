@@ -721,7 +721,7 @@ def test_export_endpoint_rejects_unknown_format(
 ) -> None:
     response = client.get(
         f"/api/projects/{project['id']}/document/export",
-        params={"format": "pdf"},
+        params={"format": "rtf"},
     )
     assert response.status_code == 422
 

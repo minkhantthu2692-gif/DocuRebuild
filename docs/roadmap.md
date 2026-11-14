@@ -15,8 +15,8 @@ presented in the UI until it actually works.
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word export; automatic table/equation extraction pending |
-| 8. Document editor and export | In progress | Core editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT and Word export with native equations and footnotes and embedded figures; PDF page layout pending |
+| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word/PDF export; automatic table/equation extraction pending |
+| 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, footnotes, and local Markdown, TXT, Word and A4 PDF export with native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
@@ -323,7 +323,8 @@ the user must review every region before extracting it.
   widths are screen-dependent and cannot survive Markdown.
 - Markdown export renders GFM tables (escaped `|`, `<br>` for multiple blocks, a
   blank structural header when none exists) and falls back to HTML for merged
-  cells so spans are not lost. Plain-text export keeps every cell.
+  cells so spans are not lost. Plain-text export keeps every cell; Word and PDF write
+  native tables and reproduce merged cells.
 - Figure captions and alt text can be corrected after insertion. Selecting the whole
   figure enables the caption tool; the image, its stored source note, its size and
   its position stay unchanged, and the corrected caption is what Markdown and
@@ -338,14 +339,16 @@ the user must review every region before extracting it.
   updates a `blockMath` or `inlineMath` node that stores only the source. Inline
   math stays inside its paragraph, and the extension's automatic input rule is
   disabled so typed prose is never converted silently. Rendering is offline and
-  bundled; Markdown export writes a `$$` block or a `$...$` formula and plain text
-  keeps the LaTeX. An equation-only change is stored in the document and versions,
-  though the text-based version diff may not display it.
+  bundled; Markdown export writes a `$$` block or a `$...$` formula, plain text
+  keeps the LaTeX and PDF shows the exact LaTeX source. An equation-only change is
+  stored in the document and versions, though the text-based version diff may not
+  display it.
 - Optional equation numbering for display equations: a checkbox in the dialog stores
   a `numbered` flag on the node, the editor shows `(n)` from a CSS counter in document
   order, and Markdown/TXT export appends the same label after the equation; Word
-  export adds the same label next to the native equation. Numbers
-  are never written into the LaTeX source, and inline formulas cannot be numbered.
+  export adds the same label next to the native equation and PDF after the LaTeX
+  source. Numbers are never written into the LaTeX source, and inline formulas cannot
+  be numbered.
 - Figure cross-references: a numbered figure gets a stable id, and the toolbar can
   insert an inline citation that stores only that id. The editor resolves the current
   `Figure n` label from document order, so moving or renumbering the figure updates
@@ -370,7 +373,7 @@ the user must review every region before extracting it.
   export now converts typed equations to native OMML.
 - Uncertain cells/symbols are marked for review, never invented.
 
-## Phase 8 — Document editor and export (in progress)
+## Phase 8 — Document editor and export (complete)
 
 **Delivered**
 
@@ -391,15 +394,16 @@ the user must review every region before extracting it.
 - Manual tables in the toolbar: an empty table (1–10 rows/columns, optional header),
   then contextual row/column insertion, deletion, header toggle and table delete.
   Cells are typed by hand and are part of the saved document.
-- Local Markdown, plain-text and Word export from the editor header. Every format is
-  rendered by the backend from the saved Tiptap document, so export works without
+- Local Markdown, plain-text, Word and PDF export from the editor header. Every format
+  is rendered by the backend from the saved Tiptap document, so export works without
   an internet connection, AI provider or extra dependency beyond the pinned local
   libraries.
-- `GET /api/projects/{project_id}/document/export?format=markdown|txt|docx` returns
+- `GET /api/projects/{project_id}/document/export?format=markdown|txt|docx|pdf` returns
   an attachment with a project-based filename. Unknown formats are rejected
   with `422`.
 - The frontend flushes unsaved editor state before downloading and refuses the
   download when that save fails, so the file always matches the visible document.
+  The file is fetched as a blob, so a backend export error is shown as a message.
 - Markdown escaping keeps extracted text literal (`#`, `-`, `+`, `>`, `1.`,
   `\`, `` ` ``, `*`, `_`, `[`, `]`, `<`, `>`), code spans stay verbatim, and links
   are limited to `http`, `https` and `mailto`. Plain-text output has no Markdown
@@ -433,16 +437,24 @@ the user must review every region before extracting it.
   includes the notes, so version previews and diffs see footnote edits.
 - `export` in `/api/meta`, English and Burmese labels, backend serializer and
   endpoint tests.
+- PDF export: A4 pages with a page-number footer, embedded project figures, clickable
+  links, native tables with merged cells, aligned headings and paragraphs, and a
+  numbered **Notes** list for footnotes. The output is deterministic and carries only
+  the project title plus `DocuRebuild` as creator/producer. Equations show their exact
+  LaTeX source because no offline LaTeX typesetter is bundled. Burmese text uses an
+  embedded Unicode Myanmar font found through `DOCUREBUILD_PDF_FONT`, known font
+  names or a font-directory scan; if none is available the export fails with
+  `pdf_font_missing` rather than writing replacement characters.
 
 **Current limitation** — export covers headings, paragraphs, lists, blockquotes,
 code blocks, rules, inline marks, tables, figures, equations and footnotes. Page
-layout is not part of the editor model yet. Word export
-follows the document flow rather than the source page geometry, and a formula the
-local converter cannot handle is written as its LaTeX source. PDF layout export is
-still unimplemented.
+layout is not part of the editor model yet. Word and PDF export follow the document
+flow rather than the source page geometry, and a formula the local Word converter
+cannot handle is written as its LaTeX source. PDF export keeps every equation as
+LaTeX source by design.
 
-**Pending** — per-cell alignment, images inline in text, page layout,
-headers/footers, page numbers, PDF layout export and broader OMML coverage.
+**Pending** — per-cell alignment, images inline in text, source page layout,
+headers/footers, broader OMML coverage and a bundled offline LaTeX typesetter.
 
 ## Phase 9 — History, backup and recovery (in progress)
 

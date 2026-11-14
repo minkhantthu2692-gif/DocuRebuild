@@ -35,6 +35,7 @@
   "pdf_empty": "The PDF does not contain any pages.",
   "pdf_too_many_pages": "The PDF has too many pages for one import. Split it and try again.",
   "pdf_page_render_failed": "One of the PDF pages could not be rendered.",
+  "pdf_font_missing": "PDF export needs a Myanmar font on this device. Install Noto Sans Myanmar or Padauk, or set DOCUREBUILD_PDF_FONT to a font file.",
   "file_too_large": "The file is larger than the current import limit.",
   "empty_file": "The file is empty.",
   "too_many_files": "Too many files were selected for one batch.",

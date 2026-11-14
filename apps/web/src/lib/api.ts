@@ -210,8 +210,15 @@ export const api = {
 
   getDocument: (projectId: string) =>
     request<DocumentRecord>(`/projects/${projectId}/document`),
-  documentExportUrl: (projectId: string, format: "markdown" | "txt" | "docx") =>
-    `${API_BASE}/projects/${projectId}/document/export?format=${format}`,
+  downloadDocument: (
+    projectId: string,
+    format: "markdown" | "txt" | "docx" | "pdf",
+  ) =>
+    download(
+      `/projects/${projectId}/document/export?format=${format}`,
+      undefined,
+      `document.${format}`,
+    ),
   saveDocument: (projectId: string, content: JSONContent, plainText: string) =>
     request<DocumentRecord>(`/projects/${projectId}/document`, {
       method: "PUT",

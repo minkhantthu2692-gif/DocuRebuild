@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 
 from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from fastapi.testclient import TestClient
 from lxml import etree
 
@@ -455,6 +456,27 @@ def test_docx_without_footnotes_has_no_footnotes_part(tmp_path: Path) -> None:
     data = render_docx(content, tmp_path)
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         assert "word/footnotes.xml" not in archive.namelist()
+
+
+def test_docx_heading_honours_text_alignment(tmp_path: Path) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "heading",
+                "attrs": {"level": 2, "textAlign": "center"},
+                "content": [{"type": "text", "text": "Centered heading"}],
+            },
+            {
+                "type": "heading",
+                "attrs": {"level": 3, "textAlign": "right"},
+                "content": [{"type": "text", "text": "Right heading"}],
+            },
+        ],
+    }
+    document = _open(render_docx(content, tmp_path))
+    assert document.paragraphs[0].alignment == WD_ALIGN_PARAGRAPH.CENTER
+    assert document.paragraphs[1].alignment == WD_ALIGN_PARAGRAPH.RIGHT
 
 
 def test_export_endpoint_returns_docx(client: TestClient, project: dict) -> None:

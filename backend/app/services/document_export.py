@@ -1,4 +1,4 @@
-"""Deterministic TXT, Markdown and Word export for the Tiptap document.
+"""Deterministic TXT, Markdown, Word and PDF export for the Tiptap document.
 
 The document is stored as Tiptap JSON. This module renders that JSON without
 any external service, so export works fully offline. It is intentionally
@@ -15,19 +15,28 @@ API paths that are meaningless outside the app.
 Word output embeds the project's own figure images and converts equations to
 OMML, so Word can edit them as real equations. Conversion happens locally; the
 LaTeX source is kept as a visible fallback if a formula cannot be converted.
+
+PDF output is a fixed A4 layout rendered locally with PyMuPDF's HTML story
+engine. Figures are embedded, links become clickable annotations and footnotes
+are written as an end-of-document notes list. No offline LaTeX typesetter is
+bundled, so equations keep their exact LaTeX source rather than an invented
+approximation. Burmese text requires a Unicode Myanmar font on this device.
 """
 
 from __future__ import annotations
 
 import html
 import io
+import os
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 from xml.sax.saxutils import escape as xml_escape
 
 import latex2mathml.converter
 import mathml2omml
+import pymupdf
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -40,9 +49,10 @@ from docx.oxml.ns import nsdecls, qn
 from docx.shared import Inches, Pt
 from PIL import Image
 
+from app.core.errors import AppError
 from app.services import documents, pages
 
-ExportFormat = Literal["markdown", "txt", "docx"]
+ExportFormat = Literal["markdown", "txt", "docx", "pdf"]
 TextExportFormat = Literal["markdown", "txt"]
 
 CONTENT_TYPES: dict[ExportFormat, str] = {
@@ -51,11 +61,13 @@ CONTENT_TYPES: dict[ExportFormat, str] = {
     "docx": (
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ),
+    "pdf": "application/pdf",
 }
 EXTENSIONS: dict[ExportFormat, str] = {
     "markdown": "md",
     "txt": "txt",
     "docx": "docx",
+    "pdf": "pdf",
 }
 
 _MARKDOWN_SPECIALS = frozenset("\\`*_[]<>")
@@ -1081,6 +1093,7 @@ class _DocxRenderer:
     def _heading(self, container: Any, node: dict[str, Any], depth: int) -> None:
         level = min(max(_int_attr(node, "level", 1), 1), 6)
         paragraph = self._new_paragraph(container, f"Heading {level}")
+        self._align(paragraph, node.get("attrs") or {})
         if depth:
             paragraph.paragraph_format.left_indent = Inches(0.3 * depth)
         self._add_inline(paragraph, node.get("content"))
@@ -1369,6 +1382,609 @@ def render_docx(
     return buffer.getvalue()
 
 
+# --- PDF export ---------------------------------------------------------
+
+# A4 is the common page size for the documents this app rebuilds. The content
+# area leaves 50 pt on each side and enough room at the bottom for a page
+# number without the text touching it.
+_PDF_PAGE_SIZE = "a4"
+_PDF_MARGIN = 50.0
+_PDF_TEXT_WIDTH = 495.2755905511812
+_PDF_MAX_IMAGE_HEIGHT = 620.0
+_PDF_FONT_ENV = "DOCUREBUILD_PDF_FONT"
+_PDF_IMAGE_SUFFIXES = frozenset(
+    {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff"}
+)
+_TEXT_ALIGNMENTS = frozenset({"left", "center", "right", "justify"})
+_MYANMAR_TEXT = re.compile(r"[\u1000-\u109F\uA9E0-\uA9FF\uAA60-\uAA7F]")
+_MYANMAR_FONT_TOKENS = (
+    "myanmar",
+    "padauk",
+    "mmrtext",
+    "myanmarmm",
+)
+
+
+def _pdf_font_dirs() -> list[Path]:
+    """Directories that commonly hold system fonts on each platform."""
+    directories = [
+        Path("/usr/share/fonts"),
+        Path("/usr/local/share/fonts"),
+        Path.home() / ".fonts",
+        Path.home() / ".local/share/fonts",
+        Path("/System/Library/Fonts"),
+        Path("/Library/Fonts"),
+    ]
+    windir = os.environ.get("WINDIR")
+    if windir:
+        directories.append(Path(windir) / "Fonts")
+    # A Windows install can still be reached through a non-Windows shell (for
+    # example a mounted drive), so keep the conventional path as a fallback.
+    directories.append(Path("C:/Windows/Fonts"))
+    return directories
+
+
+def _myanmar_font_candidates(override: str) -> list[Path]:
+    candidates: list[Path] = []
+    if override:
+        candidates.append(Path(override).expanduser())
+    known = (
+        "mmrtext.ttf",
+        "NotoSansMyanmar-Regular.ttf",
+        "NotoSansMyanmarUI-Regular.ttf",
+        "NotoSansMyanmar.ttf",
+        "Padauk-Regular.ttf",
+        "Padauk.ttf",
+    )
+    for directory in _pdf_font_dirs():
+        for name in known:
+            candidates.append(directory / name)
+    for directory in _pdf_font_dirs():
+        try:
+            entries = sorted(directory.rglob("*"))
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.suffix.lower() not in {".ttf", ".otf"}:
+                continue
+            lowered = entry.name.lower()
+            if any(token in lowered for token in _MYANMAR_FONT_TOKENS):
+                candidates.append(entry)
+    return candidates
+
+
+def _font_has_myanmar(path: Path) -> bool:
+    try:
+        font = pymupdf.Font(fontfile=str(path))
+        return bool(font.has_glyph(ord("မ")))
+    except Exception:
+        return False
+
+
+@lru_cache(maxsize=8)
+def _find_myanmar_font_cached(override: str) -> Path | None:
+    seen: set[str] = set()
+    for path in _myanmar_font_candidates(override):
+        key = str(path).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            if not path.is_file() or path.stat().st_size == 0:
+                continue
+        except OSError:
+            continue
+        if _font_has_myanmar(path):
+            return path
+    return None
+
+
+def _find_myanmar_font() -> Path | None:
+    """Find a Unicode Myanmar font, honouring ``DOCUREBUILD_PDF_FONT``."""
+    return _find_myanmar_font_cached(os.environ.get(_PDF_FONT_ENV, "").strip())
+
+
+def _has_myanmar(value: Any) -> bool:
+    if isinstance(value, str):
+        return _MYANMAR_TEXT.search(value) is not None
+    if isinstance(value, dict):
+        return any(_has_myanmar(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_has_myanmar(item) for item in value)
+    return False
+
+
+def _pdf_css(font_file: str | None) -> str:
+    """Styles for the HTML story. Only trusted, generated values are inserted."""
+    if font_file:
+        face = (
+            f"@font-face {{ font-family: docu; src: url({font_file}); }}\n"
+            "body { font-family: docu, sans-serif; }"
+        )
+    else:
+        face = "body { font-family: sans-serif; }"
+    return "\n".join(
+        [
+            face,
+            "body { font-size: 11pt; line-height: 1.45; color: #111; }",
+            "h1 { font-size: 21pt; margin: 16pt 0 8pt; }",
+            "h2 { font-size: 17pt; margin: 14pt 0 7pt; }",
+            "h3 { font-size: 14pt; margin: 12pt 0 6pt; }",
+            "h4 { font-size: 12pt; margin: 10pt 0 5pt; }",
+            "h5 { font-size: 11pt; margin: 9pt 0 4pt; }",
+            "h6 { font-size: 10pt; margin: 8pt 0 4pt; }",
+            "p { margin: 0 0 7pt; }",
+            (
+                "blockquote { margin: 8pt 0 8pt 12pt; padding-left: 9pt; "
+                "border-left: 2pt solid #c8c8c8; color: #333; }"
+            ),
+            "blockquote p { margin: 0 0 4pt; }",
+            "ul, ol { margin: 0 0 7pt 18pt; padding: 0; }",
+            "li { margin: 0 0 3pt; }",
+            "li p { margin: 0; }",
+            (
+                "pre { font-family: monospace; font-size: 9.5pt; "
+                "background-color: #f4f4f4; padding: 6pt; margin: 0 0 7pt; "
+                "white-space: pre-wrap; }"
+            ),
+            "code { font-family: monospace; font-size: 9.5pt; }",
+            "a { color: #0b57d0; text-decoration: underline; }",
+            "hr { border: none; border-top: 1pt solid #bbb; margin: 10pt 0; }",
+            (
+                "table { border-collapse: collapse; width: 100%; "
+                "margin: 0 0 8pt; }"
+            ),
+            (
+                "th, td { border: 0.6pt solid #999; padding: 3pt 4pt; "
+                "vertical-align: top; }"
+            ),
+            "th { background-color: #f2f2f2; font-weight: bold; }",
+            "td p, th p { margin: 0; }",
+            "td p + p, th p + p { margin-top: 4pt; }",
+            ".figure { text-align: center; margin: 10pt 0; }",
+            ".figure p { margin: 0; }",
+            ".figure img { max-width: 100%; }",
+            ".figure .caption { text-align: center; font-size: 10pt; margin-top: 4pt; }",
+            (
+                ".figure .note { text-align: center; font-size: 9pt; "
+                "font-style: italic; color: #555; margin-top: 2pt; }"
+            ),
+            ".equation { text-align: center; margin: 8pt 0; }",
+            ".equation code { font-size: 10pt; }",
+            ".inline-equation { font-size: 9.5pt; }",
+            (
+                ".notes-title { font-size: 14pt; margin: 18pt 0 6pt; "
+                "border-top: 0.6pt solid #ccc; padding-top: 8pt; }"
+            ),
+            ".notes { font-size: 9pt; margin-left: 16pt; }",
+            ".notes li { margin-bottom: 3pt; }",
+        ]
+    )
+
+
+class _PdfRenderer:
+    """Build escaped HTML for PyMuPDF's story engine."""
+
+    def __init__(
+        self, content: dict[str, Any], project_dir: Path, archive: pymupdf.Archive
+    ) -> None:
+        self.content = content
+        self.project_dir = project_dir
+        self.archive = archive
+        self.figure_numbers = _figure_number_map(content)
+        self.equation_numbers = _equation_number_map(content)
+        self.footnotes: list[str] = []
+        self.figure_number = 0
+        self.equation_number = 0
+        self.image_count = 0
+        self._image_cache: dict[str, tuple[str, float] | None] = {}
+
+    def render(self) -> str:
+        body = self._blocks(self.content.get("content") or [])
+        notes = self._notes()
+        combined = f"{body}{notes}"
+        # Story needs at least one block to create a page.
+        return combined or "<p>&nbsp;</p>"
+
+    # -- blocks ---------------------------------------------------------
+
+    def _blocks(self, nodes: list[dict[str, Any]] | None, depth: int = 0) -> str:
+        parts: list[str] = []
+        for node in nodes or []:
+            if isinstance(node, dict):
+                rendered = self._block(node, depth)
+                if rendered:
+                    parts.append(rendered)
+        return "".join(parts)
+
+    def _block(self, node: dict[str, Any], depth: int = 0) -> str:
+        kind = node.get("type")
+        children = node.get("content") or []
+        if kind == "paragraph":
+            inner = self._inline(children)
+            return f"<p{self._align_style(node.get('attrs') or {})}>{inner or '&nbsp;'}</p>"
+        if kind == "heading":
+            level = min(max(_int_attr(node, "level", 1), 1), 6)
+            return (
+                f"<h{level}{self._align_style(node.get('attrs') or {})}>"
+                f"{self._inline(children)}</h{level}>"
+            )
+        if kind in _LIST_TYPES:
+            return self._list(node, depth)
+        if kind == "blockquote":
+            return f"<blockquote>{self._blocks(children, depth + 1)}</blockquote>"
+        if kind == "codeBlock":
+            code = html.escape(_inline_text(children), quote=False)
+            return f"<pre>{code}</pre>"
+        if kind == "horizontalRule":
+            return "<hr>"
+        if kind == "figure":
+            return self._figure(node)
+        if kind == "blockMath":
+            return self._block_math(node)
+        if kind == "table":
+            return self._table(node)
+        if kind == "hardBreak":
+            return ""
+        return self._blocks(children, depth)
+
+    def _list(self, node: dict[str, Any], depth: int) -> str:
+        ordered = node.get("type") == "orderedList"
+        tag = "ol" if ordered else "ul"
+        start = _int_attr(node, "start", 1)
+        start_attr = f' start="{start}"' if ordered and start != 1 else ""
+        items: list[str] = []
+        for item in node.get("content") or []:
+            if not isinstance(item, dict):
+                continue
+            inner = self._blocks(item.get("content") or [], depth + 1)
+            items.append(f"<li>{inner or '&nbsp;'}</li>")
+        if not items:
+            return ""
+        return f"<{tag}{start_attr}>{''.join(items)}</{tag}>"
+
+    def _table(self, node: dict[str, Any]) -> str:
+        rows = _table_rows(node)
+        if not rows:
+            return ""
+        header = _table_header_row(rows)
+        parts = ["<table>"]
+        if header:
+            parts.append("<thead>")
+            parts.append(self._table_row(rows[0]))
+            parts.append("</thead><tbody>")
+            body_rows = rows[1:]
+        else:
+            parts.append("<tbody>")
+            body_rows = rows
+        for row in body_rows:
+            parts.append(self._table_row(row))
+        parts.append("</tbody></table>")
+        return "".join(parts)
+
+    def _table_row(self, row: list[dict[str, Any]]) -> str:
+        cells: list[str] = []
+        for cell in row:
+            tag = "th" if cell.get("type") == "tableHeader" else "td"
+            attributes = ""
+            colspan = _cell_span(cell, "colspan")
+            rowspan = _cell_span(cell, "rowspan")
+            if colspan > 1:
+                attributes += f' colspan="{colspan}"'
+            if rowspan > 1:
+                attributes += f' rowspan="{rowspan}"'
+            content = self._blocks(cell.get("content") or [])
+            cells.append(f"<{tag}{attributes}>{content or '&nbsp;'}</{tag}>")
+        return f"<tr>{''.join(cells)}</tr>"
+
+    def _figure(self, node: dict[str, Any]) -> str:
+        attrs = node.get("attrs") or {}
+        raw_caption = str(attrs.get("caption") or attrs.get("alt") or "").strip()
+        caption = raw_caption or _FIGURE_FALLBACK
+        numbered = _is_numbered_figure(node)
+        number: int | None = None
+        if numbered:
+            self.figure_number += 1
+            number = self.figure_number
+
+        image = self._image(attrs.get("src"))
+        parts = ['<div class="figure">']
+        if image is not None:
+            name, width = image
+            alt = str(attrs.get("alt") or "")
+            parts.append(
+                f'<p><img src="{name}" alt="{html.escape(alt, quote=True)}" '
+                f'style="width: {width:.1f}pt"></p>'
+            )
+            if number is not None:
+                text = (
+                    f"Figure {number}. {raw_caption}"
+                    if raw_caption
+                    else f"Figure {number}"
+                )
+            else:
+                text = caption
+        else:
+            if number is not None:
+                text = (
+                    f"[Figure {number}: {raw_caption}]"
+                    if raw_caption
+                    else f"[Figure {number}]"
+                )
+            else:
+                text = f"[Figure: {caption}]"
+        parts.append(f'<p class="caption">{html.escape(text, quote=False)}</p>')
+
+        note = attrs.get("note")
+        if isinstance(note, str):
+            lines = [line for line in note.splitlines() if line.strip()]
+            if lines:
+                note_text = html.escape("\n".join(lines), quote=False).replace(
+                    "\n", "<br>"
+                )
+                parts.append(f'<p class="note">{note_text}</p>')
+        parts.append("</div>")
+        return "".join(parts)
+
+    def _block_math(self, node: dict[str, Any]) -> str:
+        latex = _equation_latex(node)
+        if not latex:
+            return ""
+        number: int | None = None
+        if _is_numbered_equation(node):
+            self.equation_number += 1
+            number = self.equation_number
+        label = f" ({number})" if number is not None else ""
+        return (
+            f'<div class="equation"><code>{html.escape(latex, quote=False)}</code>'
+            f"{label}</div>"
+        )
+
+    def _notes(self) -> str:
+        if not self.footnotes:
+            return ""
+        items: list[str] = []
+        for text in self.footnotes:
+            escaped = html.escape(text, quote=False).replace("\n", "<br>")
+            items.append(f"<li>{escaped}</li>")
+        return (
+            '<h2 class="notes-title">Notes</h2>'
+            f'<ol class="notes">{"".join(items)}</ol>'
+        )
+
+    # -- inline content -------------------------------------------------
+
+    def _inline(self, nodes: list[dict[str, Any]] | None) -> str:
+        parts: list[str] = []
+        for node in nodes or []:
+            if not isinstance(node, dict):
+                continue
+            kind = node.get("type")
+            if kind == "text":
+                text = node.get("text")
+                if not isinstance(text, str):
+                    continue
+                escaped = html.escape(text, quote=False).replace("\n", "<br>")
+                parts.append(self._marks(escaped, node.get("marks")))
+            elif kind == "hardBreak":
+                parts.append("<br>")
+            elif kind == "inlineMath":
+                latex = _equation_latex(node)
+                if latex:
+                    parts.append(
+                        '<code class="inline-equation">'
+                        f"{html.escape(latex, quote=False)}</code>"
+                    )
+            elif kind == "figure":
+                attrs = node.get("attrs") or {}
+                caption = str(
+                    attrs.get("caption") or attrs.get("alt") or _FIGURE_FALLBACK
+                ).strip()
+                parts.append(
+                    f"[Figure: {html.escape(caption, quote=False)}]"
+                )
+            elif kind == "figureReference":
+                target = (node.get("attrs") or {}).get("targetId")
+                ident = target.strip() if isinstance(target, str) else ""
+                number = self.figure_numbers.get(ident)
+                parts.append(
+                    f"Figure {number}" if number else _FIGURE_REFERENCE_MISSING
+                )
+            elif kind == "equationReference":
+                target = (node.get("attrs") or {}).get("targetId")
+                ident = target.strip() if isinstance(target, str) else ""
+                number = self.equation_numbers.get(ident)
+                parts.append(
+                    f"Equation ({number})"
+                    if number
+                    else _EQUATION_REFERENCE_MISSING
+                )
+            elif kind == "footnote":
+                text = (node.get("attrs") or {}).get("text")
+                self.footnotes.append(text if isinstance(text, str) else "")
+                parts.append(
+                    f'<sup class="footnote">{len(self.footnotes)}</sup>'
+                )
+            else:
+                parts.append(self._inline(node.get("content")))
+        return "".join(parts)
+
+    def _marks(self, text: str, marks: list[dict[str, Any]] | None) -> str:
+        kinds = {
+            str(mark.get("type")): mark
+            for mark in marks or []
+            if isinstance(mark, dict)
+        }
+        rendered = text
+        if "code" in kinds:
+            rendered = f"<code>{rendered}</code>"
+        if "bold" in kinds:
+            rendered = f"<strong>{rendered}</strong>"
+        if "italic" in kinds:
+            rendered = f"<em>{rendered}</em>"
+        if "strike" in kinds:
+            rendered = f"<s>{rendered}</s>"
+        if "underline" in kinds:
+            rendered = f"<u>{rendered}</u>"
+        href = _safe_link(
+            ((kinds.get("link") or {}).get("attrs") or {}).get("href")
+        )
+        if href:
+            rendered = (
+                f'<a href="{html.escape(href, quote=True)}">{rendered}</a>'
+            )
+        return rendered
+
+    # -- assets ---------------------------------------------------------
+
+    def _image(self, src: Any) -> tuple[str, float] | None:
+        """Copy one project figure into the story archive.
+
+        Only an asset id from this project's own document can resolve. A
+        missing or unreadable image becomes the explicit caption marker in
+        ``_figure`` instead of aborting the whole export.
+        """
+        if not isinstance(src, str):
+            return None
+        match = _ASSET_SRC.search(src)
+        if not match:
+            return None
+        asset_id = match.group(1)
+        if asset_id in self._image_cache:
+            return self._image_cache[asset_id]
+        try:
+            path, _mime = pages.get_asset_file(self.project_dir, asset_id)
+            data = path.read_bytes()
+        except Exception:
+            self._image_cache[asset_id] = None
+            return None
+
+        suffix = path.suffix.lower()
+        try:
+            with Image.open(io.BytesIO(data)) as image:
+                width_px, height_px = image.size
+                if suffix not in _PDF_IMAGE_SUFFIXES:
+                    # MuPDF cannot read every format the project accepts
+                    # (for example WebP). Convert locally; pixels are unchanged.
+                    buffer = io.BytesIO()
+                    image.convert("RGB").save(buffer, format="PNG")
+                    data = buffer.getvalue()
+                    suffix = ".png"
+        except Exception:
+            self._image_cache[asset_id] = None
+            return None
+
+        name = f"figure-{self.image_count}{suffix}"
+        self.image_count += 1
+        try:
+            self.archive.add(data, name)
+        except Exception:
+            self._image_cache[asset_id] = None
+            return None
+
+        width = max(width_px * 72.0 / 96.0, 1.0)
+        height = max(height_px * 72.0 / 96.0, 1.0)
+        scale = min(
+            1.0,
+            _PDF_TEXT_WIDTH / width,
+            _PDF_MAX_IMAGE_HEIGHT / height,
+        )
+        result = (name, width * scale)
+        self._image_cache[asset_id] = result
+        return result
+
+    # -- formatting -----------------------------------------------------
+
+    def _align_style(self, attrs: dict[str, Any]) -> str:
+        value = attrs.get("textAlign")
+        if isinstance(value, str) and value in _TEXT_ALIGNMENTS:
+            return f' style="text-align: {value}"'
+        return ""
+
+
+def render_pdf(
+    content: dict[str, Any], project_dir: Path, project_name: str = ""
+) -> bytes:
+    """Render the document as an A4 PDF, fully locally."""
+    has_myanmar = _has_myanmar(content)
+    font_path = _find_myanmar_font() if has_myanmar else None
+    if has_myanmar and font_path is None:
+        raise AppError(
+            422,
+            "pdf_font_missing",
+            "PDF export needs a Myanmar font on this device. Install Noto Sans "
+            "Myanmar or Padauk, or set DOCUREBUILD_PDF_FONT to a font file.",
+        )
+
+    archive = pymupdf.Archive()
+    font_file: str | None = None
+    if font_path is not None:
+        suffix = font_path.suffix.lower() or ".ttf"
+        font_file = f"docu-font{suffix}"
+        try:
+            archive.add(str(font_path), font_file)
+        except Exception as exc:
+            raise AppError(
+                422,
+                "pdf_font_missing",
+                "The Myanmar font could not be loaded for PDF export.",
+            ) from exc
+
+    renderer = _PdfRenderer(content, project_dir, archive)
+    story = pymupdf.Story(
+        html=renderer.render(),
+        user_css=_pdf_css(font_file),
+        archive=archive,
+    )
+    media_box = pymupdf.paper_rect(_PDF_PAGE_SIZE)
+    text_rect = media_box + (
+        _PDF_MARGIN,
+        _PDF_MARGIN,
+        -_PDF_MARGIN,
+        -_PDF_MARGIN,
+    )
+
+    def rectfn(_rect_num: int, _filled: pymupdf.Rect) -> tuple[Any, Any, None]:
+        return media_box, text_rect, None
+
+    document = story.write_with_links(rectfn)
+    total = document.page_count
+    for index, page in enumerate(document, start=1):
+        footer = pymupdf.Rect(
+            _PDF_MARGIN,
+            page.rect.height - 34,
+            page.rect.width - _PDF_MARGIN,
+            page.rect.height - 16,
+        )
+        page.insert_textbox(
+            footer,
+            f"{index} / {total}",
+            fontsize=8,
+            fontname="helv",
+            align=1,
+            color=(0.45, 0.45, 0.45),
+        )
+
+    document.set_metadata(
+        {
+            "title": project_name,
+            "author": "",
+            "subject": "",
+            "keywords": "",
+            "creator": "DocuRebuild",
+            "producer": "DocuRebuild",
+            "creationDate": "",
+            "modDate": "",
+        }
+    )
+    return document.tobytes(
+        garbage=4,
+        deflate=True,
+        no_new_id=True,
+        reproducible=True,
+    )
+
+
 def export_document(
     project_dir: Path, project_name: str, fmt: ExportFormat
 ) -> tuple[bytes, str, str]:
@@ -1376,6 +1992,8 @@ def export_document(
     document = documents.read_document(project_dir)
     if fmt == "docx":
         body = render_docx(document["content"], project_dir, project_name)
+    elif fmt == "pdf":
+        body = render_pdf(document["content"], project_dir, project_name)
     else:
         body = render(document["content"], fmt).encode("utf-8")
     return body, download_filename(project_name, fmt), CONTENT_TYPES[fmt]

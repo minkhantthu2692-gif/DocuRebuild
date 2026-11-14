@@ -371,7 +371,7 @@ def export_document_file(
     project: ProjectDep,
     export_format: Annotated[ExportFormat, Query(alias="format")] = "markdown",
 ) -> Response:
-    """Return the stored document as an attachment (Markdown, TXT or DOCX)."""
+    """Return the stored document as an attachment (Markdown, TXT, DOCX or PDF)."""
     directory = project_service.ensure_project_storage(project)
     body, filename, content_type = export_document(directory, project.name, export_format)
     ascii_name = safe_filename(project.name, export_format)

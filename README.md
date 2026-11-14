@@ -10,7 +10,7 @@ data on your device, and treats every AI result as a reviewable proposal.
 > The workspace, local project storage, image and PDF import, non-destructive
 > image adjustments, the rich-text editor, local Tesseract OCR, manual region
 > extraction, an optional local-AI OCR text cleanup, optional vision region
-> proposals, local Markdown/TXT/Word document export and document version history
+> proposals, local Markdown/TXT/Word/PDF document export and document version history
 > are implemented. Imports run
 > as background jobs with page-level progress, cancellation and localized failures.
 > PDF pages are rendered locally and embedded text layers are stored as reviewable
@@ -100,15 +100,16 @@ data on your device, and treats every AI result as a reviewable proposal.
   text while the image and its source note stay untouched, and you can give a figure
   an optional generated number. Numbered figures can be cited from the text; the
   citation shows the figure's live number and follows it when it moves.
-- **Local Markdown, TXT and Word export** — the editor header downloads the saved
-  document as Markdown, plain text or a Word file. The export is generated on this
-  device by the backend from the same document the editor autosaves; unsaved changes
-  are flushed first, and the download is refused if that save fails. Extracted text
-  is escaped so it can never turn into Markdown structure, and equations are written
-  as their LaTeX source with any numbering kept after the equation. Word output
-  embeds the project's own figure images and converts equations to native Word
+- **Local Markdown, TXT, Word and PDF export** — the editor header downloads the saved
+  document as Markdown, plain text, a Word file or an A4 PDF. The export is generated
+  on this device by the backend from the same document the editor autosaves; unsaved
+  changes are flushed first, and the download is refused if that save fails. Extracted
+  text is escaped so it can never turn into Markdown structure or HTML, and equations
+  are written as their LaTeX source with any numbering kept after the equation. Word
+  output embeds the project's own figure images and converts equations to native Word
   equations, keeping the LaTeX as a visible fallback when a formula cannot be
-  converted.
+  converted. PDF output embeds the same figures, keeps links clickable and needs a
+  Unicode Myanmar font on the device for Burmese text.
 - **Document versions** — the editor header keeps a local version history. Automatic
   versions are captured when the document changes, a manual checkpoint can be saved
   at any time, restoring a version always keeps the state it replaces, so a restore
@@ -134,24 +135,25 @@ data on your device, and treats every AI result as a reviewable proposal.
   rows and columns and an optional header row, then add or delete rows and columns,
   toggle the header, or delete the table. Every cell is typed by hand; no cell text
   is generated from a source image. Tables are part of the saved document, version
-  history, backups and Markdown/TXT/Word export.
+  history, backups and Markdown/TXT/Word/PDF export.
 - **Equations** — insert a display equation or an inline formula from the toolbar
   dialog and check the local KaTeX preview before inserting it. Empty or invalid
   LaTeX is refused rather than saved. Display equations can be given an optional
-  number: the editor shows it from document order, and Markdown/TXT/Word export
+  number: the editor shows it from document order, and Markdown/TXT/Word/PDF export
   writes the same `(n)` label after the equation, while the saved LaTeX never
   contains it. A numbered display equation can be cited from the text; the
   citation shows `Equation (n)` and follows the equation when it moves.
   Only the LaTeX source is stored, so equations work offline and are part of the
   document, versions, backups, Markdown (`$$` blocks and `$...$` formulas), plain
-  text and Word export (native equations). Equations are typed by you; OCR or AI
-  equation recognition is not implemented.
+  text, Word export (native equations) and PDF export (exact LaTeX source).
+  Equations are typed by you; OCR or AI equation recognition is not implemented.
 - **Footnotes** — insert a footnote from the toolbar and type its text in the
   dialog. Footnotes are numbered in document order, so inserting or deleting one
   renumbers the rest automatically; the number is never stored in the note. Export
   keeps the text: Markdown writes GitHub-flavoured `[^n]` markers with definitions,
-  plain text appends a `Notes:` section, and Word writes native footnotes. Footnotes
-  are never detected from the source automatically, and an empty note is refused.
+  plain text appends a `Notes:` section, Word writes native footnotes and PDF writes
+  a numbered notes list at the end. Footnotes are never detected from the source
+  automatically, and an empty note is refused.
 - **Project activity log** — the workspace project menu lists local events newest
   first: imports, page processing, region extraction, OCR, document exports and
   backups. Entries are metadata only (counts, formats, sizes, ids and timestamps);
@@ -167,8 +169,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 Structured element reconstruction (automatic table-cell extraction, automatic
 equation transcription, generative figure detection), cloud/free-tier AI providers,
-image-generation profiles, PDF layout export, desktop packaging and PWA install
-support are planned but not implemented. OCR extracts text blocks,
+image-generation profiles, desktop packaging and PWA install support are planned
+but not implemented. OCR extracts text blocks,
 reading order and conservative layout hints; it does not build table structure or
 transcribe equations. Region extraction produces exact pixel crops and can read
 their plain text locally; it does not build structured table cells or equation
@@ -202,6 +204,7 @@ See [`docs/roadmap.md`](docs/roadmap.md).
 | Editor | Tiptap 3 (ProseMirror) |
 | Equations | KaTeX (bundled locally, MIT) |
 | Word export | python-docx, latex2mathml, mathml2omml (all run locally) |
+| PDF export | PyMuPDF HTML story engine (runs locally; A4, embedded figures, links) |
 | i18n | i18next / react-i18next (English default, Burmese secondary) |
 | Local API | Python, FastAPI, SQLAlchemy, Alembic, SQLite |
 | Image processing | Pillow |
@@ -404,14 +407,16 @@ Tables are reconstructed manually, cell by cell:
 
 ### Document export
 
-Markdown, plain-text and Word export are local and need no provider, account or
-extension:
+Markdown, plain-text, Word and PDF export are local and need no provider, account
+or extension:
 
 - Open the workspace and use the download button in the document header, then
-  choose **Markdown (.md)**, **Plain text (.txt)** or **Word document (.docx)**.
+  choose **Markdown (.md)**, **Plain text (.txt)**, **Word document (.docx)** or
+  **PDF (.pdf)**.
 - Unsaved editor changes are saved first. If that save fails, nothing is
   downloaded and the editor shows the usual save error, so the file cannot
-  silently lag behind the screen.
+  silently lag behind the screen. Export errors, including a missing Myanmar
+  font, are shown as a message instead of opening a broken download.
 - Markdown keeps headings, lists, blockquotes, code blocks, rules, bold, italic,
   strikethrough, underline, links (http/https/mailto only) and hard breaks.
   Extracted text is escaped, so a line that happens to look like `# heading` or
@@ -419,9 +424,9 @@ extension:
 - Figures are written as an explicit `[Figure: <caption>]` marker plus their
   source note in Markdown and plain text; a numbered figure becomes
   `[Figure n: <caption>]`. The image itself is not embedded there, because it
-  remains a local project asset that has no meaning outside the app. Word export
-  embeds the image instead, with the caption below it and the source note kept as
-  recorded; a numbered caption gains a `Figure n.` prefix.
+  remains a local project asset that has no meaning outside the app. Word and PDF
+  export embed the image instead, with the caption below it and the source note
+  kept as recorded; a numbered caption gains a `Figure n.` prefix.
 - Figure citations are exported as their resolved label, `Figure n`, at the place
   in the sentence where they appear. A citation whose figure was deleted or is no
   longer numbered is written as `Figure (missing)` rather than silently becoming a
@@ -434,23 +439,35 @@ extension:
 - Footnotes export their stored text. Markdown writes `[^n]` at the citation point
   and a matching `[^n]: text` definition (continuation lines indented); plain text
   writes `[n]` and a `Notes:` section; Word writes a native footnote part, so the
-  note is editable in Word rather than pasted into the sentence.
+  note is editable in Word rather than pasted into the sentence. PDF writes a
+  superscript `n` and a numbered **Notes** list at the end of the document.
 - Tables export as GitHub-flavoured Markdown. A literal `|` is escaped, multiple
   paragraphs in one cell are joined with `<br>`, and a table without a header gets
   a blank structural header row. If merged cells are present, the table is written
   as HTML instead so `colspan`/`rowspan` content is neither duplicated nor dropped.
-  Plain-text export keeps every cell with ` | ` separators. Word export uses a
-  native table and reproduces merged cells, so its columns stay editable.
+  Plain-text export keeps every cell with ` | ` separators. Word and PDF export write
+  native tables and reproduce merged cells; Word columns stay editable and the PDF
+  keeps the same table structure.
 - Equations export as native Word equations in DOCX: the LaTeX is converted
   locally to MathML and then to Office Math, so Word can edit the formula. If a
   formula cannot be converted, its LaTeX source is written in italics instead of
   being dropped. Inline formulas stay inside their sentence, and a numbered display
-  equation keeps its `(n)` label after the equation.
+  equation keeps its `(n)` label after the equation. PDF has no bundled offline
+  LaTeX typesetter, so it shows the exact LaTeX source in a code style instead of
+  inventing a rendering.
+- PDF output is A4 with a page number in the footer. Figures are scaled to the text
+  width, links become clickable annotations, and headings and table-cell paragraphs
+  keep their alignment. The document flows onto as many pages as needed; it does not
+  reconstruct the original scan's page geometry. Burmese text needs a Unicode
+  Myanmar font on the device (for example Noto Sans Myanmar, Padauk or the Windows
+  Myanmar Text font). If none is found, the export stops with a clear message and
+  suggests `DOCUREBUILD_PDF_FONT`; no silent fallback or replacement characters are
+  written.
 - The download name comes from the project name. Burmese names are sent with
   RFC 5987 encoding and get a safe ASCII fallback.
 
-PDF layout export is not implemented yet. Word export follows the saved document
-flow; it does not reconstruct the original page layout.
+Word and PDF export follow the saved document flow; they do not reconstruct the
+original page layout.
 
 ### Document versions
 
@@ -488,7 +505,7 @@ in this project:
 
 - The list is newest first and covers project creation, imports (including a
   cancelled import), page processing and deletion, region extraction and text
-  corrections, local OCR runs, Markdown/TXT/Word exports, backups and restores.
+  corrections, local OCR runs, Markdown/TXT/Word/PDF exports, backups and restores.
 - Each entry shows a localized event label, a local timestamp and, when relevant,
   the recorded detail: page count, export format and size, backup archive size, OCR
   languages, mean confidence, block count or error code.
@@ -782,7 +799,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   plain-text field with no rich formatting or nested notes. The number is derived
   from document order and cannot be set manually, so a typed number in the note text
   would appear twice. Markdown exports GitHub-flavoured footnote definitions, plain
-  text a `Notes:` section, and Word a native footnote; PDF export is still pending.
+  text a `Notes:` section, Word a native footnote and PDF a numbered notes list.
 - Table limits: inserting offers 1–10 rows and columns, and merged cells can be
   created by selecting multiple cells and choosing merge/split. There is no
   per-cell alignment beyond paragraph alignment and no column resizing. Automatic
@@ -792,9 +809,10 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   constructs that the converter does not support is written as its italic LaTeX
   source instead of a native equation. Figures are embedded from this project's
   assets and scaled to fit the page width; a figure whose asset is missing becomes a
-  visible `[Figure: <caption>]` marker rather than disappearing. Word export keeps
-  the document flow, not the original page geometry, and PDF layout export is not
-  implemented.
+  visible `[Figure: <caption>]` marker rather than disappearing. PDF export also
+  keeps equations as their LaTeX source, because no offline LaTeX typesetter is
+  bundled, and needs a Unicode Myanmar font on the device for Burmese text. Both
+  Word and PDF export keep the document flow, not the original page geometry.
 - Autosave is debounced and best-effort when leaving the page. Document versions
   protect the saved document, but they live in the same project database and are
   not a backup. Use **Download backup** or **Local backups** for a complete copy.
@@ -882,8 +900,8 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT and Word; automatic table/equation extraction pending |
-| 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT and Word export; PDF page layout pending |
+| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; automatic table/equation extraction pending |
+| 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4 PDF export with embedded figures and links |
 | 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, page-scoped selective restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
