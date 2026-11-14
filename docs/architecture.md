@@ -46,7 +46,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.project_backup` | Verified local zip creation, safe validation/extraction and additive restore as a new project |
 | `services.backup_crypto` | Optional `.drbz` container for downloaded backups: scrypt key derivation, chunked AES-256-GCM, password and corruption errors |
 | `services.local_backups` | Local backup vault: verified copy creation, retention pruning, safe name resolution and opt-in automatic copies |
-| `services.page_restore` | Page-scoped selective restore: staged archive inspection, short-lived selection tokens and additive page/asset/OCR/element copying |
+| `services.page_restore` | Selective restore: staged archive inspection, short-lived selection tokens, additive page/asset/OCR/element copying and reversible document-version restore |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
@@ -179,6 +179,7 @@ POST   /api/projects/{id}/backups/{filename}/restore
 POST   /api/projects/{id}/backup/selection
 POST   /api/projects/{id}/backups/{filename}/selection
 POST   /api/projects/{id}/backup/selection/{token}/pages
+POST   /api/projects/{id}/backup/selection/{token}/document
 POST   /api/projects/restore
 GET    /api/projects/{id}/document
 PUT    /api/projects/{id}/document
@@ -735,7 +736,9 @@ src/
 - `POST .../document` creates a manual checkpoint of the current saved document and
   deduplicates against the newest revision. `POST .../revisions/{id}/restore`
   validates the id, writes the revision content and plain text through the same
-  document update path with a forced snapshot.
+  document update path with a forced snapshot. `documents.replace_document()` exposes
+  that forced snapshot for the backup restore path, so a restore from an archive always
+  leaves the replaced text in the local version history.
 - Comparison runs entirely in the browser and is read-only. `lib/text-diff.ts`
   compares the stored revision `plain_text` with the live editor text (so unsaved
   typing is included) using a longest-common-subsequence line diff. Common prefix and
@@ -863,14 +866,16 @@ src/
   request and writes only inside the local data directory. The documentation tells
   the user to run it while the app is closed so two processes do not create a copy at
   the same moment.
-- Selective page restore (`app/services/page_restore.py`) reuses
+- Selective restore (`app/services/page_restore.py`) reuses
   `project_backup.extract_validated()`, so an uploaded or stored archive passes the
   same path, size, format, SQLite and migration checks. `inspect()` extracts it once,
-  lists the pages read-only and writes `selection.json`, then renames the staging
-  folder to `tmp/select-<token>/`. The token is a 32-hex UUID bound to the inspecting
-  project and expires after one hour; `load()` returns
+  lists the pages and the document versions read-only, writes `selection.json`, then
+  renames the staging folder to `tmp/select-<token>/`. The token is a 32-hex UUID
+  bound to the inspecting project and expires after one hour; `load()` returns
   `410 restore_selection_expired` for a missing, expired, malformed or other-project
   selection, so a stale dialog cannot apply a selection to a different project.
+  `SELECTION_VERSION` is stored in the payload, so a selection written by an older
+  build is treated as expired instead of being read with the wrong shape.
 - `apply()` appends pages after `MAX(page_number)` with new ids. It copies each page's
   original, display and thumbnail assets under new file names and new asset rows, then
   copies the page's `ocr_runs`, `ocr_blocks`, `ai_suggestions` and `elements`,
@@ -879,12 +884,23 @@ src/
   if the transaction fails, and the selection folder is discarded after a successful
   apply. A `pages_restored` history event records the count, source name and new page
   numbers.
-- Selective restore is additive and page-scoped: it never replaces an existing page
-  and never reads or writes the document, so figure and equation references in the
-  text are untouched. Document versions stay project-local and are not restored.
-  At most 5000 pages are inspected or applied in one selection; empty or unknown ids
-  are rejected with `page_selection_empty`/`page_selection_invalid`, and an archive
-  with no pages returns `backup_no_pages`.
+- `apply_document()` reads the backup's live document (`revision_id: null`) or one
+  `document_revisions` row, validates that the stored content is a JSON object, and
+  calls `documents.replace_document()`. That helper always force-snapshots the state
+  being replaced, even inside the five-minute coalescing window, so a document restore
+  is itself reversible from the local version history. The response carries the
+  restored `DocumentOut`; the workspace actions context hands it to the editor, which
+  keeps its own working copy and would otherwise ignore a query refetch. A
+  `document_restored` event records the source name, `document_source`
+  (`current`/`revision`), the revision id and the character count, but never the text.
+  Page restore and document restore are independent: pages never touch the document,
+  and a document restore never touches pages or assets.
+- Page restore is additive: it never replaces an existing page. At most 5000 pages are
+  inspected or applied in one selection; empty or unknown ids are rejected with
+  `page_selection_empty`/`page_selection_invalid`. A backup with no pages is still
+  inspectable, because its document can be restored; selecting pages from it returns
+  `page_selection_empty`, and an unknown document revision returns
+  `422 backup_document_missing`.
 - Vault filenames are treated as untrusted input: the service rejects empty names,
   path separators, `..`, non-`.zip` suffixes, symlinks and non-files with
   `backup_not_found`. The route also sets an ASCII `filename` fallback derived with

@@ -169,6 +169,31 @@ export function useRestoreSelectedPages(projectId: string) {
   });
 }
 
+export function useRestoreBackupDocument(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      token,
+      revisionId,
+    }: {
+      token: string;
+      revisionId: string | null;
+    }) => api.restoreBackupDocument(projectId, token, revisionId),
+    onSuccess: (result) => {
+      // The editor applies the restored content directly; keep the cache in sync
+      // so a later remount does not show the replaced document.
+      queryClient.setQueryData(["document", projectId], result.document);
+      void queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["document", projectId] });
+      void queryClient.invalidateQueries({
+        queryKey: ["document-revisions", projectId],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["project-history", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
 export function useOpenProject(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({

@@ -17,7 +17,7 @@ presented in the UI until it actually works.
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word/PDF export; automatic table/equation extraction pending |
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, footnotes, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
-| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
+| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
 
@@ -553,32 +553,41 @@ headers/footers, broader OMML coverage and a bundled offline LaTeX typesetter.
   is sent in the request body, never stored or logged, and restore detects the
   container by content, asks for the password and reports wrong-password versus
   damage separately. Vault and automatic copies stay plaintext by design.
-- Page-scoped selective restore: the workspace project menu can inspect a local copy
-  or an uploaded `.zip`/`.drbz`, list its pages and append chosen pages to the
-  current project. The archive is extracted once into a short-lived
-  `tmp/select-<token>/` folder (one-hour TTL, bound to the inspecting project);
-  chosen pages get new ids and numbers after the last page, and their assets, OCR
-  runs, blocks, AI proposals and extracted regions are copied with remapped
-  references. The document and existing pages are never touched. Empty or unknown
-  selections and expired tokens return typed errors, and the dialog lists pages with
-  select-all, a confirmation count and a password field for encrypted uploads.
+- Selective restore: the workspace project menu can inspect a local copy or an
+  uploaded `.zip`/`.drbz` and list both its pages and its document versions. The
+  archive is extracted once into a short-lived `tmp/select-<token>/` folder
+  (one-hour TTL, bound to the inspecting project).
+  - **Pages** are appended to the current project. Chosen pages get new ids and
+    numbers after the last page, and their assets, OCR runs, blocks, AI proposals
+    and extracted regions are copied with remapped references. The document and
+    existing pages are never touched.
+  - **Document** replaces the live document with the backup's current text or any
+    stored version (`revision_id: null` means the current document). The replaced
+    state is force-snapshotted as a local revision first, so the restore can be
+    undone from the version history; pages and assets are not touched.
+  Empty or unknown selections, a missing document revision and expired tokens return
+  typed errors, and the dialog has page/document modes, select-all, a confirmation
+  count and a password field for encrypted uploads. A backup with no pages can still
+  have its document restored.
 - Backend vault tests for create/list/download/delete/restore, retention pruning,
   missing projects, unsafe names, due checks, configurable retention, automatic-on-open
   (including the off-by-default and not-due paths) and moving a deleted project's
   vault to trash, plus encryption round-trip, wrong-password, short-password,
   tamper/truncation, plain-zip and vault-plaintext tests. Selective-restore tests
   cover a stored copy and an uploaded archive, OCR/AI/element remapping, document
-  preservation, token expiry and project binding. Component tests cover
+  preservation for page restore, token expiry and project binding, document
+  inspection, restoring the current document or one revision, the forced snapshot
+  and unknown-revision rejection. Component tests cover
   listing, downloading, deleting and restoring with confirmation, creating from the
   empty state, load errors, the download dialog's plain/protected validation, the
-  restore password field and inspecting, selecting and applying pages. Dialogs,
-  settings and strings exist in English and Burmese.
+  restore password field, inspecting and applying pages, and restoring a document
+  version. Dialogs, settings and strings exist in English and Burmese.
 
 **Pending**
 
-- Restoring an individual asset or a document version from an archive remains
-  pending; selective restore is page-scoped and additive. Editor undo/redo stays
-  separate from revision history.
+- Restoring an individual asset from an archive remains pending; selective restore
+  covers pages and the document. Editor undo/redo stays separate from revision
+  history.
 
 ## Phase 10 — Desktop, PWA and mobile distribution (planned)
 

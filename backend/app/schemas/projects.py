@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -114,13 +114,37 @@ class BackupPageSummary(BaseModel):
     original_filename: str | None = None
 
 
+class BackupDocumentSummary(BaseModel):
+    """The live document stored in a backup, without its full content."""
+
+    preview: str
+    character_count: int
+    updated_at: str | None = None
+
+
+class BackupDocumentRevision(BaseModel):
+    """One stored document version found in a backup."""
+
+    id: str
+    source: str
+    preview: str
+    character_count: int
+    created_at: str
+
+
+class BackupDocumentOut(BaseModel):
+    current: BackupDocumentSummary
+    revisions: list[BackupDocumentRevision]
+
+
 class BackupSelectionOut(BaseModel):
-    """Pages found in an inspected archive, keyed by a short-lived token."""
+    """Pages and document versions found in an inspected archive."""
 
     token: str
     source_name: str
     created_at: str
     pages: list[BackupPageSummary]
+    document: BackupDocumentOut
 
 
 class PageRestoreRequest(BaseModel):
@@ -130,3 +154,17 @@ class PageRestoreRequest(BaseModel):
 class PageRestoreOut(BaseModel):
     restored: int
     page_numbers: list[int]
+
+
+class DocumentRestoreRequest(BaseModel):
+    """``revision_id=None`` restores the backup's live document."""
+
+    revision_id: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class DocumentRestoreOut(BaseModel):
+    restored: bool
+    source: Literal["current", "revision"]
+    revision_id: str | None = None
+    updated_at: str | None = None
+    document: DocumentOut

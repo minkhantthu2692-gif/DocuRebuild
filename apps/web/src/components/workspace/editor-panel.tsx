@@ -174,7 +174,12 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const updateSettings = useUpdateSettings();
   const errorMessage = useApiErrorMessage();
   const { mutateAsync: saveDocument, isPending: isSaving } = useSaveDocument(projectId);
-  const { insertion, consumeInsertion } = useWorkspaceActions();
+  const {
+    insertion,
+    consumeInsertion,
+    pendingDocumentRestore,
+    consumeDocumentRestore,
+  } = useWorkspaceActions();
 
   const [initialized, setInitialized] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -675,6 +680,12 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     },
     [editor],
   );
+
+  useEffect(() => {
+    if (!pendingDocumentRestore || !editor) return;
+    applyRestoredDocument(pendingDocumentRestore);
+    consumeDocumentRestore();
+  }, [pendingDocumentRestore, editor, applyRestoredDocument, consumeDocumentRestore]);
 
   useEffect(() => {
     if (!findOpen) return;

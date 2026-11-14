@@ -1,19 +1,23 @@
-"""Selective restore of pages from a backup into an existing project.
+"""Selective restore from a backup into an existing project.
 
-A full restore always creates a new project. Sometimes only a few pages are
-needed: a page was deleted by mistake, or a page was damaged while the rest of
-the project is fine. This module copies chosen pages out of a validated backup
-and appends them to the current project.
+A full restore always creates a new project. Sometimes only a few pages or one
+document version is needed: a page was deleted by mistake, the document was
+edited badly, or the rest of the project is fine. This module copies chosen
+content out of a validated backup into the current project.
 
-The restore is additive and page-scoped:
+The restore is additive and scoped:
 
 - Pages get new ids and new page numbers after the current last page, so no
-  existing page is replaced or renumbered.
-- The page's own assets, OCR runs, OCR blocks, AI suggestions and extracted
-  elements are copied with new ids and remapped references, so the copied page
-  keeps its text, review status and crops.
-- The document is never touched. Figure or equation references in the text stay
-  exactly as they are; copying a page cannot silently rewrite prose.
+  existing page is replaced or renumbered. The page's own assets, OCR runs, OCR
+  blocks, AI suggestions and extracted elements are copied with new ids and
+  remapped references, so the copied page keeps its text, review status and
+  crops.
+- A document restore replaces the live document only after the state being
+  replaced is snapshotted as a local revision, so it can be undone from the
+  version history. The backup's current document or any stored revision can be
+  chosen.
+- Page restore never touches the document; document restore never touches pages
+  or their assets.
 - Files are copied under new names, so a missing or different file in the
   current project is never overwritten.
 - The archive is extracted once for inspection and kept in a staging folder for
@@ -38,15 +42,16 @@ from app.core.errors import AppError
 from app.core.storage import atomic_write_json, resolve_within
 from app.db.models import Project
 from app.db.project_schema import project_db
-from app.services import project_backup
+from app.services import documents, project_backup
 from app.services import projects as project_service
 
 SELECTION_PREFIX = "select-"
-SELECTION_VERSION = 1
+SELECTION_VERSION = 2
 # Long enough to review a large page list, short enough that an abandoned
 # extraction does not sit in tmp for a whole session.
 SELECTION_TTL_SECONDS = 60 * 60
 MAX_SELECTED_PAGES = 5000
+DOCUMENT_PREVIEW_LENGTH = 200
 _TOKEN = re.compile(r"^[0-9a-f]{32}$")
 
 
@@ -57,6 +62,7 @@ class Selection:
     source_name: str
     created_at: str
     pages: list[dict[str, Any]]
+    document: dict[str, Any]
 
 
 def _expired() -> AppError:
@@ -108,6 +114,55 @@ def _list_pages(database_path: Path) -> list[dict[str, Any]]:
     ]
 
 
+def _preview(plain_text: str) -> str:
+    return " ".join(plain_text.split())[:DOCUMENT_PREVIEW_LENGTH]
+
+
+def _list_document(database_path: Path) -> dict[str, Any]:
+    """Summarise the backup's live document and its stored revisions."""
+    try:
+        connection = _open_readonly(database_path)
+        try:
+            current = connection.execute(
+                "SELECT plain_text, updated_at FROM documents WHERE id = 'main'"
+            ).fetchone()
+            revisions = connection.execute(
+                "SELECT id, source, plain_text, created_at FROM document_revisions"
+                " ORDER BY created_at DESC, rowid DESC LIMIT 100"
+            ).fetchall()
+        finally:
+            connection.close()
+    except sqlite3.DatabaseError as exc:
+        raise AppError(
+            422,
+            "backup_database_invalid",
+            "The project database in the backup cannot be read.",
+        ) from exc
+
+    current_text = str(current["plain_text"]) if current is not None else ""
+    return {
+        "current": {
+            "preview": _preview(current_text),
+            "character_count": len(current_text),
+            "updated_at": (
+                str(current["updated_at"])
+                if current is not None and current["updated_at"]
+                else None
+            ),
+        },
+        "revisions": [
+            {
+                "id": row["id"],
+                "source": row["source"],
+                "preview": _preview(str(row["plain_text"])),
+                "character_count": len(str(row["plain_text"])),
+                "created_at": row["created_at"],
+            }
+            for row in revisions
+        ],
+    }
+
+
 def _cleanup_stale() -> None:
     """Remove abandoned selections after the time-to-live, best effort."""
     folder = get_settings().tmp_dir
@@ -126,17 +181,12 @@ def _cleanup_stale() -> None:
 def inspect(
     archive_path: Path, *, project_id: str, source_name: str
 ) -> dict[str, Any]:
-    """Extract and validate an archive, then list its pages for selection."""
+    """Extract and validate an archive, then list pages and document versions."""
     extracted = project_backup.extract_validated(archive_path)
     staging = extracted.directory
     try:
         pages = _list_pages(staging / "project.db")
-        if not pages:
-            raise AppError(
-                422,
-                "backup_no_pages",
-                "This backup contains no pages to restore.",
-            )
+        document = _list_document(staging / "project.db")
         if len(pages) > MAX_SELECTED_PAGES:
             raise AppError(
                 422,
@@ -150,6 +200,7 @@ def inspect(
             "source_name": source_name,
             "created_at": _created_at(extracted.manifest),
             "pages": pages,
+            "document": document,
         }
         atomic_write_json(staging / "selection.json", payload)
         staging.rename(staging.with_name(f"{SELECTION_PREFIX}{token}"))
@@ -163,6 +214,7 @@ def inspect(
         "source_name": source_name,
         "created_at": payload["created_at"],
         "pages": pages,
+        "document": document,
     }
 
 
@@ -188,7 +240,8 @@ def load(token: str, *, project_id: str) -> Selection:
     ):
         raise _expired()
     pages = payload.get("pages")
-    if not isinstance(pages, list) or not pages:
+    document = payload.get("document")
+    if not isinstance(pages, list) or not isinstance(document, dict):
         raise _expired()
     return Selection(
         token=token,
@@ -196,6 +249,7 @@ def load(token: str, *, project_id: str) -> Selection:
         source_name=str(payload.get("source_name") or "backup"),
         created_at=str(payload.get("created_at") or ""),
         pages=pages,
+        document=document,
     )
 
 
@@ -438,3 +492,78 @@ def apply(
         },
     )
     return {"restored": len(page_numbers), "page_numbers": page_numbers}
+
+
+def apply_document(
+    project: Project, selection: Selection, revision_id: str | None
+) -> dict[str, Any]:
+    """Replace the live document with the backup's current text or one revision.
+
+    The replaced state is snapshotted first, so this action can itself be undone
+    from the local version history.
+    """
+    staged_database = selection.directory / "project.db"
+    source = _open_readonly(staged_database)
+    try:
+        if revision_id is None:
+            row = source.execute(
+                "SELECT content, plain_text FROM documents WHERE id = 'main'"
+            ).fetchone()
+            kind = "current"
+        else:
+            row = source.execute(
+                "SELECT content, plain_text FROM document_revisions WHERE id = ?",
+                (revision_id,),
+            ).fetchone()
+            kind = "revision"
+    except sqlite3.DatabaseError as exc:
+        raise AppError(
+            422,
+            "backup_database_invalid",
+            "The project database in the backup cannot be read.",
+        ) from exc
+    finally:
+        source.close()
+
+    if row is None:
+        raise AppError(
+            422,
+            "backup_document_missing",
+            "The selected document version is not in this backup.",
+        )
+    try:
+        content = json.loads(row["content"])
+    except (TypeError, ValueError) as exc:
+        raise AppError(
+            422,
+            "backup_document_invalid",
+            "The document in this backup cannot be read.",
+        ) from exc
+    if not isinstance(content, dict) or content.get("type") != "doc":
+        raise AppError(
+            422,
+            "backup_document_invalid",
+            "The document in this backup cannot be read.",
+        )
+
+    plain_text = str(row["plain_text"])
+    project_dir = Path(project.directory)
+    document = documents.replace_document(project_dir, content, plain_text)
+    project_service.record_history(
+        project_dir,
+        "document_restored",
+        "Document restored from backup",
+        {
+            "source": selection.source_name,
+            "document_source": kind,
+            "revision_id": revision_id,
+            "character_count": len(plain_text),
+        },
+    )
+    return {
+        "restored": True,
+        "source": kind,
+        "revision_id": revision_id,
+        "updated_at": document["updated_at"],
+        "document": document,
+    }

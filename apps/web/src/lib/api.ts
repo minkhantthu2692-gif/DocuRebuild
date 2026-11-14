@@ -17,6 +17,7 @@ import type {
   BackupSelection,
   BackupSettings,
   DocumentRecord,
+  DocumentRestoreResult,
   DocumentRevision,
   DocumentRevisionSummary,
   EditorSettings,
@@ -206,6 +207,15 @@ export const api = {
     request<PageRestoreResult>(
       `/projects/${projectId}/backup/selection/${encodeURIComponent(token)}/pages`,
       { method: "POST", body: JSON.stringify({ page_ids: pageIds }) },
+    ),
+  restoreBackupDocument: (
+    projectId: string,
+    token: string,
+    revisionId: string | null,
+  ) =>
+    request<DocumentRestoreResult>(
+      `/projects/${projectId}/backup/selection/${encodeURIComponent(token)}/document`,
+      { method: "POST", body: JSON.stringify({ revision_id: revisionId }) },
     ),
   listProjectHistory: (projectId: string, limit = 100) =>
     request<HistoryEvent[]>(`/projects/${projectId}/history?limit=${limit}`),

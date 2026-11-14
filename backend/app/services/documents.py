@@ -188,6 +188,18 @@ def write_document(
         return _update_document(conn, content, plain_text)
 
 
+def replace_document(
+    project_dir: Path, content: dict[str, Any], plain_text: str
+) -> dict[str, Any]:
+    """Replace the live document and always snapshot the state it replaces.
+
+    Used by a restore from a backup, where the previous text must stay available
+    in the local version history even when it was edited moments ago.
+    """
+    with project_db(project_dir) as conn:
+        return _update_document(conn, content, plain_text, force_snapshot=True)
+
+
 def list_revisions(project_dir: Path, limit: int = 50) -> list[dict[str, Any]]:
     with project_db(project_dir) as conn:
         ensure_document_row(conn)

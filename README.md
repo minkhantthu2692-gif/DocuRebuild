@@ -120,9 +120,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   thumbnails, exports) from the dashboard or the workspace, optionally protected
   with a password (`.drbz`). Restoring a backup
   always creates a new project and never overwrites existing work. You can also
-  restore only chosen pages from a copy or uploaded archive into the current
-  project; they are appended with new ids and the document is left alone.
-  Everything is written and read on this device; nothing is uploaded.
+  restore only chosen pages, or the document or one of its stored versions, from a
+  copy or uploaded archive into the current project. Pages are appended with new ids
+  and leave the document alone; a document restore saves the replaced text as a
+  version first, so it can be undone. Everything is written and read on this device;
+  nothing is uploaded.
 - **Local backup vault** — keep verified copies of a project on this device from the
   workspace project menu. Copies are created when you ask, or after opening a project
   when you opt in and the newest copy is older than the configured interval. The
@@ -565,15 +567,20 @@ Backups are local files, not a cloud service and not a GitHub upload:
   (`<name> (restored)`, numbered on further conflicts). Existing projects are never
   replaced or modified, so a restore can be reviewed and the new copy deleted if it
   is unwanted.
-- **Restore pages** from the workspace project menu copies only the pages you choose
-  from a local backup copy or an uploaded `.zip`/`.drbz`. **Inspect backup** lists
-  each page with its page number and original filename; nothing changes until you
-  select pages and confirm. The chosen pages are appended after the current last
-  page with new ids, and their own assets, OCR runs, text blocks, AI proposals and
-  extracted regions are copied with remapped references. The document, existing
-  pages and versions are untouched, so one lost page can be recovered without
-  duplicating the whole project. The staged extraction is kept for one hour; if it
-  expires, inspect the backup again.
+- **Restore from a backup** in the workspace project menu copies only what you choose
+  from a local backup copy or an uploaded `.zip`/`.drbz`. **Inspect backup** lists the
+  pages and the document versions in that archive; nothing changes until you select
+  something and confirm. The staged extraction is kept for one hour; if it expires,
+  inspect the backup again. A backup with no pages can still have its document
+  restored.
+  - **Pages** are appended after the current last page with new ids, and their own
+    assets, OCR runs, text blocks, AI proposals and extracted regions are copied with
+    remapped references. Existing pages and versions are untouched, so one lost page
+    can be recovered without duplicating the whole project.
+  - **Document** replaces the live document with the backup's current text or any
+    stored version you pick. The state being replaced is saved as a local version
+    first, so the restore itself can be undone from the version history. Pages,
+    images and regions are not changed.
 - The archive size limit is `DOCUREBUILD_MAX_BACKUP_MB` (default 2048 MB, both
   upload and expanded size) and is reported to the UI through `/api/meta`.
 - Archive reading, extraction and database checks run in a temporary folder under
@@ -904,7 +911,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; automatic table/equation extraction pending |
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
-| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, page-scoped selective restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
+| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
 

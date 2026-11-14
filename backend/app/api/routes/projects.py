@@ -28,6 +28,8 @@ from app.schemas.projects import (
     BackupSelectionOut,
     DocumentOut,
     DocumentPayload,
+    DocumentRestoreOut,
+    DocumentRestoreRequest,
     DocumentRevisionOut,
     DocumentRevisionSummary,
     EncryptedBackupRequest,
@@ -320,6 +322,21 @@ def restore_selected_pages(
     """Append the chosen pages to this project. Existing pages are untouched."""
     selection = page_restore.load(token, project_id=project.id)
     result = page_restore.apply(project, selection, payload.page_ids)
+    page_restore.discard(token)
+    return result
+
+
+@router.post(
+    "/{project_id}/backup/selection/{token}/document",
+    response_model=DocumentRestoreOut,
+)
+def restore_selected_document(
+    project: ProjectDep, token: str, payload: DocumentRestoreRequest, session: DbSession
+) -> dict[str, Any]:
+    """Replace the live document with the backup's text, after snapshotting it."""
+    selection = page_restore.load(token, project_id=project.id)
+    result = page_restore.apply_document(project, selection, payload.revision_id)
+    touch_project(session, project)
     page_restore.discard(token)
     return result
 

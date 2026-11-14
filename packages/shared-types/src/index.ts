@@ -97,12 +97,44 @@ export interface BackupPageSummary {
   original_filename: string | null;
 }
 
-/** Pages found in an inspected archive, keyed by a short-lived token. */
+/** Pages and document versions found in an inspected archive. */
 export interface BackupSelection {
   token: string;
   source_name: string;
   created_at: string;
   pages: BackupPageSummary[];
+  document: BackupDocument;
+}
+
+/** The live document stored in a backup, without its full content. */
+export interface BackupDocumentSummary {
+  preview: string;
+  character_count: number;
+  updated_at: string | null;
+}
+
+/** One stored document version found in a backup. */
+export interface BackupDocumentRevision {
+  id: string;
+  source: string;
+  preview: string;
+  character_count: number;
+  created_at: string;
+}
+
+export interface BackupDocument {
+  current: BackupDocumentSummary;
+  revisions: BackupDocumentRevision[];
+}
+
+/** Result of replacing the live document from a backup. */
+export interface DocumentRestoreResult {
+  restored: boolean;
+  source: "current" | "revision";
+  revision_id: string | null;
+  updated_at: string | null;
+  /** The restored record, so the editor can apply it without a reload. */
+  document: DocumentRecord;
 }
 
 /** Result of appending selected pages to the current project. */

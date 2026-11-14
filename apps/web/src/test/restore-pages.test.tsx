@@ -4,6 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BackupSelection } from "@docurebuild/shared-types";
 
 import { RestorePagesDialog } from "@/components/workspace/restore-pages-dialog";
+import { WorkspaceActionsProvider } from "@/components/workspace/workspace-actions";
 import { i18n, initI18n } from "@/i18n";
 import { ApiError } from "@/lib/api";
 
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   inspectCopy: vi.fn(),
   inspectUpload: vi.fn(),
   restore: vi.fn(),
+  restoreDocument: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
@@ -39,6 +41,10 @@ vi.mock("@/hooks/use-projects", () => ({
   useRestoreSelectedPages: () => ({
     isPending: false,
     mutate: mocks.restore,
+  }),
+  useRestoreBackupDocument: () => ({
+    isPending: false,
+    mutate: mocks.restoreDocument,
   }),
 }));
 
@@ -66,20 +72,56 @@ const selection: BackupSelection = {
       original_filename: "page-2.png",
     },
   ],
+  document: {
+    current: {
+      preview: "Current document text",
+      character_count: 21,
+      updated_at: "2026-11-12T00:00:00Z",
+    },
+    revisions: [
+      {
+        id: "revision-1",
+        source: "manual",
+        preview: "Older checkpoint text",
+        character_count: 21,
+        created_at: "2026-11-11T00:00:00Z",
+      },
+    ],
+  },
+};
+
+const restoredDocument = {
+  format: "tiptap" as const,
+  schema_version: 1,
+  content: {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Older checkpoint text" }],
+      },
+    ],
+  },
+  plain_text: "Older checkpoint text",
+  updated_at: "2026-11-12T01:00:00Z",
 };
 
 function renderDialog() {
   const onOpenChange = vi.fn();
   const onRestored = vi.fn();
+  const onDocumentRestored = vi.fn();
   render(
-    <RestorePagesDialog
-      projectId="project-1"
-      open
-      onOpenChange={onOpenChange}
-      onRestored={onRestored}
-    />,
+    <WorkspaceActionsProvider>
+      <RestorePagesDialog
+        projectId="project-1"
+        open
+        onOpenChange={onOpenChange}
+        onRestored={onRestored}
+        onDocumentRestored={onDocumentRestored}
+      />
+    </WorkspaceActionsProvider>,
   );
-  return { onOpenChange, onRestored };
+  return { onOpenChange, onRestored, onDocumentRestored };
 }
 
 function chooseFile(file: File) {
@@ -109,6 +151,7 @@ beforeEach(() => {
   mocks.inspectCopy.mockReset();
   mocks.inspectUpload.mockReset();
   mocks.restore.mockReset();
+  mocks.restoreDocument.mockReset();
   mocks.toast.success.mockReset();
   mocks.toast.error.mockReset();
 });
@@ -236,5 +279,99 @@ describe("RestorePagesDialog", () => {
     );
     expect(screen.queryByText("Pages in this backup")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Restore pages" })).toBeDisabled();
+  });
+
+  it("restores a stored document version from a copy", async () => {
+    mocks.inspectCopy.mockImplementation(
+      (_input: unknown, options: { onSuccess: (result: BackupSelection) => void }) =>
+        options.onSuccess(selection),
+    );
+    mocks.restoreDocument.mockImplementation(
+      (
+        _input: { token: string; revisionId: string | null },
+        options: {
+          onSuccess: (result: {
+            restored: boolean;
+            source: "current" | "revision";
+            revision_id: string | null;
+            updated_at: string | null;
+            document: typeof restoredDocument;
+          }) => void;
+        },
+      ) =>
+        options.onSuccess({
+          restored: true,
+          source: "revision",
+          revision_id: "revision-1",
+          updated_at: "2026-11-12T01:00:00Z",
+          document: restoredDocument,
+        }),
+    );
+    const { onOpenChange, onDocumentRestored } = renderDialog();
+
+    fireEvent.click(screen.getByText("Document"));
+    fireEvent.click(screen.getByRole("radio", { name: /book-20261112\.zip/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Inspect backup" }));
+
+    expect(
+      screen.getByText("Document versions in this backup"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Restore document" }),
+    ).toBeDisabled();
+
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Manual checkpoint/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Restore document" }));
+
+    await waitFor(() =>
+      expect(mocks.restoreDocument).toHaveBeenCalledWith(
+        { token: selection.token, revisionId: "revision-1" },
+        expect.any(Object),
+      ),
+    );
+    expect(mocks.toast.success).toHaveBeenCalledWith(
+      "Restored the document from this backup.",
+    );
+    expect(onDocumentRestored).toHaveBeenCalledWith({
+      restored: true,
+      source: "revision",
+      revision_id: "revision-1",
+      updated_at: "2026-11-12T01:00:00Z",
+      document: restoredDocument,
+    });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("restores the backup's current document with a null revision", async () => {
+    mocks.inspectCopy.mockImplementation(
+      (_input: unknown, options: { onSuccess: (result: BackupSelection) => void }) =>
+        options.onSuccess(selection),
+    );
+    mocks.restoreDocument.mockImplementation(
+      (_input: unknown, options: { onSuccess: (result: unknown) => void }) =>
+        options.onSuccess({
+          restored: true,
+          source: "current",
+          revision_id: null,
+          updated_at: "2026-11-12T01:00:00Z",
+          document: restoredDocument,
+        }),
+    );
+    renderDialog();
+
+    fireEvent.click(screen.getByText("Document"));
+    fireEvent.click(screen.getByRole("radio", { name: /book-20261112\.zip/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Inspect backup" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Current document/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Restore document" }));
+
+    await waitFor(() =>
+      expect(mocks.restoreDocument).toHaveBeenCalledWith(
+        { token: selection.token, revisionId: null },
+        expect.any(Object),
+      ),
+    );
   });
 });

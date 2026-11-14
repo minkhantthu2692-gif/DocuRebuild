@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 
+import type { DocumentRecord } from "@docurebuild/shared-types";
+
 import {
   WorkspaceActionsContext,
   type FigureInsertionInput,
@@ -10,6 +12,8 @@ let nextInsertionId = 1;
 
 export function WorkspaceActionsProvider({ children }: { children: ReactNode }) {
   const [insertion, setInsertion] = useState<WorkspaceInsertion | null>(null);
+  const [pendingDocumentRestore, setPendingDocumentRestore] =
+    useState<DocumentRecord | null>(null);
 
   const insertText = useCallback((text: string, note?: string | null) => {
     setInsertion({ id: nextInsertionId++, type: "text", text, note: note ?? null });
@@ -23,9 +27,33 @@ export function WorkspaceActionsProvider({ children }: { children: ReactNode }) 
     setInsertion((current) => (current?.id === id ? null : current));
   }, []);
 
+  const restoreDocumentIntoEditor = useCallback((record: DocumentRecord) => {
+    setPendingDocumentRestore(record);
+  }, []);
+
+  const consumeDocumentRestore = useCallback(() => {
+    setPendingDocumentRestore(null);
+  }, []);
+
   const value = useMemo(
-    () => ({ insertion, insertText, insertFigure, consumeInsertion }),
-    [insertion, insertText, insertFigure, consumeInsertion],
+    () => ({
+      insertion,
+      insertText,
+      insertFigure,
+      consumeInsertion,
+      pendingDocumentRestore,
+      restoreDocumentIntoEditor,
+      consumeDocumentRestore,
+    }),
+    [
+      insertion,
+      insertText,
+      insertFigure,
+      consumeInsertion,
+      pendingDocumentRestore,
+      restoreDocumentIntoEditor,
+      consumeDocumentRestore,
+    ],
   );
 
   return (
