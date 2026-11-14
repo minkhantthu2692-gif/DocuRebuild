@@ -23,6 +23,8 @@ export type FontSizePreset = "sm" | "md" | "lg";
 export type MotionPreference = "full" | "reduced";
 export type LanguageCode = "en" | "my" | "system";
 export type DocumentFont = "serif" | "sans";
+export type PdfPageSize = "a4" | "letter";
+export type PdfMargin = "narrow" | "normal" | "wide";
 
 export interface AppearanceSettings {
   theme: ThemeMode;
@@ -38,6 +40,11 @@ export interface EditorSettings {
   document_font: DocumentFont;
 }
 
+export interface ExportSettings {
+  pdf_page_size: PdfPageSize;
+  pdf_margin: PdfMargin;
+}
+
 export interface BackupSettings {
   auto_on_open: boolean;
   interval_hours: number;
@@ -48,6 +55,7 @@ export interface AppSettings {
   language: LanguageCode;
   appearance: AppearanceSettings;
   editor: EditorSettings;
+  export: ExportSettings;
   ai: AiSettings;
   backups: BackupSettings;
 }

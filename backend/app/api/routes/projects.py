@@ -369,11 +369,19 @@ def write_document(
 @router.get("/{project_id}/document/export")
 def export_document_file(
     project: ProjectDep,
+    session: DbSession,
     export_format: Annotated[ExportFormat, Query(alias="format")] = "markdown",
 ) -> Response:
     """Return the stored document as an attachment (Markdown, TXT, DOCX or PDF)."""
     directory = project_service.ensure_project_storage(project)
-    body, filename, content_type = export_document(directory, project.name, export_format)
+    export_prefs = get_app_settings(session).export
+    body, filename, content_type = export_document(
+        directory,
+        project.name,
+        export_format,
+        pdf_page_size=export_prefs.pdf_page_size,
+        pdf_margin=export_prefs.pdf_margin,
+    )
     ascii_name = safe_filename(project.name, export_format)
     project_service.record_history(
         directory,

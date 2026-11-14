@@ -9,6 +9,7 @@
     "appearance": "Appearance",
     "language": "Language & region",
     "editor": "Editor",
+    "export": "Export",
     "ocr": "Local OCR",
     "ai": "Local AI",
     "backups": "Backups",
@@ -75,6 +76,24 @@
     "serif": "Serif",
     "sans": "Sans-serif",
     "preview": "The quick brown fox jumps over the lazy dog. မြန်မာစာ စမ်းသပ်ချက်။"
+  },
+  "export": {
+    "title": "PDF layout",
+    "description": "Choose the page size and margin for exported PDF files. The file is still created on this device.",
+    "pageSize": "Page size",
+    "pageSizeDescription": "A4 is the default. Choose Letter for documents that use US paper.",
+    "pageSizeValues": {
+      "a4": "A4 (210 × 297 mm)",
+      "letter": "Letter (8.5 × 11 in)"
+    },
+    "margin": "Margin",
+    "marginDescription": "Narrow fits more text on a page; wide leaves more white space.",
+    "marginValues": {
+      "narrow": "Narrow",
+      "normal": "Normal",
+      "wide": "Wide"
+    },
+    "note": "These settings apply to PDF export only. Markdown, plain text and Word files keep their current format."
   },
   "ocr": {
     "title": "Local OCR engine",

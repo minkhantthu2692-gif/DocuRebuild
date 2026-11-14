@@ -16,6 +16,8 @@ FontSizePreset = Literal["sm", "md", "lg"]
 MotionPreference = Literal["full", "reduced"]
 LanguageCode = Literal["en", "my", "system"]
 DocumentFont = Literal["serif", "sans"]
+PdfPageSize = Literal["a4", "letter"]
+PdfMargin = Literal["narrow", "normal", "wide"]
 
 
 class AppearanceSettings(BaseModel):
@@ -52,6 +54,22 @@ class EditorPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     document_font: DocumentFont | None = None
+
+
+class ExportSettings(BaseModel):
+    """Local document export preferences. Only PDF uses a layout choice."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pdf_page_size: PdfPageSize = "a4"
+    pdf_margin: PdfMargin = "normal"
+
+
+class ExportPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pdf_page_size: PdfPageSize | None = None
+    pdf_margin: PdfMargin | None = None
 
 
 class BackupSettings(BaseModel):
@@ -166,6 +184,7 @@ class AppSettings(BaseModel):
     language: LanguageCode = "en"
     appearance: AppearanceSettings = Field(default_factory=AppearanceSettings)
     editor: EditorSettings = Field(default_factory=EditorSettings)
+    export: ExportSettings = Field(default_factory=ExportSettings)
     ai: AiSettings = Field(default_factory=AiSettings)
     backups: BackupSettings = Field(default_factory=BackupSettings)
 
@@ -176,5 +195,6 @@ class SettingsUpdate(BaseModel):
     language: LanguageCode | None = None
     appearance: AppearancePatch | None = None
     editor: EditorPatch | None = None
+    export: ExportPatch | None = None
     ai: AiPatch | None = None
     backups: BackupPatch | None = None

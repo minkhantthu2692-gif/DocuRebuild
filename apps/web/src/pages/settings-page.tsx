@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Copy,
   ExternalLink,
+  FileDown,
   HardDrive,
   Info,
   Languages,
@@ -30,9 +31,12 @@ import type {
   BlurLevel,
   Density,
   DocumentFont,
+  ExportSettings,
   FontSizePreset,
   LanguageCode,
   MotionPreference,
+  PdfMargin,
+  PdfPageSize,
   RadiusStyle,
   ThemeMode,
 } from "@docurebuild/shared-types";
@@ -76,9 +80,9 @@ const ROADMAP: Array<{
   { key: "processing", status: "inProgress" },
   { key: "ocr", status: "inProgress" },
   { key: "ai", status: "inProgress" },
-  { key: "editor", status: "inProgress" },
-  { key: "export", status: "planned" },
-  { key: "history", status: "planned" },
+  { key: "editor", status: "done" },
+  { key: "export", status: "done" },
+  { key: "history", status: "inProgress" },
 ];
 
 const STATUS_VARIANT = {
@@ -98,6 +102,11 @@ const DEFAULT_BACKUPS: BackupSettings = {
   auto_on_open: false,
   interval_hours: 24,
   keep_copies: 5,
+};
+
+const DEFAULT_EXPORT: ExportSettings = {
+  pdf_page_size: "a4",
+  pdf_margin: "normal",
 };
 
 const BACKUP_INTERVALS = [6, 12, 24, 72, 168] as const;
@@ -191,6 +200,7 @@ export function SettingsPage() {
   const aiVisionSaved = settings?.ai?.vision_model ?? "";
   const aiLimitSaved = settings?.ai?.request_limit ?? 0;
   const backupPrefs = settings?.backups ?? DEFAULT_BACKUPS;
+  const exportPrefs = settings?.export ?? DEFAULT_EXPORT;
   const intervalOptions = withCurrentValue(BACKUP_INTERVALS, backupPrefs.interval_hours);
   const keepOptions = withCurrentValue(BACKUP_KEEP_COPIES, backupPrefs.keep_copies);
   const aiDraft = aiDraftOverride ?? aiSaved;
@@ -273,6 +283,7 @@ export function SettingsPage() {
     { id: "appearance", label: t("sections.appearance") },
     { id: "language", label: t("sections.language") },
     { id: "editor", label: t("sections.editor") },
+    { id: "export", label: t("sections.export") },
     { id: "ocr", label: t("sections.ocr") },
     { id: "ai", label: t("sections.ai") },
     { id: "backups", label: t("sections.backups") },
@@ -518,6 +529,67 @@ export function SettingsPage() {
                 }}
               >
                 {t("editor.preview")}
+              </div>
+            </SettingsSection>
+
+            <SettingsSection id="export" icon={FileDown} title={t("sections.export")}>
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold">{t("export.title")}</h3>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("export.description")}
+                </p>
+              </div>
+
+              <SettingRow
+                title={t("export.pageSize")}
+                description={t("export.pageSizeDescription")}
+              >
+                <Select
+                  value={exportPrefs.pdf_page_size}
+                  onValueChange={(value) =>
+                    change({ export: { pdf_page_size: value as PdfPageSize } })
+                  }
+                >
+                  <SelectTrigger aria-label={t("export.pageSize")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="a4">{t("export.pageSizeValues.a4")}</SelectItem>
+                    <SelectItem value="letter">
+                      {t("export.pageSizeValues.letter")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </SettingRow>
+
+              <SettingRow
+                title={t("export.margin")}
+                description={t("export.marginDescription")}
+              >
+                <Select
+                  value={exportPrefs.pdf_margin}
+                  onValueChange={(value) =>
+                    change({ export: { pdf_margin: value as PdfMargin } })
+                  }
+                >
+                  <SelectTrigger aria-label={t("export.margin")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="narrow">
+                      {t("export.marginValues.narrow")}
+                    </SelectItem>
+                    <SelectItem value="normal">
+                      {t("export.marginValues.normal")}
+                    </SelectItem>
+                    <SelectItem value="wide">{t("export.marginValues.wide")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </SettingRow>
+
+              <div className="flex gap-2 rounded-lg border border-border/60 bg-background/50 p-3 text-2xs leading-relaxed text-muted-foreground">
+                <Info className="mt-0.5 size-icon-sm shrink-0 text-primary" aria-hidden="true" />
+                <p>{t("export.note")}</p>
               </div>
             </SettingsSection>
 

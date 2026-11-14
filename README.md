@@ -101,7 +101,7 @@ data on your device, and treats every AI result as a reviewable proposal.
   an optional generated number. Numbered figures can be cited from the text; the
   citation shows the figure's live number and follows it when it moves.
 - **Local Markdown, TXT, Word and PDF export** — the editor header downloads the saved
-  document as Markdown, plain text, a Word file or an A4 PDF. The export is generated
+  document as Markdown, plain text, a Word file or a PDF. The export is generated
   on this device by the backend from the same document the editor autosaves; unsaved
   changes are flushed first, and the download is refused if that save fails. Extracted
   text is escaped so it can never turn into Markdown structure or HTML, and equations
@@ -204,7 +204,7 @@ See [`docs/roadmap.md`](docs/roadmap.md).
 | Editor | Tiptap 3 (ProseMirror) |
 | Equations | KaTeX (bundled locally, MIT) |
 | Word export | python-docx, latex2mathml, mathml2omml (all run locally) |
-| PDF export | PyMuPDF HTML story engine (runs locally; A4, embedded figures, links) |
+| PDF export | PyMuPDF HTML story engine (runs locally; A4/Letter and margin presets, embedded figures, links) |
 | i18n | i18next / react-i18next (English default, Burmese secondary) |
 | Local API | Python, FastAPI, SQLAlchemy, Alembic, SQLite |
 | Image processing | Pillow |
@@ -455,8 +455,10 @@ or extension:
   equation keeps its `(n)` label after the equation. PDF has no bundled offline
   LaTeX typesetter, so it shows the exact LaTeX source in a code style instead of
   inventing a rendering.
-- PDF output is A4 with a page number in the footer. Figures are scaled to the text
-  width, links become clickable annotations, and headings and table-cell paragraphs
+- PDF output uses A4 with a page number in the footer. **Settings → Export** chooses
+  A4 or US Letter and a narrow, normal or wide margin (36, 50 or 72 pt); the choice
+  applies to every later PDF download. Figures are scaled to the text width, links
+  become clickable annotations, and headings and table-cell paragraphs
   keep their alignment. The document flows onto as many pages as needed; it does not
   reconstruct the original scan's page geometry. Burmese text needs a Unicode
   Myanmar font on the device (for example Noto Sans Myanmar, Padauk or the Windows
@@ -901,7 +903,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; automatic table/equation extraction pending |
-| 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4 PDF export with embedded figures and links |
+| 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
 | 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, page-scoped selective restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |

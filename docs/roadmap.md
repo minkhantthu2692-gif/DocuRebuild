@@ -16,7 +16,7 @@ presented in the UI until it actually works.
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word/PDF export; automatic table/equation extraction pending |
-| 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, footnotes, and local Markdown, TXT, Word and A4 PDF export with native Word equations/footnotes, embedded figures, links and notes |
+| 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, footnotes, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
@@ -437,14 +437,17 @@ the user must review every region before extracting it.
   includes the notes, so version previews and diffs see footnote edits.
 - `export` in `/api/meta`, English and Burmese labels, backend serializer and
   endpoint tests.
-- PDF export: A4 pages with a page-number footer, embedded project figures, clickable
-  links, native tables with merged cells, aligned headings and paragraphs, and a
-  numbered **Notes** list for footnotes. The output is deterministic and carries only
-  the project title plus `DocuRebuild` as creator/producer. Equations show their exact
-  LaTeX source because no offline LaTeX typesetter is bundled. Burmese text uses an
-  embedded Unicode Myanmar font found through `DOCUREBUILD_PDF_FONT`, known font
-  names or a font-directory scan; if none is available the export fails with
-  `pdf_font_missing` rather than writing replacement characters.
+- PDF export: A4 or US Letter pages with a page-number footer, embedded project
+  figures, clickable links, native tables with merged cells, aligned headings and
+  paragraphs, and a numbered **Notes** list for footnotes. **Settings → Export**
+  chooses the page size and a narrow/normal/wide margin (36/50/72 pt); both are
+  validated presets stored in app settings and applied to later downloads. The output
+  is deterministic and carries only the project title plus `DocuRebuild` as
+  creator/producer. Equations show their exact LaTeX source because no offline LaTeX
+  typesetter is bundled. Burmese text uses an embedded Unicode Myanmar font found
+  through `DOCUREBUILD_PDF_FONT`, known font names or a font-directory scan; if none
+  is available the export fails with `pdf_font_missing` rather than writing
+  replacement characters.
 
 **Current limitation** — export covers headings, paragraphs, lists, blockquotes,
 code blocks, rules, inline marks, tables, figures, equations and footnotes. Page

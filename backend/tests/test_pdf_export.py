@@ -410,6 +410,64 @@ def test_pdf_export_escapes_document_markup(tmp_path: Path) -> None:
     assert "<script>alert(1)</script> & <b>literal</b>" in text
 
 
+def test_pdf_export_honours_page_size_and_margin(tmp_path: Path) -> None:
+    data = render_pdf(
+        _content(), tmp_path, "Letter", page_size="letter", margin="wide"
+    )
+    page = _open(data)[0]
+    assert round(page.rect.width) == 612
+    assert round(page.rect.height) == 792
+
+    blocks = page.get_text("dict")["blocks"]
+    spans = [
+        span
+        for block in blocks
+        for line in block.get("lines", [])
+        for span in line.get("spans", [])
+    ]
+    left = min(span["bbox"][0] for span in spans)
+    assert 70 <= left <= 74
+
+
+def test_export_endpoint_uses_pdf_settings(client: TestClient, project: dict) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Configured PDF body."}],
+            }
+        ],
+    }
+    saved = client.put(
+        f"/api/projects/{project['id']}/document",
+        json={"content": content, "plain_text": "Configured PDF body."},
+    )
+    assert saved.status_code == 200, saved.text
+
+    updated = client.patch(
+        "/api/settings",
+        json={"export": {"pdf_page_size": "letter", "pdf_margin": "narrow"}},
+    )
+    assert updated.status_code == 200, updated.text
+
+    response = client.get(
+        f"/api/projects/{project['id']}/document/export",
+        params={"format": "pdf"},
+    )
+    assert response.status_code == 200, response.text
+    page = _open(response.content)[0]
+    assert round(page.rect.width) == 612
+    blocks = page.get_text("dict")["blocks"]
+    spans = [
+        span
+        for block in blocks
+        for line in block.get("lines", [])
+        for span in line.get("spans", [])
+    ]
+    assert min(span["bbox"][0] for span in spans) <= 38
+
+
 def test_export_endpoint_returns_pdf(client: TestClient, project: dict) -> None:
     content = {
         "type": "doc",

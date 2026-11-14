@@ -62,7 +62,7 @@ to the same local API; the API is not intended to be exposed publicly.
 The application database (`app.db`) contains only global state:
 
 - `projects` — id, name, description, directory, timestamps
-- `app_settings` — key/value JSON (appearance, language, editor, local AI profile, vision model, request limit and local backup preferences)
+- `app_settings` — key/value JSON (appearance, language, editor, export layout, local AI profile, vision model, request limit and local backup preferences)
 - `ai_usage` — local AI request metadata: provider, model, task, outcome, error code, project/page/block ids and timestamp; never document text
 - `schema_migrations` — created by Alembic
 
@@ -560,6 +560,13 @@ src/
   RFC 5987 `filename*` for Unicode project names.
 - `export_document` returns `(bytes, filename, content_type)` for all formats, so the
   route can record the exact byte size and the response can serve a binary body.
+- Export preferences live in `app_settings.export` as
+  `{ pdf_page_size, pdf_margin }`. Both are closed enums (`a4|letter`,
+  `narrow|normal|wide`), so an unknown value is rejected by request validation
+  (`422`) instead of silently falling back. The values are presets rather than
+  free-form measurements, which keeps the PDF geometry deterministic and testable;
+  the frontend defaults mirror the backend defaults (`a4`, `normal`). Only PDF
+  rendering reads them, so Markdown, TXT and DOCX output is unaffected.
 - `services.document_export` maps every known node deterministically: doc,
   paragraph, heading (levels 1–6, clamped), bullet/ordered lists (including
   `start`), listItem, blockquote, codeBlock (fence widened when the code contains
@@ -658,10 +665,14 @@ src/
 #### PDF (.pdf) rendering
 
 - `render_pdf` turns the stored JSON into escaped HTML and hands it to PyMuPDF's
-  `Story` engine, which lays the content out locally on A4 pages with 50 pt margins.
-  The page is a document flow, not the original scan geometry: text reflows and the
-  file grows to as many pages as needed. A footer writes `n / total` outside the text
-  rectangle.
+  `Story` engine, which lays the content out locally on A4 or US Letter pages. The
+  page size and margin are presets stored in app settings: `pdf_page_size` is `a4`
+  or `letter`, `pdf_margin` is `narrow`, `normal` or `wide` (36, 50 or 72 pt). The
+  route reads them from `get_app_settings` and passes them to `render_pdf`; text
+  width and maximum figure height are derived from the chosen media box, and a
+  zero body margin in the CSS makes the configured margin exact. The page is a
+  document flow, not the original scan geometry: text reflows and the file grows to
+  as many pages as needed. A footer writes `n / total` outside the text rectangle.
 - The same node set as the other renderers is mapped to HTML: headings (levels 1–6),
   paragraphs with alignment, lists (including `start` and nesting), blockquotes, code
   blocks, rules, native tables with `colspan`/`rowspan`, bold, italic, strike,

@@ -9,6 +9,10 @@ def test_default_settings(client: TestClient) -> None:
     assert settings["appearance"]["theme"] == "system"
     assert settings["appearance"]["accent"] == "indigo"
     assert settings["editor"]["document_font"] == "serif"
+    assert settings["export"] == {
+        "pdf_page_size": "a4",
+        "pdf_margin": "normal",
+    }
     assert settings["backups"] == {
         "auto_on_open": False,
         "interval_hours": 24,
@@ -42,3 +46,22 @@ def test_invalid_settings_are_rejected(client: TestClient) -> None:
 
     response = client.patch("/api/settings", json={"backups": {"interval_hours": 0}})
     assert response.status_code == 422
+
+    response = client.patch("/api/settings", json={"export": {"pdf_page_size": "a5"}})
+    assert response.status_code == 422
+
+    response = client.patch("/api/settings", json={"export": {"pdf_margin": "huge"}})
+    assert response.status_code == 422
+
+
+def test_export_settings_persist(client: TestClient) -> None:
+    response = client.patch(
+        "/api/settings",
+        json={"export": {"pdf_page_size": "letter", "pdf_margin": "wide"}},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["export"] == {
+        "pdf_page_size": "letter",
+        "pdf_margin": "wide",
+    }
+    assert client.get("/api/settings").json()["export"]["pdf_margin"] == "wide"

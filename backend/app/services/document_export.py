@@ -1385,12 +1385,10 @@ def render_docx(
 # --- PDF export ---------------------------------------------------------
 
 # A4 is the common page size for the documents this app rebuilds. The content
-# area leaves 50 pt on each side and enough room at the bottom for a page
-# number without the text touching it.
-_PDF_PAGE_SIZE = "a4"
-_PDF_MARGIN = 50.0
-_PDF_TEXT_WIDTH = 495.2755905511812
-_PDF_MAX_IMAGE_HEIGHT = 620.0
+# area leaves room on each side for the chosen margin and enough room at the
+# bottom for a page number without the text touching it.
+_PDF_PAGE_SIZES = {"a4": "a4", "letter": "letter"}
+_PDF_MARGINS = {"narrow": 36.0, "normal": 50.0, "wide": 72.0}
 _PDF_FONT_ENV = "DOCUREBUILD_PDF_FONT"
 _PDF_IMAGE_SUFFIXES = frozenset(
     {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff"}
@@ -1506,7 +1504,7 @@ def _pdf_css(font_file: str | None) -> str:
     return "\n".join(
         [
             face,
-            "body { font-size: 11pt; line-height: 1.45; color: #111; }",
+            "body { margin: 0; font-size: 11pt; line-height: 1.45; color: #111; }",
             "h1 { font-size: 21pt; margin: 16pt 0 8pt; }",
             "h2 { font-size: 17pt; margin: 14pt 0 7pt; }",
             "h3 { font-size: 14pt; margin: 12pt 0 6pt; }",
@@ -1566,11 +1564,18 @@ class _PdfRenderer:
     """Build escaped HTML for PyMuPDF's story engine."""
 
     def __init__(
-        self, content: dict[str, Any], project_dir: Path, archive: pymupdf.Archive
+        self,
+        content: dict[str, Any],
+        project_dir: Path,
+        archive: pymupdf.Archive,
+        text_width: float,
+        max_image_height: float,
     ) -> None:
         self.content = content
         self.project_dir = project_dir
         self.archive = archive
+        self.text_width = text_width
+        self.max_image_height = max_image_height
         self.figure_numbers = _figure_number_map(content)
         self.equation_numbers = _equation_number_map(content)
         self.footnotes: list[str] = []
@@ -1886,8 +1891,8 @@ class _PdfRenderer:
         height = max(height_px * 72.0 / 96.0, 1.0)
         scale = min(
             1.0,
-            _PDF_TEXT_WIDTH / width,
-            _PDF_MAX_IMAGE_HEIGHT / height,
+            self.text_width / width,
+            self.max_image_height / height,
         )
         result = (name, width * scale)
         self._image_cache[asset_id] = result
@@ -1903,9 +1908,21 @@ class _PdfRenderer:
 
 
 def render_pdf(
-    content: dict[str, Any], project_dir: Path, project_name: str = ""
+    content: dict[str, Any],
+    project_dir: Path,
+    project_name: str = "",
+    *,
+    page_size: str = "a4",
+    margin: str = "normal",
 ) -> bytes:
-    """Render the document as an A4 PDF, fully locally."""
+    """Render the document as an A4 or Letter PDF, fully locally."""
+    paper = _PDF_PAGE_SIZES.get(page_size, "a4")
+    margin_pt = _PDF_MARGINS.get(margin, _PDF_MARGINS["normal"])
+    media_box = pymupdf.paper_rect(paper)
+    text_width = media_box.width - 2 * margin_pt
+    # Keep a tall scan inside one page while leaving room for its caption.
+    max_image_height = max(120.0, media_box.height - 2 * margin_pt - 60.0)
+
     has_myanmar = _has_myanmar(content)
     font_path = _find_myanmar_font() if has_myanmar else None
     if has_myanmar and font_path is None:
@@ -1930,19 +1947,15 @@ def render_pdf(
                 "The Myanmar font could not be loaded for PDF export.",
             ) from exc
 
-    renderer = _PdfRenderer(content, project_dir, archive)
+    renderer = _PdfRenderer(
+        content, project_dir, archive, text_width, max_image_height
+    )
     story = pymupdf.Story(
         html=renderer.render(),
         user_css=_pdf_css(font_file),
         archive=archive,
     )
-    media_box = pymupdf.paper_rect(_PDF_PAGE_SIZE)
-    text_rect = media_box + (
-        _PDF_MARGIN,
-        _PDF_MARGIN,
-        -_PDF_MARGIN,
-        -_PDF_MARGIN,
-    )
+    text_rect = media_box + (margin_pt, margin_pt, -margin_pt, -margin_pt)
 
     def rectfn(_rect_num: int, _filled: pymupdf.Rect) -> tuple[Any, Any, None]:
         return media_box, text_rect, None
@@ -1951,10 +1964,10 @@ def render_pdf(
     total = document.page_count
     for index, page in enumerate(document, start=1):
         footer = pymupdf.Rect(
-            _PDF_MARGIN,
-            page.rect.height - 34,
-            page.rect.width - _PDF_MARGIN,
-            page.rect.height - 16,
+            margin_pt,
+            page.rect.height - margin_pt + 2,
+            page.rect.width - margin_pt,
+            page.rect.height - margin_pt + 20,
         )
         page.insert_textbox(
             footer,
@@ -1986,14 +1999,25 @@ def render_pdf(
 
 
 def export_document(
-    project_dir: Path, project_name: str, fmt: ExportFormat
+    project_dir: Path,
+    project_name: str,
+    fmt: ExportFormat,
+    *,
+    pdf_page_size: str = "a4",
+    pdf_margin: str = "normal",
 ) -> tuple[bytes, str, str]:
     """Return ``(body, filename, content_type)`` for the stored document."""
     document = documents.read_document(project_dir)
     if fmt == "docx":
         body = render_docx(document["content"], project_dir, project_name)
     elif fmt == "pdf":
-        body = render_pdf(document["content"], project_dir, project_name)
+        body = render_pdf(
+            document["content"],
+            project_dir,
+            project_name,
+            page_size=pdf_page_size,
+            margin=pdf_margin,
+        )
     else:
         body = render(document["content"], fmt).encode("utf-8")
     return body, download_filename(project_name, fmt), CONTENT_TYPES[fmt]

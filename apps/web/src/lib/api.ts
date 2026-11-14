@@ -21,6 +21,7 @@ import type {
   DocumentRevisionSummary,
   EditorSettings,
   ElementSummary,
+  ExportSettings,
   HealthStatus,
   HistoryEvent,
   ImportJob,
@@ -123,6 +124,7 @@ export interface SettingsPatch {
   language?: LanguageCode;
   appearance?: Partial<AppearanceSettings>;
   editor?: Partial<EditorSettings>;
+  export?: Partial<ExportSettings>;
   ai?: Partial<AiSettings>;
   backups?: Partial<BackupSettings>;
 }

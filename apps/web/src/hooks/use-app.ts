@@ -44,6 +44,7 @@ function mergeSettings(current: AppSettings | undefined, patch: SettingsPatch): 
       motion: "full",
     },
     editor: { document_font: "serif" },
+    export: { pdf_page_size: "a4", pdf_margin: "normal" },
     ai: {
       text: { provider: "ollama", base_url: "", model: "", allow_remote: false },
       vision_model: "",
@@ -56,6 +57,7 @@ function mergeSettings(current: AppSettings | undefined, patch: SettingsPatch): 
     ...(patch.language ? { language: patch.language } : {}),
     appearance: { ...base.appearance, ...patch.appearance },
     editor: { ...base.editor, ...patch.editor },
+    export: { ...base.export, ...patch.export },
     ai: { ...base.ai, ...patch.ai },
     backups: { ...base.backups, ...patch.backups },
   };
