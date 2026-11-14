@@ -194,6 +194,29 @@ export function useRestoreBackupDocument(projectId: string) {
   });
 }
 
+export function useRepairBackupPageAssets(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ token, pageId }: { token: string; pageId: string }) =>
+      api.repairBackupPageAssets(projectId, token, pageId),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["pages", projectId] });
+      void queryClient.invalidateQueries({
+        queryKey: ["ocr", "latest", projectId, result.page_id],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["elements", projectId, result.page_id],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["region-proposals", projectId, result.page_id],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["project-history", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
 export function useOpenProject(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({

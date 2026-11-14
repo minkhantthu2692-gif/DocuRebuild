@@ -46,7 +46,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.project_backup` | Verified local zip creation, safe validation/extraction and additive restore as a new project |
 | `services.backup_crypto` | Optional `.drbz` container for downloaded backups: scrypt key derivation, chunked AES-256-GCM, password and corruption errors |
 | `services.local_backups` | Local backup vault: verified copy creation, retention pruning, safe name resolution and opt-in automatic copies |
-| `services.page_restore` | Selective restore: staged archive inspection, short-lived selection tokens, additive page/asset/OCR/element copying and reversible document-version restore |
+| `services.page_restore` | Selective restore: staged archive inspection, short-lived selection tokens, additive page/asset/OCR/element copying, page-image repair and reversible document-version restore |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
@@ -180,6 +180,7 @@ POST   /api/projects/{id}/backup/selection
 POST   /api/projects/{id}/backups/{filename}/selection
 POST   /api/projects/{id}/backup/selection/{token}/pages
 POST   /api/projects/{id}/backup/selection/{token}/document
+POST   /api/projects/{id}/backup/selection/{token}/page-assets
 POST   /api/projects/restore
 GET    /api/projects/{id}/document
 PUT    /api/projects/{id}/document
@@ -870,7 +871,12 @@ src/
   `project_backup.extract_validated()`, so an uploaded or stored archive passes the
   same path, size, format, SQLite and migration checks. `inspect()` extracts it once,
   lists the pages and the document versions read-only, writes `selection.json`, then
-  renames the staging folder to `tmp/select-<token>/`. The token is a 32-hex UUID
+  renames the staging folder to `tmp/select-<token>/`. The current project database
+  is opened read-only and best effort, so each page also carries `in_project`,
+  `missing_slots` and `restorable_slots` for page-image repair; a missing or
+  unreadable current database reports pages as not in the project instead of failing
+  the inspection. A null display slot is normal for formats that use the original
+  directly and is not reported as missing. The token is a 32-hex UUID
   bound to the inspecting project and expires after one hour; `load()` returns
   `410 restore_selection_expired` for a missing, expired, malformed or other-project
   selection, so a stale dialog cannot apply a selection to a different project.
@@ -895,6 +901,20 @@ src/
   (`current`/`revision`), the revision id and the character count, but never the text.
   Page restore and document restore are independent: pages never touch the document,
   and a document restore never touches pages or assets.
+- `apply_page_assets()` repairs one page in the current project. It recomputes the
+  missing slots from the live database, so it never trusts the inspection snapshot
+  for what to overwrite. A slot is missing when it has no id (except a null display,
+  which is normal), its asset row is gone, its path is unsafe, or its file is missing
+  or empty. Only missing slots whose backup asset and file are usable are copied.
+  Before copying, a backup asset checksum is verified and a mismatch raises
+  `422 backup_checksum_mismatch` instead of copying corrupt data. If the current
+  asset row still exists the file is rewritten under the same asset id, so OCR
+  `source_asset_id` and element references stay valid; if the row is gone, the file
+  is copied under a new id and the page column is updated. A present image is never
+  overwritten. Copied files are removed if the transaction fails, and a
+  `page_assets_restored` event records the page id, number, slots and source. The
+  inspection token is not discarded, so several pages can be repaired from one
+  inspection.
 - Page restore is additive: it never replaces an existing page. At most 5000 pages are
   inspected or applied in one selection; empty or unknown ids are rejected with
   `page_selection_empty`/`page_selection_invalid`. A backup with no pages is still
@@ -1075,8 +1095,10 @@ src/
   itself. Only an explicit download can be password-protected (`.drbz`); vault and
   automatic copies stay plaintext, and the password is never persisted, so it cannot
   be recovered. Selective restore stages an extracted archive under `tmp/` for at most
-  one hour and deletes it after a successful apply, so a forgotten dialog does not
-  leave a second copy of the project on disk.
+  one hour and deletes it after a successful page or document apply; page-image
+  repair keeps it so several pages can be repaired from one inspection, and the
+  one-hour cleanup removes it afterwards. A forgotten dialog therefore does not leave
+  a second copy of the project on disk indefinitely.
 - Document links are validated to `http`, `https` or `mailto` before they enter the
   document, and Markdown export repeats that check. A stored `javascript:` or
   `data:` target is never emitted as a link; only its text is kept.

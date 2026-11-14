@@ -86,6 +86,9 @@ export interface ProjectBackupSummary {
   created_at: string;
 }
 
+/** Page image slots that can be repaired from a backup. */
+export type PageAssetSlot = "original" | "display" | "thumbnail";
+
 /** One page found in an inspected backup archive. */
 export interface BackupPageSummary {
   id: string;
@@ -95,6 +98,12 @@ export interface BackupPageSummary {
   width: number | null;
   height: number | null;
   original_filename: string | null;
+  /** Whether this page still exists in the inspecting project. */
+  in_project: boolean;
+  /** Image slots whose file is missing in the current project. */
+  missing_slots: PageAssetSlot[];
+  /** Missing slots the backup can actually supply. */
+  restorable_slots: PageAssetSlot[];
 }
 
 /** Pages and document versions found in an inspected archive. */
@@ -141,6 +150,13 @@ export interface DocumentRestoreResult {
 export interface PageRestoreResult {
   restored: number;
   page_numbers: number[];
+}
+
+/** Result of repairing a page's missing image files from a backup. */
+export interface PageAssetRepairResult {
+  page_id: string;
+  page_number: number;
+  restored_slots: PageAssetSlot[];
 }
 
 export type SourceKind = "image" | "pdf";

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.core.config import get_settings
 from app.db.project_schema import project_db
 from tests.conftest import upload_pages
 
@@ -280,3 +282,234 @@ def test_unknown_selection_token_expires(client: TestClient, project: dict) -> N
 
     malformed = _apply(client, project["id"], "g" * 32, ["page"])
     assert malformed.status_code == 410
+
+
+def _page_row(directory: str, page_id: str) -> dict:
+    with project_db(Path(directory)) as conn:
+        row = conn.execute("SELECT * FROM pages WHERE id = ?", (page_id,)).fetchone()
+    assert row is not None
+    return dict(row)
+
+
+def _asset_row(directory: str, asset_id: str) -> dict | None:
+    with project_db(Path(directory)) as conn:
+        row = conn.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
+    return dict(row) if row is not None else None
+
+
+def _remove_asset_file(directory: str, asset_id: str) -> None:
+    asset = _asset_row(directory, asset_id)
+    assert asset is not None
+    path = Path(directory) / asset["relative_path"]
+    assert path.is_file()
+    path.unlink()
+
+
+def _drop_page_asset(directory: str, page_id: str, column: str) -> None:
+    with project_db(Path(directory)) as conn:
+        page = conn.execute("SELECT * FROM pages WHERE id = ?", (page_id,)).fetchone()
+        asset_id = page[column]
+        conn.execute(f"UPDATE pages SET {column} = NULL WHERE id = ?", (page_id,))
+        conn.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
+
+
+def _add_ocr_run(directory: str, page_id: str, source_asset_id: str) -> None:
+    with project_db(Path(directory)) as conn:
+        conn.execute(
+            "INSERT INTO ocr_runs (id, page_id, status, engine, languages,"
+            " source_asset_id, rotation, text, created_at, updated_at, completed_at)"
+            " VALUES ('run-repair', ?, 'completed', 'tesseract', 'eng', ?, 0,"
+            " 'Repair text', '2026-01-01T00:00:00+00:00',"
+            " '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
+            (page_id, source_asset_id),
+        )
+
+
+def _repair(
+    client: TestClient, project_id: str, token: str, page_id: str
+):
+    return client.post(
+        f"/api/projects/{project_id}/backup/selection/{token}/page-assets",
+        json={"page_id": page_id},
+    )
+
+
+def test_repair_page_image_in_place_keeps_ocr_and_elements(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    page = upload_pages(client, project_id, ["page.png"])[0]
+    before = _page_row(project["directory"], page["id"])
+    original_id = before["original_asset_id"]
+    assert original_id is not None
+    _add_ocr_run(project["directory"], page["id"], original_id)
+    element = client.post(
+        f"/api/projects/{project_id}/pages/{page['id']}/elements",
+        json={
+            "kind": "figure",
+            "x": 10,
+            "y": 20,
+            "width": 100,
+            "height": 80,
+            "caption": "Kept crop",
+        },
+    )
+    assert element.status_code == 201, element.text
+    element_id = element.json()["id"]
+
+    filename = _make_copy(client, project_id)
+    _remove_asset_file(project["directory"], original_id)
+
+    selection = _inspect_copy(client, project_id, filename)
+    summary = selection["pages"][0]
+    assert summary["in_project"] is True
+    assert summary["missing_slots"] == ["original"]
+    assert summary["restorable_slots"] == ["original"]
+
+    response = _repair(client, project_id, selection["token"], page["id"])
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "page_id": page["id"],
+        "page_number": 1,
+        "restored_slots": ["original"],
+    }
+
+    after = _page_row(project["directory"], page["id"])
+    # The existing asset row is reused, so references stay valid.
+    assert after["original_asset_id"] == original_id
+    asset = _asset_row(project["directory"], original_id)
+    assert asset is not None
+    assert (Path(project["directory"]) / asset["relative_path"]).stat().st_size > 0
+
+    ocr = client.get(f"/api/projects/{project_id}/pages/{page['id']}/ocr").json()
+    assert ocr["id"] == "run-repair"
+    assert ocr["source_asset_id"] == original_id
+    assert ocr["stale"] is False
+
+    elements = client.get(
+        f"/api/projects/{project_id}/pages/{page['id']}/elements"
+    ).json()
+    assert [item["id"] for item in elements] == [element_id]
+
+    # The inspection token survives a repair, so several pages can be fixed.
+    again = _repair(client, project_id, selection["token"], page["id"])
+    assert again.status_code == 200, again.text
+    assert again.json()["restored_slots"] == []
+
+
+def test_repair_page_image_uses_a_new_asset_when_the_row_is_gone(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    page = upload_pages(client, project_id, ["page.png"])[0]
+    before = _page_row(project["directory"], page["id"])
+    original_id = before["original_asset_id"]
+
+    filename = _make_copy(client, project_id)
+    _drop_page_asset(project["directory"], page["id"], "original_asset_id")
+
+    selection = _inspect_copy(client, project_id, filename)
+    summary = selection["pages"][0]
+    assert summary["missing_slots"] == ["original"]
+    assert summary["restorable_slots"] == ["original"]
+
+    response = _repair(client, project_id, selection["token"], page["id"])
+    assert response.status_code == 200, response.text
+    assert response.json()["restored_slots"] == ["original"]
+
+    after = _page_row(project["directory"], page["id"])
+    assert after["original_asset_id"] is not None
+    assert after["original_asset_id"] != original_id
+    assert _asset_row(project["directory"], after["original_asset_id"]) is not None
+
+
+def test_repair_leaves_present_images_alone(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    page = upload_pages(client, project_id, ["page.png"])[0]
+    before = _page_row(project["directory"], page["id"])
+    filename = _make_copy(client, project_id)
+
+    selection = _inspect_copy(client, project_id, filename)
+    summary = selection["pages"][0]
+    assert summary["missing_slots"] == []
+    assert summary["restorable_slots"] == []
+
+    response = _repair(client, project_id, selection["token"], page["id"])
+    assert response.status_code == 200, response.text
+    assert response.json()["restored_slots"] == []
+
+    after = _page_row(project["directory"], page["id"])
+    for column in ("original_asset_id", "display_asset_id", "thumbnail_asset_id"):
+        assert after[column] == before[column]
+
+
+def test_repair_rejects_a_page_that_is_not_in_the_project(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    page = upload_pages(client, project_id, ["page.png"])[0]
+    filename = _make_copy(client, project_id)
+    with project_db(Path(project["directory"])) as conn:
+        conn.execute("DELETE FROM pages WHERE id = ?", (page["id"],))
+
+    selection = _inspect_copy(client, project_id, filename)
+    summary = selection["pages"][0]
+    assert summary["in_project"] is False
+    assert summary["missing_slots"] == []
+    assert summary["restorable_slots"] == []
+
+    response = _repair(client, project_id, selection["token"], page["id"])
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "page_not_in_project"
+
+
+def test_repair_refuses_a_corrupt_backup_image(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    page = upload_pages(client, project_id, ["page.png"])[0]
+    before = _page_row(project["directory"], page["id"])
+    original_id = before["original_asset_id"]
+
+    filename = _make_copy(client, project_id)
+    _remove_asset_file(project["directory"], original_id)
+    selection = _inspect_copy(client, project_id, filename)
+
+    staging = get_settings().tmp_dir / f"select-{selection['token']}"
+    with sqlite3.connect(staging / "project.db") as conn:
+        row = conn.execute(
+            "SELECT relative_path FROM assets WHERE id = ?", (original_id,)
+        ).fetchone()
+    assert row is not None
+    (staging / row[0]).write_bytes(b"not the original image")
+
+    response = _repair(client, project_id, selection["token"], page["id"])
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "backup_checksum_mismatch"
+
+
+def test_repair_reports_when_the_backup_file_is_missing(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    page = upload_pages(client, project_id, ["page.png"])[0]
+    before = _page_row(project["directory"], page["id"])
+    original_id = before["original_asset_id"]
+
+    filename = _make_copy(client, project_id)
+    _remove_asset_file(project["directory"], original_id)
+    selection = _inspect_copy(client, project_id, filename)
+
+    staging = get_settings().tmp_dir / f"select-{selection['token']}"
+    with sqlite3.connect(staging / "project.db") as conn:
+        row = conn.execute(
+            "SELECT relative_path FROM assets WHERE id = ?", (original_id,)
+        ).fetchone()
+    assert row is not None
+    (staging / row[0]).unlink()
+
+    response = _repair(client, project_id, selection["token"], page["id"])
+    assert response.status_code == 200, response.text
+    assert response.json()["restored_slots"] == []

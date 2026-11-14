@@ -34,6 +34,8 @@ from app.schemas.projects import (
     DocumentRevisionSummary,
     EncryptedBackupRequest,
     HistoryEventOut,
+    PageAssetRepairOut,
+    PageAssetRepairRequest,
     PageRestoreOut,
     PageRestoreRequest,
     ProjectBackupSummary,
@@ -296,6 +298,7 @@ async def inspect_uploaded_backup(
             usable,
             project_id=project.id,
             source_name=Path(file.filename or "backup").name,
+            project_dir=Path(project.directory),
         )
     finally:
         for path in cleanup:
@@ -309,7 +312,12 @@ async def inspect_uploaded_backup(
 def inspect_stored_backup(project: ProjectDep, filename: str) -> dict[str, Any]:
     """List the pages in one stored copy without restoring the whole project."""
     path = local_backups.resolve_copy(project.id, filename)
-    return page_restore.inspect(path, project_id=project.id, source_name=filename)
+    return page_restore.inspect(
+        path,
+        project_id=project.id,
+        source_name=filename,
+        project_dir=Path(project.directory),
+    )
 
 
 @router.post(
@@ -338,6 +346,21 @@ def restore_selected_document(
     result = page_restore.apply_document(project, selection, payload.revision_id)
     touch_project(session, project)
     page_restore.discard(token)
+    return result
+
+
+@router.post(
+    "/{project_id}/backup/selection/{token}/page-assets",
+    response_model=PageAssetRepairOut,
+)
+def repair_selected_page_assets(
+    project: ProjectDep, token: str, payload: PageAssetRepairRequest, session: DbSession
+) -> dict[str, Any]:
+    """Restore missing image files for one page without replacing present ones."""
+    selection = page_restore.load(token, project_id=project.id)
+    result = page_restore.apply_page_assets(project, selection, payload.page_id)
+    if result["restored_slots"]:
+        touch_project(session, project)
     return result
 
 

@@ -27,6 +27,7 @@ The restore is additive and scoped:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -41,7 +42,7 @@ from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.storage import atomic_write_json, resolve_within
 from app.db.models import Project
-from app.db.project_schema import project_db
+from app.db.project_schema import project_db, utc_iso
 from app.services import documents, project_backup
 from app.services import projects as project_service
 
@@ -52,6 +53,12 @@ SELECTION_VERSION = 2
 SELECTION_TTL_SECONDS = 60 * 60
 MAX_SELECTED_PAGES = 5000
 DOCUMENT_PREVIEW_LENGTH = 200
+# Page image slots in display order. The database column keeps the reference.
+ASSET_SLOTS = (
+    ("original", "original_asset_id"),
+    ("display", "display_asset_id"),
+    ("thumbnail", "thumbnail_asset_id"),
+)
 _TOKEN = re.compile(r"^[0-9a-f]{32}$")
 
 
@@ -84,14 +91,140 @@ def _created_at(manifest: dict[str, Any]) -> str:
     return value if isinstance(value, str) else ""
 
 
-def _list_pages(database_path: Path) -> list[dict[str, Any]]:
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _asset_path(base: Path, relative: Any) -> Path | None:
+    """Resolve an asset path inside a project folder, or None when unsafe."""
+    if not isinstance(relative, str) or not relative:
+        return None
+    try:
+        return resolve_within(base, relative)
+    except ValueError:
+        return None
+
+
+def _missing_asset(
+    connection: sqlite3.Connection, base: Path, asset_id: str | None
+) -> bool:
+    """True when a page slot cannot show its image.
+
+    A slot is missing when it has no id, its asset row is gone, its path is
+    unsafe, or the file is missing or empty. Anything else is left alone.
+    """
+    if not asset_id:
+        return True
+    row = connection.execute(
+        "SELECT relative_path FROM assets WHERE id = ?", (asset_id,)
+    ).fetchone()
+    if row is None:
+        return True
+    path = _asset_path(base, row["relative_path"])
+    if path is None or not path.is_file():
+        return True
+    try:
+        return path.stat().st_size == 0
+    except OSError:
+        return True
+
+
+def _available_asset(
+    connection: sqlite3.Connection, base: Path, asset_id: str | None
+) -> bool:
+    """True when the backup can supply this slot's file."""
+    return bool(asset_id) and not _missing_asset(connection, base, asset_id)
+
+
+def _page_asset_status(
+    connection: sqlite3.Connection, base: Path, page: sqlite3.Row
+) -> list[str]:
+    """Slot names whose image is missing in this project.
+
+    A null display slot is normal: most imports use the original directly and
+    only converted formats get a separate display file. It is therefore not
+    reported as missing on its own.
+    """
+    return [
+        slot
+        for slot, column in ASSET_SLOTS
+        if not (slot == "display" and page[column] is None)
+        and _missing_asset(connection, base, page[column])
+    ]
+
+
+def _list_pages(staging: Path, project_dir: Path) -> list[dict[str, Any]]:
+    """List backup pages, annotated with what this project is missing.
+
+    The current project database is opened read-only and best effort: if it is
+    absent or unreadable, every page is reported as not in this project instead
+    of failing the inspection.
+    """
+    database_path = staging / "project.db"
+    current: sqlite3.Connection | None = None
+    current_path = project_dir / "project.db"
+    if current_path.is_file():
+        try:
+            current = _open_readonly(current_path)
+        except sqlite3.DatabaseError:
+            current = None
+
     try:
         connection = _open_readonly(database_path)
         try:
             rows = connection.execute(
                 "SELECT id, page_number, source_kind, status, width, height,"
-                " original_filename FROM pages ORDER BY page_number ASC"
+                " original_filename, original_asset_id, display_asset_id,"
+                " thumbnail_asset_id FROM pages ORDER BY page_number ASC"
             ).fetchall()
+            pages: list[dict[str, Any]] = []
+            for row in rows:
+                in_project = False
+                missing_slots: list[str] = []
+                restorable_slots: list[str] = []
+                if current is not None:
+                    try:
+                        existing = current.execute(
+                            "SELECT * FROM pages WHERE id = ?", (row["id"],)
+                        ).fetchone()
+                        if existing is not None:
+                            in_project = True
+                            missing_slots = _page_asset_status(
+                                current, project_dir, existing
+                            )
+                            restorable_slots = [
+                                slot
+                                for slot in missing_slots
+                                if _available_asset(
+                                    connection, staging, row[f"{slot}_asset_id"]
+                                )
+                            ]
+                    except (sqlite3.DatabaseError, IndexError):
+                        # An unreadable or older current database must not stop
+                        # the inspection; report the page as not in this project.
+                        current.close()
+                        current = None
+                        in_project = False
+                        missing_slots = []
+                        restorable_slots = []
+                pages.append(
+                    {
+                        "id": row["id"],
+                        "page_number": row["page_number"],
+                        "source_kind": row["source_kind"],
+                        "status": row["status"],
+                        "width": row["width"],
+                        "height": row["height"],
+                        "original_filename": row["original_filename"],
+                        "in_project": in_project,
+                        "missing_slots": missing_slots,
+                        "restorable_slots": restorable_slots,
+                    }
+                )
         finally:
             connection.close()
     except sqlite3.DatabaseError as exc:
@@ -100,18 +233,10 @@ def _list_pages(database_path: Path) -> list[dict[str, Any]]:
             "backup_database_invalid",
             "The project database in the backup cannot be read.",
         ) from exc
-    return [
-        {
-            "id": row["id"],
-            "page_number": row["page_number"],
-            "source_kind": row["source_kind"],
-            "status": row["status"],
-            "width": row["width"],
-            "height": row["height"],
-            "original_filename": row["original_filename"],
-        }
-        for row in rows
-    ]
+    finally:
+        if current is not None:
+            current.close()
+    return pages
 
 
 def _preview(plain_text: str) -> str:
@@ -179,13 +304,13 @@ def _cleanup_stale() -> None:
 
 
 def inspect(
-    archive_path: Path, *, project_id: str, source_name: str
+    archive_path: Path, *, project_id: str, source_name: str, project_dir: Path
 ) -> dict[str, Any]:
     """Extract and validate an archive, then list pages and document versions."""
     extracted = project_backup.extract_validated(archive_path)
     staging = extracted.directory
     try:
-        pages = _list_pages(staging / "project.db")
+        pages = _list_pages(staging, project_dir)
         document = _list_document(staging / "project.db")
         if len(pages) > MAX_SELECTED_PAGES:
             raise AppError(
@@ -566,4 +691,184 @@ def apply_document(
         "revision_id": revision_id,
         "updated_at": document["updated_at"],
         "document": document,
+    }
+
+
+def _backup_asset_file(
+    source: sqlite3.Connection, staging: Path, asset_id: str | None
+) -> tuple[sqlite3.Row, Path] | None:
+    """Return a backup asset row and its verified file, or None when unusable."""
+    if not asset_id:
+        return None
+    row = source.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
+    if row is None:
+        return None
+    path = _asset_path(staging, row["relative_path"])
+    if path is None or not path.is_file():
+        return None
+    try:
+        if path.stat().st_size == 0:
+            return None
+    except OSError:
+        return None
+    checksum = row["checksum"]
+    if checksum and _sha256(path) != checksum:
+        raise AppError(
+            422,
+            "backup_checksum_mismatch",
+            "A page image in the backup does not match its checksum.",
+        )
+    return row, path
+
+
+def _restore_asset_in_place(
+    target: sqlite3.Connection,
+    project_dir: Path,
+    asset_id: str,
+    backup: sqlite3.Row,
+    source_path: Path,
+) -> None:
+    """Rewrite the file under an existing asset id, keeping references valid.
+
+    The asset row is kept so OCR ``source_asset_id`` and element references do
+    not become stale. If the row's stored path is unsafe, the id is kept but the
+    path is replaced with a safe name derived from the backup file.
+    """
+    row = target.execute(
+        "SELECT relative_path FROM assets WHERE id = ?", (asset_id,)
+    ).fetchone()
+    relative = row["relative_path"] if row is not None else None
+    target_path = _asset_path(project_dir, relative)
+    if target_path is None:
+        pure = PurePosixPath(str(backup["relative_path"]))
+        relative = str(pure.with_name(f"{asset_id}{pure.suffix}"))
+        target_path = resolve_within(project_dir, relative)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source_path, target_path)
+    target.execute(
+        "UPDATE assets SET relative_path = ?, mime_type = ?, byte_size = ?,"
+        " checksum = ?, width = ?, height = ? WHERE id = ?",
+        (
+            relative,
+            backup["mime_type"],
+            source_path.stat().st_size,
+            backup["checksum"],
+            backup["width"],
+            backup["height"],
+            asset_id,
+        ),
+    )
+
+
+def apply_page_assets(
+    project: Project, selection: Selection, page_id: str
+) -> dict[str, Any]:
+    """Restore missing image files for one existing page from the backup.
+
+    Only slots whose image is missing are touched. A present image is never
+    overwritten, and the page, its OCR runs and its elements keep their ids.
+    """
+    if page_id not in {str(page["id"]) for page in selection.pages}:
+        raise AppError(
+            422,
+            "page_selection_invalid",
+            "The selected page is not in this backup.",
+        )
+
+    project_dir = Path(project.directory)
+    staged_database = selection.directory / "project.db"
+    created_files: list[Path] = []
+    restored: list[str] = []
+    page_number = 0
+
+    source = _open_readonly(staged_database)
+    try:
+        with project_db(project_dir) as target:
+            current = target.execute(
+                "SELECT * FROM pages WHERE id = ?", (page_id,)
+            ).fetchone()
+            if current is None:
+                raise AppError(
+                    422,
+                    "page_not_in_project",
+                    "This page is not in the current project.",
+                )
+            page_number = int(current["page_number"])
+            backup = source.execute(
+                "SELECT * FROM pages WHERE id = ?", (page_id,)
+            ).fetchone()
+            if backup is None:
+                raise AppError(
+                    422,
+                    "page_selection_invalid",
+                    "The selected page is not in this backup.",
+                )
+
+            for slot, column in ASSET_SLOTS:
+                if not _missing_asset(target, project_dir, current[column]):
+                    continue
+                found = _backup_asset_file(
+                    source, selection.directory, backup[column]
+                )
+                if found is None:
+                    continue
+                backup_asset, source_path = found
+                current_id = current[column]
+                existing = (
+                    target.execute(
+                        "SELECT 1 FROM assets WHERE id = ?", (current_id,)
+                    ).fetchone()
+                    if current_id
+                    else None
+                )
+                if existing is not None:
+                    _restore_asset_in_place(
+                        target, project_dir, current_id, backup_asset, source_path
+                    )
+                else:
+                    new_id = _copy_asset(
+                        source,
+                        target,
+                        selection.directory,
+                        project_dir,
+                        backup[column],
+                        {},
+                        created_files,
+                    )
+                    if not new_id:
+                        continue
+                    target.execute(
+                        f"UPDATE pages SET {column} = ? WHERE id = ?",
+                        (new_id, page_id),
+                    )
+                restored.append(slot)
+
+            if restored:
+                target.execute(
+                    "UPDATE pages SET updated_at = ? WHERE id = ?",
+                    (utc_iso(), page_id),
+                )
+    except Exception:
+        for path in created_files:
+            path.unlink(missing_ok=True)
+        raise
+    finally:
+        source.close()
+
+    if restored:
+        project_service.record_history(
+            project_dir,
+            "page_assets_restored",
+            "Page image repaired from backup",
+            {
+                "page_id": page_id,
+                "page_number": page_number,
+                "slots": restored,
+                "source": selection.source_name,
+            },
+        )
+    return {
+        "page_id": page_id,
+        "page_number": page_number,
+        "restored_slots": restored,
     }

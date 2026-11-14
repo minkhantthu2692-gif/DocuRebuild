@@ -120,11 +120,12 @@ data on your device, and treats every AI result as a reviewable proposal.
   thumbnails, exports) from the dashboard or the workspace, optionally protected
   with a password (`.drbz`). Restoring a backup
   always creates a new project and never overwrites existing work. You can also
-  restore only chosen pages, or the document or one of its stored versions, from a
-  copy or uploaded archive into the current project. Pages are appended with new ids
-  and leave the document alone; a document restore saves the replaced text as a
-  version first, so it can be undone. Everything is written and read on this device;
-  nothing is uploaded.
+  restore only chosen pages, a page's missing image files, or the document or one of
+  its stored versions, from a copy or uploaded archive into the current project.
+  Pages are appended with new ids and leave the document alone; a page image repair
+  fills only missing files and keeps the page, OCR and elements; a document restore
+  saves the replaced text as a version first, so it can be undone. Everything is
+  written and read on this device; nothing is uploaded.
 - **Local backup vault** — keep verified copies of a project on this device from the
   workspace project menu. Copies are created when you ask, or after opening a project
   when you opt in and the newest copy is older than the configured interval. The
@@ -581,6 +582,11 @@ Backups are local files, not a cloud service and not a GitHub upload:
     stored version you pick. The state being replaced is saved as a local version
     first, so the restore itself can be undone from the version history. Pages,
     images and regions are not changed.
+  - **Page image** repairs a page whose original, display or thumbnail file is
+    missing. The dialog lists each backup page with its state, and only missing
+    files are copied; a present image is never overwritten. When the asset row still
+    exists the file is restored under the same id, so the page's OCR runs and
+    extracted regions stay valid. The page itself, its text and its elements are kept.
 - The archive size limit is `DOCUREBUILD_MAX_BACKUP_MB` (default 2048 MB, both
   upload and expanded size) and is reported to the UI through `/api/meta`.
 - Archive reading, extraction and database checks run in a temporary folder under
@@ -911,7 +917,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; automatic table/equation extraction pending |
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
-| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
+| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
 

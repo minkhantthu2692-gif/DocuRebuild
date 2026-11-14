@@ -29,6 +29,7 @@ import type {
   JSONContent,
   LanguageCode,
   OcrCapabilities,
+  PageAssetRepairResult,
   PageEdits,
   OcrRun,
   PageRestoreResult,
@@ -216,6 +217,11 @@ export const api = {
     request<DocumentRestoreResult>(
       `/projects/${projectId}/backup/selection/${encodeURIComponent(token)}/document`,
       { method: "POST", body: JSON.stringify({ revision_id: revisionId }) },
+    ),
+  repairBackupPageAssets: (projectId: string, token: string, pageId: string) =>
+    request<PageAssetRepairResult>(
+      `/projects/${projectId}/backup/selection/${encodeURIComponent(token)}/page-assets`,
+      { method: "POST", body: JSON.stringify({ page_id: pageId }) },
     ),
   listProjectHistory: (projectId: string, limit = 100) =>
     request<HistoryEvent[]>(`/projects/${projectId}/history?limit=${limit}`),

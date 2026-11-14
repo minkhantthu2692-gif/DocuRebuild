@@ -3,6 +3,7 @@ import {
   CircleAlert,
   FileArchive,
   FileText,
+  ImageOff,
   KeyRound,
   ListChecks,
   Upload,
@@ -12,8 +13,11 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import type {
+  BackupPageSummary,
   BackupSelection,
   DocumentRestoreResult,
+  PageAssetRepairResult,
+  PageAssetSlot,
   PageRestoreResult,
 } from "@docurebuild/shared-types";
 
@@ -37,6 +41,7 @@ import {
   useInspectStoredBackup,
   useInspectUploadedBackup,
   useProjectBackups,
+  useRepairBackupPageAssets,
   useRestoreBackupDocument,
   useRestoreSelectedPages,
 } from "@/hooks/use-projects";
@@ -46,7 +51,7 @@ import { formatDateTime, formatFileSize, resolveLocale } from "@/lib/format";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
 type BackupSource = "copy" | "upload";
-type RestoreMode = "pages" | "document";
+type RestoreMode = "pages" | "document" | "asset";
 const CURRENT_DOCUMENT = "current";
 
 interface RestorePagesDialogProps {
@@ -58,12 +63,13 @@ interface RestorePagesDialogProps {
 }
 
 /**
- * Copy chosen pages or a document version out of a backup.
+ * Copy chosen pages, page images or a document version out of a backup.
  *
  * A full restore always creates a new project. This dialog covers the smaller
- * cases: a page was deleted or damaged, or the document needs an older version.
- * Pages are appended after the last page with new ids; a document restore
- * replaces the live document only after snapshotting the state it replaces.
+ * cases: a page was deleted, a page image file is missing, or the document needs
+ * an older version. Pages are appended after the last page with new ids; a page
+ * image repair fills only missing files; a document restore replaces the live
+ * document only after snapshotting the state it replaces.
  */
 export function RestorePagesDialog({
   projectId,
@@ -82,6 +88,7 @@ export function RestorePagesDialog({
   const inspectUpload = useInspectUploadedBackup();
   const restore = useRestoreSelectedPages(projectId);
   const restoreDocument = useRestoreBackupDocument(projectId);
+  const repairAssets = useRepairBackupPageAssets(projectId);
   const { restoreDocumentIntoEditor } = useWorkspaceActions();
   const inputRef = useRef<HTMLInputElement>(null);
   const passwordId = useId();
@@ -96,6 +103,7 @@ export function RestorePagesDialog({
   const [selection, setSelection] = useState<BackupSelection | null>(null);
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [chosenDocument, setChosenDocument] = useState<string | null>(null);
+  const [chosenAssetPage, setChosenAssetPage] = useState<string | null>(null);
 
   const maxMb = metaQuery.data?.max_backup_mb ?? 2048;
   const inspecting = inspectCopy.isPending || inspectUpload.isPending;
@@ -108,6 +116,7 @@ export function RestorePagesDialog({
     setSelection(null);
     setChosen(new Set());
     setChosenDocument(null);
+    setChosenAssetPage(null);
     setError(null);
   };
 
@@ -151,6 +160,7 @@ export function RestorePagesDialog({
     setSelection(result);
     setChosen(new Set());
     setChosenDocument(null);
+    setChosenAssetPage(null);
     setError(null);
   };
 
@@ -161,6 +171,7 @@ export function RestorePagesDialog({
       setSelection(null);
       setChosen(new Set());
       setChosenDocument(null);
+      setChosenAssetPage(null);
     }
   };
 
@@ -234,6 +245,78 @@ export function RestorePagesDialog({
 
   const documentChosen = chosenDocument !== null;
 
+  const slotLabel = (slot: PageAssetSlot) =>
+    t(`restorePages.slot${slot.charAt(0).toUpperCase()}${slot.slice(1)}`);
+
+  const assetStatus = (page: BackupPageSummary) => {
+    if (!page.in_project) return t("restorePages.assetNotInProject");
+    if (page.missing_slots.length === 0) return t("restorePages.assetPresent");
+    if (page.restorable_slots.length === 0) {
+      return t("restorePages.assetUnavailable");
+    }
+    return t("restorePages.assetMissing", {
+      slots: page.missing_slots.map(slotLabel).join(", "),
+    });
+  };
+
+  const applyRepairResult = (result: PageAssetRepairResult) => {
+    setSelection((current) =>
+      current
+        ? {
+            ...current,
+            pages: current.pages.map((page) =>
+              page.id === result.page_id
+                ? {
+                    ...page,
+                    missing_slots: page.missing_slots.filter(
+                      (slot) => !result.restored_slots.includes(slot),
+                    ),
+                    restorable_slots: page.restorable_slots.filter(
+                      (slot) => !result.restored_slots.includes(slot),
+                    ),
+                  }
+                : page,
+            ),
+          }
+        : current,
+    );
+    setChosenAssetPage(null);
+  };
+
+  const submitRepair = () => {
+    if (!selection || !chosenAssetPage || repairAssets.isPending) return;
+    repairAssets.mutate(
+      { token: selection.token, pageId: chosenAssetPage },
+      {
+        onSuccess: (result) => {
+          if (result.restored_slots.length > 0) {
+            toast.success(
+              t("restorePages.assetSuccess", {
+                count: result.restored_slots.length,
+              }),
+            );
+          } else {
+            toast.error(t("restorePages.assetNothing"));
+          }
+          applyRepairResult(result);
+        },
+        onError: fail,
+      },
+    );
+  };
+
+  const selectedAssetPage =
+    selection?.pages.find((page) => page.id === chosenAssetPage) ?? null;
+  const canRepair = Boolean(
+    selectedAssetPage && selectedAssetPage.restorable_slots.length > 0,
+  );
+  const modeNote =
+    mode === "pages"
+      ? t("restorePages.note")
+      : mode === "document"
+        ? t("restorePages.documentNote")
+        : t("restorePages.assetNote");
+
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogContent className="max-w-xl">
@@ -261,6 +344,7 @@ export function RestorePagesDialog({
               options={[
                 { value: "pages", label: t("restorePages.modePages") },
                 { value: "document", label: t("restorePages.modeDocument") },
+                { value: "asset", label: t("restorePages.modeAsset") },
               ]}
             />
           </div>
@@ -423,9 +507,7 @@ export function RestorePagesDialog({
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="max-w-sm text-2xs leading-relaxed text-muted-foreground">
-              {mode === "pages"
-                ? t("restorePages.note")
-                : t("restorePages.documentNote")}
+              {modeNote}
             </p>
             <Button
               type="button"
@@ -582,9 +664,75 @@ export function RestorePagesDialog({
             </div>
           ) : null}
 
+          {mode === "asset" && selection ? (
+            <div className="rounded-lg border border-border/70 bg-background/40">
+              <div className="border-b border-border/60 px-3 py-2">
+                <p className="truncate text-xs font-medium">
+                  {t("restorePages.assetTitle")}
+                </p>
+                <p className="truncate text-2xs text-muted-foreground">
+                  {t("restorePages.assetFrom", { name: selection.source_name })}
+                </p>
+              </div>
+              {selection.pages.length === 0 ? (
+                <p className="px-3 py-4 text-2xs leading-relaxed text-muted-foreground">
+                  {t("restorePages.noPages")}
+                </p>
+              ) : (
+                <ul className="max-h-56 space-y-0.5 overflow-y-auto p-1.5">
+                  {selection.pages.map((page) => {
+                    const available =
+                      page.in_project && page.restorable_slots.length > 0;
+                    return (
+                      <li key={page.id}>
+                        <label
+                          className={
+                            available
+                              ? "flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 hover:bg-muted/40"
+                              : "flex items-start gap-2.5 rounded-md px-2 py-1.5 opacity-70"
+                          }
+                        >
+                          <input
+                            type="radio"
+                            name="restore-page-asset"
+                            className="mt-0.5 size-3.5 shrink-0 accent-primary"
+                            checked={chosenAssetPage === page.id}
+                            disabled={!available}
+                            aria-label={t("restorePages.selectAssetPage", {
+                              page: page.page_number,
+                            })}
+                            onChange={() => setChosenAssetPage(page.id)}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-medium">
+                              {t("restorePages.page", { page: page.page_number })}
+                            </span>
+                            <span className="block truncate text-2xs text-muted-foreground">
+                              {page.original_filename ||
+                                t("restorePages.unknownFile")}
+                            </span>
+                            <span className="mt-0.5 block text-2xs text-muted-foreground">
+                              {assetStatus(page)}
+                            </span>
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
+
           {selection && mode === "pages" && chosen.size === 0 ? (
             <p className="text-2xs text-muted-foreground">
               {t("restorePages.noSelection")}
+            </p>
+          ) : null}
+
+          {selection && mode === "asset" && !canRepair ? (
+            <p className="text-2xs text-muted-foreground">
+              {t("restorePages.noAssetSelection")}
             </p>
           ) : null}
 
@@ -612,7 +760,7 @@ export function RestorePagesDialog({
                   ? t("restorePages.restore", { count: chosen.size })
                   : t("restorePages.restoreIdle")}
             </Button>
-          ) : (
+          ) : mode === "document" ? (
             <Button
               type="button"
               disabled={
@@ -624,6 +772,17 @@ export function RestorePagesDialog({
               {restoreDocument.isPending
                 ? t("restorePages.restoringDocument")
                 : t("restorePages.restoreDocument")}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              disabled={!canRepair || repairAssets.isPending}
+              onClick={submitRepair}
+            >
+              {repairAssets.isPending ? <Spinner /> : <ImageOff />}
+              {repairAssets.isPending
+                ? t("restorePages.repairingAsset")
+                : t("restorePages.repairAsset")}
             </Button>
           )}
         </DialogFooter>

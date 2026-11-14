@@ -17,7 +17,7 @@ presented in the UI until it actually works.
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word/PDF export; automatic table/equation extraction pending |
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, footnotes, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
-| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
+| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
 
@@ -565,8 +565,16 @@ headers/footers, broader OMML coverage and a bundled offline LaTeX typesetter.
     stored version (`revision_id: null` means the current document). The replaced
     state is force-snapshotted as a local revision first, so the restore can be
     undone from the version history; pages and assets are not touched.
-  Empty or unknown selections, a missing document revision and expired tokens return
-  typed errors, and the dialog has page/document modes, select-all, a confirmation
+  - **Page image** repairs a page whose original, display or thumbnail file is
+    missing. Inspection annotates each backup page with whether it is still in the
+    project and which slots are missing and restorable. Only missing slots are
+    copied; a present image is never overwritten. When the asset row still exists the
+    file is rewritten under the same id, so OCR `source_asset_id` and element
+    references stay valid; otherwise a new asset id is used. Backup checksums are
+    verified before copying, and the page, its text and its elements are kept.
+  Empty or unknown selections, a missing document revision, a page that is not in
+  the current project, a corrupt backup image and expired tokens return typed errors.
+  The dialog has page, document and page-image modes, select-all, a confirmation
   count and a password field for encrypted uploads. A backup with no pages can still
   have its document restored.
 - Backend vault tests for create/list/download/delete/restore, retention pruning,
@@ -577,16 +585,21 @@ headers/footers, broader OMML coverage and a bundled offline LaTeX typesetter.
   cover a stored copy and an uploaded archive, OCR/AI/element remapping, document
   preservation for page restore, token expiry and project binding, document
   inspection, restoring the current document or one revision, the forced snapshot
-  and unknown-revision rejection. Component tests cover
-  listing, downloading, deleting and restoring with confirmation, creating from the
-  empty state, load errors, the download dialog's plain/protected validation, the
-  restore password field, inspecting and applying pages, and restoring a document
-  version. Dialogs, settings and strings exist in English and Burmese.
+  and unknown-revision rejection. Page-image tests cover inspection annotations,
+  in-place repair that keeps OCR and elements, new-asset repair, present-image
+  refusal, checksum mismatch, a page missing from the project and a missing backup
+  file. Component tests cover listing, downloading, deleting and restoring with
+  confirmation, creating from the empty state, load errors, the download dialog's
+  plain/protected validation, the restore password field, inspecting and applying
+  pages, restoring a document version, page-image statuses and repairing one image
+  without closing the dialog. Dialogs, settings and strings exist in English and
+  Burmese.
 
 **Pending**
 
-- Restoring an individual asset from an archive remains pending; selective restore
-  covers pages and the document. Editor undo/redo stays separate from revision
+- Restoring an individual figure crop (element asset) from an archive remains
+  pending; selective restore covers pages, the document and a page's original,
+  display and thumbnail images. Editor undo/redo stays separate from revision
   history.
 
 ## Phase 10 — Desktop, PWA and mobile distribution (planned)

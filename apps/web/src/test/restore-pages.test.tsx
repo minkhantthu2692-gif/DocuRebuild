@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   inspectUpload: vi.fn(),
   restore: vi.fn(),
   restoreDocument: vi.fn(),
+  repairAssets: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
@@ -46,6 +47,10 @@ vi.mock("@/hooks/use-projects", () => ({
     isPending: false,
     mutate: mocks.restoreDocument,
   }),
+  useRepairBackupPageAssets: () => ({
+    isPending: false,
+    mutate: mocks.repairAssets,
+  }),
 }));
 
 const selection: BackupSelection = {
@@ -61,6 +66,9 @@ const selection: BackupSelection = {
       width: 1200,
       height: 800,
       original_filename: "page-1.png",
+      in_project: true,
+      missing_slots: [],
+      restorable_slots: [],
     },
     {
       id: "page-2",
@@ -70,6 +78,9 @@ const selection: BackupSelection = {
       width: 1200,
       height: 800,
       original_filename: "page-2.png",
+      in_project: true,
+      missing_slots: ["display"],
+      restorable_slots: ["display"],
     },
   ],
   document: {
@@ -152,6 +163,7 @@ beforeEach(() => {
   mocks.inspectUpload.mockReset();
   mocks.restore.mockReset();
   mocks.restoreDocument.mockReset();
+  mocks.repairAssets.mockReset();
   mocks.toast.success.mockReset();
   mocks.toast.error.mockReset();
 });
@@ -373,5 +385,95 @@ describe("RestorePagesDialog", () => {
         expect.any(Object),
       ),
     );
+  });
+
+  it("lists page image status and repairs a missing image without closing", async () => {
+    mocks.inspectCopy.mockImplementation(
+      (_input: unknown, options: { onSuccess: (result: BackupSelection) => void }) =>
+        options.onSuccess(selection),
+    );
+    mocks.repairAssets.mockImplementation(
+      (
+        _input: { token: string; pageId: string },
+        options: {
+          onSuccess: (result: {
+            page_id: string;
+            page_number: number;
+            restored_slots: string[];
+          }) => void;
+        },
+      ) =>
+        options.onSuccess({
+          page_id: "page-2",
+          page_number: 2,
+          restored_slots: ["display"],
+        }),
+    );
+    const { onOpenChange } = renderDialog();
+
+    fireEvent.click(screen.getByText("Page image"));
+    fireEvent.click(screen.getByRole("radio", { name: /book-20261112\.zip/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Inspect backup" }));
+
+    expect(screen.getByText("Page images in this backup")).toBeInTheDocument();
+    expect(screen.getByText("Image is present")).toBeInTheDocument();
+    expect(screen.getByText("Missing: display")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Repair image" }),
+    ).toBeDisabled();
+
+    fireEvent.click(
+      screen.getByRole("radio", { name: "Repair image for page 2" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Repair image" }));
+
+    await waitFor(() =>
+      expect(mocks.repairAssets).toHaveBeenCalledWith(
+        { token: selection.token, pageId: "page-2" },
+        expect.any(Object),
+      ),
+    );
+    expect(mocks.toast.success).toHaveBeenCalledWith(
+      "Repaired 1 image file from this backup.",
+    );
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    await waitFor(() =>
+      expect(screen.getAllByText("Image is present")).toHaveLength(2),
+    );
+    expect(
+      screen.getByRole("button", { name: "Repair image" }),
+    ).toBeDisabled();
+  });
+
+  it("shows pages that are not in this project or cannot be repaired", async () => {
+    const partial: BackupSelection = {
+      ...selection,
+      pages: [
+        { ...selection.pages[0], in_project: false },
+        {
+          ...selection.pages[1],
+          missing_slots: ["original", "thumbnail"],
+          restorable_slots: [],
+        },
+      ],
+    };
+    mocks.inspectCopy.mockImplementation(
+      (_input: unknown, options: { onSuccess: (result: BackupSelection) => void }) =>
+        options.onSuccess(partial),
+    );
+    renderDialog();
+
+    fireEvent.click(screen.getByText("Page image"));
+    fireEvent.click(screen.getByRole("radio", { name: /book-20261112\.zip/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Inspect backup" }));
+
+    expect(screen.getByText("Not in this project")).toBeInTheDocument();
+    expect(screen.getByText("Backup image is missing")).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: "Repair image for page 1" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("radio", { name: "Repair image for page 2" }),
+    ).toBeDisabled();
   });
 });

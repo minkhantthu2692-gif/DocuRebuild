@@ -112,6 +112,12 @@ class BackupPageSummary(BaseModel):
     width: int | None = None
     height: int | None = None
     original_filename: str | None = None
+    # Whether this page still exists in the inspecting project, and which of its
+    # image slots are missing there. ``restorable_slots`` is the subset the
+    # backup can supply, so the dialog can offer a repair only when it can work.
+    in_project: bool = False
+    missing_slots: list[str] = Field(default_factory=list)
+    restorable_slots: list[str] = Field(default_factory=list)
 
 
 class BackupDocumentSummary(BaseModel):
@@ -154,6 +160,16 @@ class PageRestoreRequest(BaseModel):
 class PageRestoreOut(BaseModel):
     restored: int
     page_numbers: list[int]
+
+
+class PageAssetRepairRequest(BaseModel):
+    page_id: str = Field(min_length=1, max_length=64)
+
+
+class PageAssetRepairOut(BaseModel):
+    page_id: str
+    page_number: int
+    restored_slots: list[str]
 
 
 class DocumentRestoreRequest(BaseModel):
