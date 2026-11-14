@@ -116,7 +116,8 @@ data on your device, and treats every AI result as a reviewable proposal.
   text on screen.
 - **Project backup and restore** — download a verified `.zip` of a whole project
   (manifest, a consistent database snapshot, source and processed images,
-  thumbnails, exports) from the dashboard or the workspace. Restoring a backup
+  thumbnails, exports) from the dashboard or the workspace, optionally protected
+  with a password (`.drbz`). Restoring a backup
   always creates a new project and never overwrites existing work. Everything is
   written and read on this device; nothing is uploaded.
 - **Local backup vault** — keep verified copies of a project on this device from the
@@ -165,7 +166,7 @@ data on your device, and treats every AI result as a reviewable proposal.
 Structured element reconstruction (automatic table-cell extraction, automatic
 equation transcription, generative figure detection), cloud/free-tier AI providers,
 image-generation profiles, selective restore from an
-archive, backup encryption, PDF layout export, desktop packaging and PWA install
+archive, PDF layout export, desktop packaging and PWA install
 support are planned but not implemented. OCR extracts text blocks,
 reading order and conservative layout hints; it does not build table structure or
 transcribe equations. Region extraction produces exact pixel crops and can read
@@ -513,7 +514,17 @@ in this project:
 Backups are local files, not a cloud service and not a GitHub upload:
 
 - **Download backup** is available from the project card menu on the dashboard and
-  from the project menu inside the workspace.
+  from the project menu inside the workspace. The dialog downloads a plain `.zip`
+  by default, or a password-protected `.drbz` archive when you tick **Protect this
+  archive with a password**.
+- A protected archive is an authenticated container, not a zip with a password
+  flag: the zip is encrypted with AES-256-GCM in 1 MiB chunks using a key derived
+  from your password with scrypt. Any edit, reordering or truncation makes the
+  restore fail instead of producing damaged files. The password is sent in the
+  request body, used for that download only and never stored, logged or written to
+  the archive, so a forgotten password cannot be recovered. Use at least 8
+  characters. Only explicit downloads can be protected; vault copies and automatic
+  copies stay plaintext because they run without a user present.
 - The archive contains `manifest.json`, a transaction-consistent snapshot of
   `project.db`, every file under `source/`, `processed/`, `thumbnails/` and
   `exports/`, plus a small `backup.json` describing the archive format and the
@@ -523,9 +534,11 @@ Backups are local files, not a cloud service and not a GitHub upload:
   present in the archive. A backup that changed mid-write is refused
   (`backup_incomplete`) rather than silently saved incomplete. Backup is also
   refused while an import job is queued or running.
-- **Restore backup** on the dashboard accepts a `.zip` produced this way. The
-  archive is validated before anything is registered: safe paths only (no absolute
-  paths, `..`, drive letters or symlinks), a bounded total expanded size, required
+- **Restore backup** on the dashboard accepts a `.zip` or `.drbz` produced this way.
+  The file type is detected from its content, not its name, so a renamed archive
+  still works; an encrypted archive asks for its password. The archive is validated
+  before anything is registered: safe paths only (no absolute paths, `..`, drive
+  letters or symlinks), a bounded total expanded size, required
   entries, project/backup format versions, SQLite integrity, required tables and a
   database migration version no newer than this build.
 - A restore always creates a **new** project with a new id and a unique name
@@ -553,20 +566,22 @@ Backups are local files, not a cloud service and not a GitHub upload:
   local trash rather than destroying it.
 
 ```text
-GET    /api/projects/{project_id}/backup      # application/zip attachment
+GET    /api/projects/{project_id}/backup      # plain application/zip attachment
+POST   /api/projects/{project_id}/backup      # JSON {"password"} → encrypted .drbz
 GET    /api/projects/{project_id}/backups     # ProjectBackupSummary[]
 POST   /api/projects/{project_id}/backups     # create one verified copy → 201 summary
 GET    /api/projects/{project_id}/backups/{filename}  # application/zip attachment
 DELETE /api/projects/{project_id}/backups/{filename}  # delete one copy
 POST   /api/projects/{project_id}/backups/{filename}/restore  # restore as new project
-POST   /api/projects/restore                  # multipart field: file → 201 ProjectDetail
+POST   /api/projects/restore                  # multipart: file, optional password → 201 ProjectDetail
 ```
 
 Restore error codes: `backup_invalid`, `backup_missing_files`,
 `backup_unsafe_path`, `backup_database_invalid`, `backup_incompatible`,
 `backup_too_large`, `backup_import_running`, `backup_incomplete`,
-`backup_verification_failed`, `backup_restore_failed` and
-`project_storage_incomplete`.
+`backup_verification_failed`, `backup_restore_failed`, `backup_password_required`,
+`backup_password_too_short`, `backup_password_too_long`, `backup_wrong_password`,
+`backup_corrupt` and `project_storage_incomplete`.
 
 #### Optional scheduled copies
 
@@ -590,8 +605,8 @@ and retention as opening a project. Set `DOCUREBUILD_DATA_DIR` for the command i
 you run the app with a custom data folder. Schedule it with Windows Task Scheduler,
 cron or a systemd timer, and run it while the app is closed so two processes do not
 create a copy at the same moment. It makes no network request and copies nothing
-outside the local data folder. Selective restore and backup encryption remain
-unimplemented.
+outside the local data folder. Selective restore remains unimplemented; automatic
+and vault copies are never encrypted, and only an explicit download can be.
 
 ### PDF import
 
@@ -766,12 +781,13 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   implemented.
 - Autosave is debounced and best-effort when leaving the page. Document versions
   protect the saved document, but they live in the same project database and are
-  not a backup. Use **Download backup** or **Local backups** for a complete copy;
-  copies can be automatic after opening a project if you enable that setting, but
-  scheduled/background backups are not implemented, and an archive is not encrypted,
-  so it is only as safe as the folder you store it in. The vault keeps a configurable
-  number of copies per project (five by default) and is not a substitute for an
-  off-device backup.
+  not a backup. Use **Download backup** or **Local backups** for a complete copy.
+  Automatic copies after opening a project are opt-in, and the included
+  `app.scheduled_backup` command covers copies while the app is closed, but there
+  is no built-in background daemon. Only an explicit download can be
+  password-protected; automatic and vault copies are plaintext, and a lost password
+  cannot be recovered. The vault keeps a configurable number of copies per project
+  (five by default) and is not a substitute for an off-device backup.
 - A backup can only be restored by the same or a newer DocuRebuild build that
   understands its format; a backup created by a newer build is rejected as
   `backup_incompatible`. Restore is whole-project only: individual pages, assets or
@@ -850,7 +866,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT and Word; automatic table/equation extraction pending |
 | 8. Document editor and export | In progress: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT and Word export; PDF page layout pending |
-| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download, additive restore from upload or a stored vault copy, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers; selective restore and encryption pending |
+| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers; selective restore pending |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
 

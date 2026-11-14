@@ -34,23 +34,26 @@ htmlcov/
 coverage.xml
 
 # Local application data and user project data (Category C - never pushed)
-.data/
-data/
-projects/
-user-data/
+# These are anchored to the repository root on purpose. An unanchored
+# `projects/` would also ignore source folders such as
+# `apps/web/src/components/projects/`, which must be committed. If you point
+# DOCUREBUILD_DATA_DIR inside this repository somewhere else, add that folder
+# to this file before running the app.
+/data/
+/.data/
+/user-data/
+/projects/
+/backups/
+/exports/
+/thumbnails/
+/cache/
+/.trash/
 *.db
 *.sqlite
 *.sqlite3
 *.db-wal
 *.db-shm
 *.db-journal
-
-# Backups, exports and caches generated at runtime
-backups/
-exports/
-thumbnails/
-cache/
-.trash/
 
 # Test artefacts
 test-results/

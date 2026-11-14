@@ -43,6 +43,8 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.layout` | Shared deterministic block classification (heading, list, caption, equation, table-like grid, running header/footer, page number) for OCR and embedded PDF text |
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps, coalesced revision snapshots, manual checkpoints and restore |
 | `services.document_export` | Deterministic Tiptap-to-Markdown/TXT/DOCX rendering, escaping, OMML equations, figure embedding, native footnotes and download names |
+| `services.project_backup` | Verified local zip creation, safe validation/extraction and additive restore as a new project |
+| `services.backup_crypto` | Optional `.drbz` container for downloaded backups: scrypt key derivation, chunked AES-256-GCM, password and corruption errors |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
@@ -166,6 +168,7 @@ PATCH  /api/projects/{id}
 DELETE /api/projects/{id}
 POST   /api/projects/{id}/open
 GET    /api/projects/{id}/backup
+POST   /api/projects/{id}/backup
 GET    /api/projects/{id}/backups
 POST   /api/projects/{id}/backups
 GET    /api/projects/{id}/backups/{filename}
@@ -757,8 +760,24 @@ src/
   opened, renamed, replaced or deleted by a restore.
 - The frontend downloads through `fetch` (so error codes can be shown) and saves the
   blob; the Unicode name comes from RFC 5987 `filename*`, with the ASCII `filename`
-  as fallback. The restore dialog checks `.zip` and `max_backup_mb` before uploading
-  and explains that a new project will be created.
+  as fallback. The restore dialog checks `.zip`/`.drbz` and `max_backup_mb` before
+  uploading and explains that a new project will be created.
+- An explicit download can be password-protected. `POST /projects/{id}/backup` with
+  `{"password"}` wraps the verified zip in the `.drbz` container from
+  `services/backup_crypto.py`. The container is `MAGIC` (`DRBZ`), a version byte, a
+  16-byte salt and an 8-byte nonce prefix; a scrypt key (n=2^15, r=8, p=1) derives a
+  32-byte AES-256-GCM key, and each 1 MiB record is sealed with the header and record
+  index as associated data, followed by a zero-length terminator. A key-check record
+  in the header separates a wrong password (`backup_wrong_password`) from damage
+  (`backup_corrupt`). No extra compression is applied because the payload is already
+  a deflated zip. The password travels in the request body, is used for one response
+  and is never stored, logged or written into the archive.
+- Restore detects encryption by reading the file magic, not by its extension, so a
+  renamed `.drbz` still works and a plain zip is never decrypted. An encrypted upload
+  without a password fails with `backup_password_required`; the decrypted zip goes to
+  a second temporary file, and both temporary files are removed in `finally`. Vault
+  and automatic copies never take a password: they run without a user present, so
+  storing one would be worse than keeping them plaintext.
 - The local backup vault (`app/services/local_backups.py`) is separate from the
   one-off download: `create_copy()` builds the same verified archive through
   `project_backup.create_backup()` and moves it to
@@ -956,7 +975,9 @@ src/
   is opened, and no backup work happens while it is stopped. No backup content is
   uploaded, and the app does not sync archives to GitHub. An archive contains the
   original documents and extracted text, so it must be stored like the project folder
-  itself; it is not encrypted by the app.
+  itself. Only an explicit download can be password-protected (`.drbz`); vault and
+  automatic copies stay plaintext, and the password is never persisted, so it cannot
+  be recovered.
 - Document links are validated to `http`, `https` or `mailto` before they enter the
   document, and Markdown export repeats that check. A stored `javascript:` or
   `data:` target is never emitted as a link; only its text is kept.

@@ -92,3 +92,13 @@ class ProjectBackupSummary(BaseModel):
     filename: str
     byte_size: int
     created_at: str
+
+
+class EncryptedBackupRequest(BaseModel):
+    """Password for a one-off encrypted backup download.
+
+    The value is used to derive a key for this response only; it is never stored.
+    Length is validated in the service so the error carries a stable code.
+    """
+
+    password: str

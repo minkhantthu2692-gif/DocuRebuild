@@ -62,7 +62,8 @@ export function useDeleteProject() {
 
 export function useDownloadProjectBackup() {
   return useMutation({
-    mutationFn: (projectId: string) => api.downloadProjectBackup(projectId),
+    mutationFn: ({ projectId, password }: { projectId: string; password?: string }) =>
+      api.downloadProjectBackup(projectId, password),
   });
 }
 
@@ -119,7 +120,8 @@ export function useRestoreProjectBackupCopy(projectId: string) {
 export function useRestoreProjectBackup() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (file: File) => api.restoreProjectBackup(file),
+    mutationFn: ({ file, password }: { file: File; password?: string }) =>
+      api.restoreProjectBackup(file, password),
     onSuccess: (project) => {
       queryClient.setQueryData(["project", project.id], project);
       void queryClient.invalidateQueries({ queryKey: ["projects"] });

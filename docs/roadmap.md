@@ -17,7 +17,7 @@ presented in the UI until it actually works.
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word export; automatic table/equation extraction pending |
 | 8. Document editor and export | In progress | Core editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT and Word export with native equations and footnotes and embedded figures; PDF page layout pending |
-| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download, additive (new-project) restore from an upload or a stored vault copy, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers; selective restore and encryption pending |
+| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers; selective restore pending |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
 
@@ -477,10 +477,12 @@ headers/footers, page numbers, PDF layout export and broader OMML coverage.
   SQLite integrity, required tables and migration version, then registers the archive
   as a **new** project with a new id and a unique `(restored)` name. Existing projects
   are never overwritten, so the operation is additive and reversible.
-- Dashboard and workspace download entries, a restore dialog with client-side `.zip`
-  and `max_backup_mb` checks, English/Burmese strings and error codes, plus backend
-  round-trip, conflict-name, unsafe-path and invalid-archive tests and component
-  tests for the download name and restore dialog.
+- Dashboard and workspace download entries, a download dialog that chooses plain
+  `.zip` or a password-protected `.drbz`, a restore dialog with client-side
+  `.zip`/`.drbz` and `max_backup_mb` checks and an optional password field,
+  English/Burmese strings and error codes, plus backend round-trip, conflict-name,
+  unsafe-path and invalid-archive tests and component tests for the download name,
+  download dialog and restore dialog.
 - Project activity log: `GET /api/projects/{id}/history?limit=50` returns newest-first
   local events with metadata-only payloads. Imports, page processing, region
   extraction, OCR start/completion/failure, exports, backups and restores record
@@ -530,17 +532,25 @@ headers/footers, page numbers, PDF layout export and broader OMML coverage.
   retention, creates at most one due copy per project, continues after a per-project
   failure, prints a summary and exits with code 1 when any project failed. It is not
   a daemon and makes no network request.
+- Optional password-protected downloads: the download dialog can wrap the verified
+  zip in a `.drbz` container (`services/backup_crypto.py`) using scrypt key
+  derivation and chunked AES-256-GCM with a header key-check record. The password
+  is sent in the request body, never stored or logged, and restore detects the
+  container by content, asks for the password and reports wrong-password versus
+  damage separately. Vault and automatic copies stay plaintext by design.
 - Backend vault tests for create/list/download/delete/restore, retention pruning,
   missing projects, unsafe names, due checks, configurable retention, automatic-on-open
   (including the off-by-default and not-due paths) and moving a deleted project's
-  vault to trash, plus component tests for listing, downloading, deleting and
-  restoring with confirmation, creating from the empty state, load errors and the
-  Settings controls. The dialog, settings and strings exist in English and Burmese.
+  vault to trash, plus encryption round-trip, wrong-password, short-password,
+  tamper/truncation, plain-zip and vault-plaintext tests. Component tests cover
+  listing, downloading, deleting and restoring with confirmation, creating from the
+  empty state, load errors, the download dialog's plain/protected validation and the
+  restore password field. Dialogs, settings and strings exist in English and Burmese.
 
 **Pending**
 
-- Selective restore (single page, asset or version from an archive) and backup
-  encryption. Editor undo/redo stays separate from revision history.
+- Selective restore (single page, asset or version from an archive). Editor
+  undo/redo stays separate from revision history.
 
 ## Phase 10 — Desktop, PWA and mobile distribution (planned)
 
@@ -578,7 +588,9 @@ headers/footers, page numbers, PDF layout export and broader OMML coverage.
   removes them too. Project backup download, additive restore and the local vault
   remain manual/opt-in safeguards: automatic copies run only after opening a project,
   the vault keeps a configurable limited number of copies, is not encrypted and is not
-  synced off-device, so it is not a substitute for your own off-device backup.
+  synced off-device, so it is not a substitute for your own off-device backup. Only
+  an explicit download can be password-protected, and a forgotten password cannot be
+  recovered.
 
 ## Phase 3 definition of done (met)
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, BackgroundTasks, File, Query, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, Form, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
@@ -29,6 +29,7 @@ from app.schemas.projects import (
     DocumentPayload,
     DocumentRevisionOut,
     DocumentRevisionSummary,
+    EncryptedBackupRequest,
     HistoryEventOut,
     ProjectBackupSummary,
     ProjectCreate,
@@ -36,7 +37,7 @@ from app.schemas.projects import (
     ProjectSummary,
     ProjectUpdate,
 )
-from app.services import documents, projects as project_service
+from app.services import backup_crypto, documents, projects as project_service
 from app.services import history as history_service
 from app.services import imports as import_service
 from app.services import local_backups
@@ -77,23 +78,45 @@ def update_project(
     return _detail(updated)
 
 
-@router.get("/{project_id}/backup")
-def download_project_backup(project: ProjectDep) -> FileResponse:
-    """Build and download a verified local backup of the whole project."""
-    path, unicode_name, ascii_name, _size = project_backup.create_backup(project)
+def _backup_response(
+    path: Path, unicode_name: str, ascii_name: str, media_type: str
+) -> FileResponse:
     disposition = (
         f'attachment; filename="{ascii_name}"; '
         f"filename*=UTF-8''{quote(unicode_name, safe='')}"
     )
     return FileResponse(
         path,
-        media_type="application/zip",
+        media_type=media_type,
         headers={
             "Content-Disposition": disposition,
             "Cache-Control": "private, no-store",
         },
         background=BackgroundTask(path.unlink, missing_ok=True),
     )
+
+
+@router.get("/{project_id}/backup")
+def download_project_backup(project: ProjectDep) -> FileResponse:
+    """Build and download a verified local backup of the whole project."""
+    path, unicode_name, ascii_name, _size = project_backup.create_backup(project)
+    return _backup_response(path, unicode_name, ascii_name, "application/zip")
+
+
+@router.post("/{project_id}/backup")
+def download_encrypted_project_backup(
+    project: ProjectDep, payload: EncryptedBackupRequest
+) -> FileResponse:
+    """Download the same verified backup inside a password-encrypted container.
+
+    The password travels in the request body rather than the URL, and it is used
+    only for this response: nothing is stored, so a lost password cannot be
+    recovered by the app.
+    """
+    path, unicode_name, ascii_name, _size = project_backup.create_backup(
+        project, password=payload.password
+    )
+    return _backup_response(path, unicode_name, ascii_name, "application/octet-stream")
 
 
 @router.get("/{project_id}/backups", response_model=list[ProjectBackupSummary])
@@ -159,16 +182,18 @@ def restore_local_backup(
 async def restore_project_backup(
     session: DbSession,
     file: Annotated[UploadFile, File(description="DocuRebuild backup archive")],
+    password: Annotated[str | None, Form()] = None,
 ) -> dict[str, Any]:
     """Restore a backup as a new project. No existing project is overwritten."""
     settings = get_settings()
-    if Path(file.filename or "").suffix.lower() != ".zip":
-        raise AppError(422, "backup_invalid", "Choose a .zip backup file.")
+    if Path(file.filename or "").suffix.lower() not in {".zip", backup_crypto.ENCRYPTED_SUFFIX}:
+        raise AppError(422, "backup_invalid", "Choose a .zip or .drbz backup file.")
 
     temp_dir = settings.tmp_dir
     temp_dir.mkdir(parents=True, exist_ok=True)
-    handle, temp_name = tempfile.mkstemp(dir=str(temp_dir), suffix=".zip")
+    handle, temp_name = tempfile.mkstemp(dir=str(temp_dir), suffix=".upload")
     temp_path = Path(temp_name)
+    decrypted_path: Path | None = None
     limit = settings.max_backup_mb * 1024 * 1024
     size = 0
     try:
@@ -188,8 +213,28 @@ async def restore_project_backup(
         if size == 0:
             raise AppError(422, "backup_invalid", "The backup file is empty.")
 
+        # The container is detected by its content, not its name, so a renamed
+        # encrypted archive is still handled and a plain zip is never decrypted.
+        restore_path = temp_path
+        if backup_crypto.is_encrypted(temp_path):
+            if not password:
+                raise AppError(
+                    422,
+                    "backup_password_required",
+                    "This backup is encrypted. Enter its password to restore it.",
+                )
+            decrypted_handle, decrypted_name = tempfile.mkstemp(
+                dir=str(temp_dir), suffix=".zip"
+            )
+            os.close(decrypted_handle)
+            decrypted_path = Path(decrypted_name)
+            await run_in_threadpool(
+                backup_crypto.decrypt_file, temp_path, decrypted_path, password
+            )
+            restore_path = decrypted_path
+
         candidate = await run_in_threadpool(
-            project_backup.prepare_restore, temp_path
+            project_backup.prepare_restore, restore_path
         )
         try:
             project = project_backup.finalize_restore(session, candidate)
@@ -198,6 +243,8 @@ async def restore_project_backup(
             raise
     finally:
         temp_path.unlink(missing_ok=True)
+        if decrypted_path is not None:
+            decrypted_path.unlink(missing_ok=True)
     return _detail(project)
 
 

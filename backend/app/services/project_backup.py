@@ -33,6 +33,7 @@ from app.core.config import get_settings
 from app.core.errors import AppError
 from app.db.models import Project, utcnow
 from app.db.project_schema import PROJECT_MIGRATIONS, project_db
+from app.services import backup_crypto
 from app.services import projects as project_service
 from app.services.documents import ensure_document_row
 
@@ -68,12 +69,13 @@ def _clean_stem(name: str, *, ascii_only: bool) -> str:
     return cleaned or "project"
 
 
-def backup_filenames(project_name: str) -> tuple[str, str]:
+def backup_filenames(project_name: str, *, encrypted: bool = False) -> tuple[str, str]:
     """Unicode-preserving and portable ASCII names for the download."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    suffix = backup_crypto.ENCRYPTED_SUFFIX if encrypted else ".zip"
     return (
-        f"{_clean_stem(project_name, ascii_only=False)}-{stamp}.zip",
-        f"{_clean_stem(project_name, ascii_only=True)}-{stamp}.zip",
+        f"{_clean_stem(project_name, ascii_only=False)}-{stamp}{suffix}",
+        f"{_clean_stem(project_name, ascii_only=True)}-{stamp}{suffix}",
     )
 
 
@@ -130,9 +132,19 @@ def _missing_assets(database_path: Path, archive_names: set[str]) -> list[str]:
     return sorted(path for path in stored if path not in archive_names)
 
 
-def create_backup(project: Project) -> tuple[Path, str, str, int]:
-    """Write a verified zip archive and return (path, Unicode name, ASCII name, size)."""
+def create_backup(
+    project: Project, *, password: str | None = None
+) -> tuple[Path, str, str, int]:
+    """Write a verified archive and return (path, Unicode name, ASCII name, size).
+
+    When ``password`` is given the zip is wrapped in the encrypted container and
+    the returned path is that container; the plaintext zip is removed first. The
+    password is only used for this call and is never stored.
+    """
     settings = get_settings()
+    if password is not None:
+        # Fail before writing an archive that could not be encrypted.
+        backup_crypto.validate_password(password)
     directory = Path(project.directory)
     manifest_path = directory / "manifest.json"
     if not directory.is_dir() or not manifest_path.is_file():
@@ -203,19 +215,26 @@ def create_backup(project: Project) -> tuple[Path, str, str, int]:
                 "backup_verification_failed",
                 "The backup archive could not be verified.",
             )
+
+        if password is not None:
+            encrypted_path = archive_path.with_suffix(backup_crypto.ENCRYPTED_SUFFIX)
+            backup_crypto.encrypt_file(archive_path, encrypted_path, password)
+            archive_path.unlink(missing_ok=True)
+            archive_path = encrypted_path
     except Exception:
         archive_path.unlink(missing_ok=True)
         raise
     finally:
         database_copy.unlink(missing_ok=True)
 
-    unicode_name, ascii_name = backup_filenames(project.name)
+    encrypted = password is not None
+    unicode_name, ascii_name = backup_filenames(project.name, encrypted=encrypted)
     size = archive_path.stat().st_size
     project_service.record_history(
         directory,
         "project_backup_created",
         "Project backup created",
-        {"filename": unicode_name, "byte_size": size},
+        {"filename": unicode_name, "byte_size": size, "encrypted": encrypted},
     )
     return archive_path, unicode_name, ascii_name, size
 

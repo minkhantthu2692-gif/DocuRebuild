@@ -91,10 +91,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function download(path: string): Promise<{ blob: Blob; filename: string }> {
+async function download(
+  path: string,
+  init?: RequestInit,
+  fallbackName = "project-backup.zip",
+): Promise<{ blob: Blob; filename: string }> {
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}${path}`);
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        ...(typeof init?.body === "string" ? { "Content-Type": "application/json" } : {}),
+        ...init?.headers,
+      },
+    });
   } catch {
     throw new ApiError("network_unreachable", "The local backend is not reachable.", 0);
   }
@@ -103,9 +113,7 @@ async function download(path: string): Promise<{ blob: Blob; filename: string }>
   }
   return {
     blob: await response.blob(),
-    filename:
-      filenameFromDisposition(response.headers.get("Content-Disposition")) ??
-      "project-backup.zip",
+    filename: filenameFromDisposition(response.headers.get("Content-Disposition")) ?? fallbackName,
   };
 }
 
@@ -143,7 +151,16 @@ export const api = {
     request<ProjectDetail>(`/projects/${projectId}/open`, { method: "POST" }),
   deleteProject: (projectId: string) =>
     request<{ ok: boolean; trash_path: string }>(`/projects/${projectId}`, { method: "DELETE" }),
-  downloadProjectBackup: (projectId: string) => download(`/projects/${projectId}/backup`),
+  // A password is sent in the request body, never in the URL, and is used only
+  // for this download. Without one the archive stays a plain .zip.
+  downloadProjectBackup: (projectId: string, password?: string) =>
+    password
+      ? download(
+          `/projects/${projectId}/backup`,
+          { method: "POST", body: JSON.stringify({ password }) },
+          "project-backup.drbz",
+        )
+      : download(`/projects/${projectId}/backup`),
   listProjectBackups: (projectId: string) =>
     request<ProjectBackupSummary[]>(`/projects/${projectId}/backups`),
   createProjectBackupCopy: (projectId: string) =>
@@ -160,9 +177,11 @@ export const api = {
       `/projects/${projectId}/backups/${encodeURIComponent(filename)}/restore`,
       { method: "POST" },
     ),
-  restoreProjectBackup: (file: File) => {
+  restoreProjectBackup: (file: File, password?: string) => {
     const form = new FormData();
     form.append("file", file);
+    // Only sent when the user typed one; the backend ignores it for a plain zip.
+    if (password) form.append("password", password);
     return request<ProjectDetail>("/projects/restore", { method: "POST", body: form });
   },
   listProjectHistory: (projectId: string, limit = 100) =>

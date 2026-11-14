@@ -20,6 +20,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { DeleteProjectDialog } from "@/components/projects/delete-project-dialog";
 import { RenameProjectDialog } from "@/components/projects/rename-project-dialog";
 import { DownloadBackupMenuItem } from "@/components/projects/backup-actions";
+import { DownloadBackupDialog } from "@/components/projects/download-backup-dialog";
 import { EditorPanel } from "@/components/workspace/editor-panel";
 import { LocalBackupsDialog } from "@/components/workspace/local-backups-dialog";
 import { ProjectActivityDialog } from "@/components/workspace/project-activity-dialog";
@@ -77,6 +78,7 @@ export function WorkspacePage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
   const [backupsOpen, setBackupsOpen] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(false);
 
   useEffect(() => {
     if (!projectId || openedProjectId.current === projectId) return;
@@ -235,7 +237,7 @@ export function WorkspacePage() {
                 <span>{t("activity.open")}</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DownloadBackupMenuItem projectId={projectId} />
+              <DownloadBackupMenuItem onOpen={() => setBackupOpen(true)} />
               <DropdownMenuItem onSelect={() => setBackupsOpen(true)}>
                 <Archive />
                 <span>{t("backups.open")}</span>
@@ -358,6 +360,11 @@ export function WorkspacePage() {
         projectId={projectId}
         open={backupsOpen}
         onOpenChange={setBackupsOpen}
+      />
+      <DownloadBackupDialog
+        projectId={projectId}
+        open={backupOpen}
+        onOpenChange={setBackupOpen}
       />
       </div>
     </WorkspaceActionsProvider>

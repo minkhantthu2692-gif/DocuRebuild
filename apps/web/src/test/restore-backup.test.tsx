@@ -69,13 +69,13 @@ beforeEach(() => {
 });
 
 describe("RestoreBackupDialog", () => {
-  it("rejects files that are not zip backups", () => {
+  it("rejects files that are not backup archives", () => {
     renderDialog();
 
     chooseFile(new File(["content"], "backup.tar"));
 
     expect(
-      screen.getByText("Choose a .zip backup created by DocuRebuild."),
+      screen.getByText("Choose a .zip or .drbz backup created by DocuRebuild."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Restore project" })).toBeDisabled();
   });
@@ -94,7 +94,7 @@ describe("RestoreBackupDialog", () => {
   });
 
   it("restores a selected archive as a new project", async () => {
-    mocks.restore.mockImplementation((_file: File, options: {
+    mocks.restore.mockImplementation((_input: { file: File; password?: string }, options: {
       onSuccess: (project: ProjectDetail) => void;
     }) => options.onSuccess(restored));
     const { onRestored, onOpenChange } = renderDialog();
@@ -106,15 +106,43 @@ describe("RestoreBackupDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Restore project" }));
 
     await waitFor(() => expect(onRestored).toHaveBeenCalledWith(restored));
-    expect(mocks.restore).toHaveBeenCalledWith(file, expect.any(Object));
+    // A plain zip is restored without a password, so none is sent.
+    expect(mocks.restore).toHaveBeenCalledWith(
+      { file, password: undefined },
+      expect.any(Object),
+    );
     expect(mocks.toast.success).toHaveBeenCalledWith(
       "“Quantum Mechanics (restored)” was restored as a new project.",
     );
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it("accepts an encrypted .drbz archive and sends its password", async () => {
+    mocks.restore.mockImplementation((_input: { file: File; password?: string }, options: {
+      onSuccess: (project: ProjectDetail) => void;
+    }) => options.onSuccess(restored));
+    renderDialog();
+
+    const file = new File(["DRBZ"], "book-backup.drbz");
+    chooseFile(file);
+    expect(screen.getByText("book-backup.drbz")).toBeInTheDocument();
+
+    fireEvent.change(
+      screen.getByLabelText("Password (only for an encrypted backup)"),
+      { target: { value: "correct horse battery" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Restore project" }));
+
+    await waitFor(() =>
+      expect(mocks.restore).toHaveBeenCalledWith(
+        { file, password: "correct horse battery" },
+        expect.any(Object),
+      ),
+    );
+  });
+
   it("shows an error when the restore fails", async () => {
-    mocks.restore.mockImplementation((_file: File, options: {
+    mocks.restore.mockImplementation((_input: { file: File; password?: string }, options: {
       onError: (error: Error) => void;
     }) => options.onError(new Error("failed")));
     const { onRestored } = renderDialog();
