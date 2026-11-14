@@ -25,12 +25,15 @@ from app.schemas.pages import (
     RotateRequest,
 )
 from app.schemas.projects import (
+    BackupSelectionOut,
     DocumentOut,
     DocumentPayload,
     DocumentRevisionOut,
     DocumentRevisionSummary,
     EncryptedBackupRequest,
     HistoryEventOut,
+    PageRestoreOut,
+    PageRestoreRequest,
     ProjectBackupSummary,
     ProjectCreate,
     ProjectDetail,
@@ -41,6 +44,7 @@ from app.services import backup_crypto, documents, projects as project_service
 from app.services import history as history_service
 from app.services import imports as import_service
 from app.services import local_backups
+from app.services import page_restore
 from app.services import pages as page_service
 from app.services import project_backup
 from app.services.document_export import ExportFormat, export_document, safe_filename
@@ -174,25 +178,27 @@ def restore_local_backup(
     return _detail(restored)
 
 
-@router.post(
-    "/restore",
-    response_model=ProjectDetail,
-    status_code=status.HTTP_201_CREATED,
-)
-async def restore_project_backup(
-    session: DbSession,
-    file: Annotated[UploadFile, File(description="DocuRebuild backup archive")],
-    password: Annotated[str | None, Form()] = None,
-) -> dict[str, Any]:
-    """Restore a backup as a new project. No existing project is overwritten."""
+async def _receive_backup(
+    file: UploadFile, password: str | None
+) -> tuple[Path, list[Path]]:
+    """Stream an upload to tmp and decrypt it when needed.
+
+    Returns the usable archive path and the temporary files the caller must
+    remove. The password is never stored: it is used to derive a key for this
+    request only.
+    """
     settings = get_settings()
-    if Path(file.filename or "").suffix.lower() not in {".zip", backup_crypto.ENCRYPTED_SUFFIX}:
+    if Path(file.filename or "").suffix.lower() not in {
+        ".zip",
+        backup_crypto.ENCRYPTED_SUFFIX,
+    }:
         raise AppError(422, "backup_invalid", "Choose a .zip or .drbz backup file.")
 
     temp_dir = settings.tmp_dir
     temp_dir.mkdir(parents=True, exist_ok=True)
     handle, temp_name = tempfile.mkstemp(dir=str(temp_dir), suffix=".upload")
     temp_path = Path(temp_name)
+    cleanup = [temp_path]
     decrypted_path: Path | None = None
     limit = settings.max_backup_mb * 1024 * 1024
     size = 0
@@ -215,7 +221,7 @@ async def restore_project_backup(
 
         # The container is detected by its content, not its name, so a renamed
         # encrypted archive is still handled and a plain zip is never decrypted.
-        restore_path = temp_path
+        usable = temp_path
         if backup_crypto.is_encrypted(temp_path):
             if not password:
                 raise AppError(
@@ -228,13 +234,33 @@ async def restore_project_backup(
             )
             os.close(decrypted_handle)
             decrypted_path = Path(decrypted_name)
+            cleanup.append(decrypted_path)
             await run_in_threadpool(
                 backup_crypto.decrypt_file, temp_path, decrypted_path, password
             )
-            restore_path = decrypted_path
+            usable = decrypted_path
+    except Exception:
+        for path in cleanup:
+            path.unlink(missing_ok=True)
+        raise
+    return usable, cleanup
 
+
+@router.post(
+    "/restore",
+    response_model=ProjectDetail,
+    status_code=status.HTTP_201_CREATED,
+)
+async def restore_project_backup(
+    session: DbSession,
+    file: Annotated[UploadFile, File(description="DocuRebuild backup archive")],
+    password: Annotated[str | None, Form()] = None,
+) -> dict[str, Any]:
+    """Restore a backup as a new project. No existing project is overwritten."""
+    usable, cleanup = await _receive_backup(file, password)
+    try:
         candidate = await run_in_threadpool(
-            project_backup.prepare_restore, restore_path
+            project_backup.prepare_restore, usable
         )
         try:
             project = project_backup.finalize_restore(session, candidate)
@@ -242,10 +268,60 @@ async def restore_project_backup(
             shutil.rmtree(candidate.directory, ignore_errors=True)
             raise
     finally:
-        temp_path.unlink(missing_ok=True)
-        if decrypted_path is not None:
-            decrypted_path.unlink(missing_ok=True)
+        for path in cleanup:
+            path.unlink(missing_ok=True)
     return _detail(project)
+
+
+@router.post(
+    "/{project_id}/backup/selection",
+    response_model=BackupSelectionOut,
+)
+async def inspect_uploaded_backup(
+    project: ProjectDep,
+    file: Annotated[UploadFile, File(description="DocuRebuild backup archive")],
+    password: Annotated[str | None, Form()] = None,
+) -> dict[str, Any]:
+    """List the pages in an uploaded archive so the user can choose a subset.
+
+    Nothing is registered or changed here. The validated extraction is kept for
+    a short time and identified by an opaque token.
+    """
+    usable, cleanup = await _receive_backup(file, password)
+    try:
+        return await run_in_threadpool(
+            page_restore.inspect,
+            usable,
+            project_id=project.id,
+            source_name=Path(file.filename or "backup").name,
+        )
+    finally:
+        for path in cleanup:
+            path.unlink(missing_ok=True)
+
+
+@router.post(
+    "/{project_id}/backups/{filename}/selection",
+    response_model=BackupSelectionOut,
+)
+def inspect_stored_backup(project: ProjectDep, filename: str) -> dict[str, Any]:
+    """List the pages in one stored copy without restoring the whole project."""
+    path = local_backups.resolve_copy(project.id, filename)
+    return page_restore.inspect(path, project_id=project.id, source_name=filename)
+
+
+@router.post(
+    "/{project_id}/backup/selection/{token}/pages",
+    response_model=PageRestoreOut,
+)
+def restore_selected_pages(
+    project: ProjectDep, token: str, payload: PageRestoreRequest
+) -> dict[str, Any]:
+    """Append the chosen pages to this project. Existing pages are untouched."""
+    selection = page_restore.load(token, project_id=project.id)
+    result = page_restore.apply(project, selection, payload.page_ids)
+    page_restore.discard(token)
+    return result
 
 
 @router.post("/{project_id}/open", response_model=ProjectDetail)

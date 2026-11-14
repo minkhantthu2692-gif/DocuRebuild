@@ -14,6 +14,7 @@ import type {
   AppMeta,
   AppSettings,
   AppearanceSettings,
+  BackupSelection,
   BackupSettings,
   DocumentRecord,
   DocumentRevision,
@@ -28,6 +29,7 @@ import type {
   OcrCapabilities,
   PageEdits,
   OcrRun,
+  PageRestoreResult,
   PageSummary,
   ProjectBackupSummary,
   ProjectDetail,
@@ -184,6 +186,25 @@ export const api = {
     if (password) form.append("password", password);
     return request<ProjectDetail>("/projects/restore", { method: "POST", body: form });
   },
+  inspectUploadedBackup: (projectId: string, file: File, password?: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (password) form.append("password", password);
+    return request<BackupSelection>(`/projects/${projectId}/backup/selection`, {
+      method: "POST",
+      body: form,
+    });
+  },
+  inspectStoredBackup: (projectId: string, filename: string) =>
+    request<BackupSelection>(
+      `/projects/${projectId}/backups/${encodeURIComponent(filename)}/selection`,
+      { method: "POST" },
+    ),
+  restoreSelectedPages: (projectId: string, token: string, pageIds: string[]) =>
+    request<PageRestoreResult>(
+      `/projects/${projectId}/backup/selection/${encodeURIComponent(token)}/pages`,
+      { method: "POST", body: JSON.stringify({ page_ids: pageIds }) },
+    ),
   listProjectHistory: (projectId: string, limit = 100) =>
     request<HistoryEvent[]>(`/projects/${projectId}/history?limit=${limit}`),
 

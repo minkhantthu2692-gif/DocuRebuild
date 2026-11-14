@@ -102,3 +102,31 @@ class EncryptedBackupRequest(BaseModel):
     """
 
     password: str
+
+
+class BackupPageSummary(BaseModel):
+    id: str
+    page_number: int
+    source_kind: str
+    status: str
+    width: int | None = None
+    height: int | None = None
+    original_filename: str | None = None
+
+
+class BackupSelectionOut(BaseModel):
+    """Pages found in an inspected archive, keyed by a short-lived token."""
+
+    token: str
+    source_name: str
+    created_at: str
+    pages: list[BackupPageSummary]
+
+
+class PageRestoreRequest(BaseModel):
+    page_ids: list[str]
+
+
+class PageRestoreOut(BaseModel):
+    restored: int
+    page_numbers: list[int]

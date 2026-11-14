@@ -129,6 +129,46 @@ export function useRestoreProjectBackup() {
   });
 }
 
+export function useInspectUploadedBackup() {
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      file,
+      password,
+    }: {
+      projectId: string;
+      file: File;
+      password?: string;
+    }) => api.inspectUploadedBackup(projectId, file, password),
+  });
+}
+
+export function useInspectStoredBackup() {
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      filename,
+    }: {
+      projectId: string;
+      filename: string;
+    }) => api.inspectStoredBackup(projectId, filename),
+  });
+}
+
+export function useRestoreSelectedPages(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ token, pageIds }: { token: string; pageIds: string[] }) =>
+      api.restoreSelectedPages(projectId, token, pageIds),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["pages", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["project-history", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
 export function useOpenProject(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({

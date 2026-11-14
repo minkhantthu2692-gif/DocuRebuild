@@ -3,6 +3,7 @@ import {
   Archive,
   ArrowLeft,
   CircleAlert,
+  CopyPlus,
   FileText,
   Image as ImageIcon,
   MoreHorizontal,
@@ -24,6 +25,7 @@ import { DownloadBackupDialog } from "@/components/projects/download-backup-dial
 import { EditorPanel } from "@/components/workspace/editor-panel";
 import { LocalBackupsDialog } from "@/components/workspace/local-backups-dialog";
 import { ProjectActivityDialog } from "@/components/workspace/project-activity-dialog";
+import { RestorePagesDialog } from "@/components/workspace/restore-pages-dialog";
 import { SourcePanel } from "@/components/workspace/source-panel";
 import { WorkspaceActionsProvider } from "@/components/workspace/workspace-actions";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +81,7 @@ export function WorkspacePage() {
   const [activityOpen, setActivityOpen] = useState(false);
   const [backupsOpen, setBackupsOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
+  const [restorePagesOpen, setRestorePagesOpen] = useState(false);
 
   useEffect(() => {
     if (!projectId || openedProjectId.current === projectId) return;
@@ -242,6 +245,10 @@ export function WorkspacePage() {
                 <Archive />
                 <span>{t("backups.open")}</span>
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setRestorePagesOpen(true)}>
+                <CopyPlus />
+                <span>{t("restorePages.open")}</span>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
                 <Pencil />
@@ -365,6 +372,11 @@ export function WorkspacePage() {
         projectId={projectId}
         open={backupOpen}
         onOpenChange={setBackupOpen}
+      />
+      <RestorePagesDialog
+        projectId={projectId}
+        open={restorePagesOpen}
+        onOpenChange={setRestorePagesOpen}
       />
       </div>
     </WorkspaceActionsProvider>

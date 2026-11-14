@@ -63,6 +63,16 @@ class RestoreCandidate:
     file_count: int
 
 
+@dataclass(frozen=True)
+class ExtractedArchive:
+    """A validated archive extracted into a staging folder."""
+
+    directory: Path
+    manifest: dict[str, Any]
+    metadata: dict[str, Any]
+    file_count: int
+
+
 def _clean_stem(name: str, *, ascii_only: bool) -> str:
     cleaned = (ASCII_FILENAME if ascii_only else UNSAFE_FILENAME).sub("-", name.strip())
     cleaned = cleaned.strip(" .-_")[:80].strip(" .-_")
@@ -372,8 +382,13 @@ def _parse_created_at(value: Any) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def prepare_restore(archive_path: Path) -> RestoreCandidate:
-    """Validate an uploaded archive and extract it into a staging folder."""
+def extract_validated(archive_path: Path) -> "ExtractedArchive":
+    """Validate an archive and extract it into a staging folder.
+
+    The caller owns the staging folder: it must move it into a project directory
+    or remove it. ``backup.json`` is kept so callers can read provenance; a full
+    restore removes it before registering the project.
+    """
     settings = get_settings()
     settings.tmp_dir.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(dir=str(settings.tmp_dir), prefix="restore-"))
@@ -416,23 +431,40 @@ def prepare_restore(archive_path: Path) -> RestoreCandidate:
                 "backup_incompatible",
                 "The backup uses an unsupported backup format.",
             )
+        _validate_database(staging / "project.db")
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+
+    return ExtractedArchive(
+        directory=staging,
+        manifest=manifest,
+        metadata=metadata,
+        file_count=file_count,
+    )
+
+
+def prepare_restore(archive_path: Path) -> RestoreCandidate:
+    """Validate an uploaded archive and extract it into a staging folder."""
+    extracted = extract_validated(archive_path)
+    staging = extracted.directory
+    try:
+        manifest = extracted.manifest
         name = manifest.get("name")
         if not isinstance(name, str) or not name.strip():
             raise AppError(422, "backup_invalid", "The backup has no project name.")
         description = manifest.get("description")
         if not isinstance(description, str):
             description = ""
-        _validate_database(staging / "project.db")
-
         candidate = RestoreCandidate(
             directory=staging,
             name=" ".join(name.split())[:MAX_NAME_LENGTH],
             description=description.strip()[:MAX_DESCRIPTION_LENGTH],
             created_at=_parse_created_at(manifest.get("created_at")),
             original_project_id=str(
-                metadata.get("project_id") or manifest.get("project_id") or ""
+                extracted.metadata.get("project_id") or manifest.get("project_id") or ""
             ),
-            file_count=file_count,
+            file_count=extracted.file_count,
         )
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)

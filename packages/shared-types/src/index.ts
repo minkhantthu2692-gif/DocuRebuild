@@ -78,6 +78,31 @@ export interface ProjectBackupSummary {
   created_at: string;
 }
 
+/** One page found in an inspected backup archive. */
+export interface BackupPageSummary {
+  id: string;
+  page_number: number;
+  source_kind: string;
+  status: string;
+  width: number | null;
+  height: number | null;
+  original_filename: string | null;
+}
+
+/** Pages found in an inspected archive, keyed by a short-lived token. */
+export interface BackupSelection {
+  token: string;
+  source_name: string;
+  created_at: string;
+  pages: BackupPageSummary[];
+}
+
+/** Result of appending selected pages to the current project. */
+export interface PageRestoreResult {
+  restored: number;
+  page_numbers: number[];
+}
+
 export type SourceKind = "image" | "pdf";
 export type PageStatus = "imported" | "processing" | "ready" | "failed";
 export type ImportJobStatus =

@@ -45,6 +45,8 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.document_export` | Deterministic Tiptap-to-Markdown/TXT/DOCX rendering, escaping, OMML equations, figure embedding, native footnotes and download names |
 | `services.project_backup` | Verified local zip creation, safe validation/extraction and additive restore as a new project |
 | `services.backup_crypto` | Optional `.drbz` container for downloaded backups: scrypt key derivation, chunked AES-256-GCM, password and corruption errors |
+| `services.local_backups` | Local backup vault: verified copy creation, retention pruning, safe name resolution and opt-in automatic copies |
+| `services.page_restore` | Page-scoped selective restore: staged archive inspection, short-lived selection tokens and additive page/asset/OCR/element copying |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
@@ -174,6 +176,9 @@ POST   /api/projects/{id}/backups
 GET    /api/projects/{id}/backups/{filename}
 DELETE /api/projects/{id}/backups/{filename}
 POST   /api/projects/{id}/backups/{filename}/restore
+POST   /api/projects/{id}/backup/selection
+POST   /api/projects/{id}/backups/{filename}/selection
+POST   /api/projects/{id}/backup/selection/{token}/pages
 POST   /api/projects/restore
 GET    /api/projects/{id}/document
 PUT    /api/projects/{id}/document
@@ -804,6 +809,28 @@ src/
   request and writes only inside the local data directory. The documentation tells
   the user to run it while the app is closed so two processes do not create a copy at
   the same moment.
+- Selective page restore (`app/services/page_restore.py`) reuses
+  `project_backup.extract_validated()`, so an uploaded or stored archive passes the
+  same path, size, format, SQLite and migration checks. `inspect()` extracts it once,
+  lists the pages read-only and writes `selection.json`, then renames the staging
+  folder to `tmp/select-<token>/`. The token is a 32-hex UUID bound to the inspecting
+  project and expires after one hour; `load()` returns
+  `410 restore_selection_expired` for a missing, expired, malformed or other-project
+  selection, so a stale dialog cannot apply a selection to a different project.
+- `apply()` appends pages after `MAX(page_number)` with new ids. It copies each page's
+  original, display and thumbnail assets under new file names and new asset rows, then
+  copies the page's `ocr_runs`, `ocr_blocks`, `ai_suggestions` and `elements`,
+  remapping run, block and source-asset references. An unmapped source asset becomes
+  `NULL` rather than pointing at the wrong file. Copied files are tracked and removed
+  if the transaction fails, and the selection folder is discarded after a successful
+  apply. A `pages_restored` history event records the count, source name and new page
+  numbers.
+- Selective restore is additive and page-scoped: it never replaces an existing page
+  and never reads or writes the document, so figure and equation references in the
+  text are untouched. Document versions stay project-local and are not restored.
+  At most 5000 pages are inspected or applied in one selection; empty or unknown ids
+  are rejected with `page_selection_empty`/`page_selection_invalid`, and an archive
+  with no pages returns `backup_no_pages`.
 - Vault filenames are treated as untrusted input: the service rejects empty names,
   path separators, `..`, non-`.zip` suffixes, symlinks and non-files with
   `backup_not_found`. The route also sets an ASCII `filename` fallback derived with
@@ -977,7 +1004,9 @@ src/
   original documents and extracted text, so it must be stored like the project folder
   itself. Only an explicit download can be password-protected (`.drbz`); vault and
   automatic copies stay plaintext, and the password is never persisted, so it cannot
-  be recovered.
+  be recovered. Selective restore stages an extracted archive under `tmp/` for at most
+  one hour and deletes it after a successful apply, so a forgotten dialog does not
+  leave a second copy of the project on disk.
 - Document links are validated to `http`, `https` or `mailto` before they enter the
   document, and Markdown export repeats that check. A stored `javascript:` or
   `data:` target is never emitted as a link; only its text is kept.
