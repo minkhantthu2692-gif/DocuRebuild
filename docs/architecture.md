@@ -46,7 +46,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.project_backup` | Verified local zip creation, safe validation/extraction and additive restore as a new project |
 | `services.backup_crypto` | Optional `.drbz` container for downloaded backups: scrypt key derivation, chunked AES-256-GCM, password and corruption errors |
 | `services.local_backups` | Local backup vault: verified copy creation, retention pruning, safe name resolution and opt-in automatic copies |
-| `services.page_restore` | Selective restore: staged archive inspection, short-lived selection tokens, additive page/asset/OCR/element copying, page-image repair and reversible document-version restore |
+| `services.page_restore` | Selective restore: staged archive inspection, short-lived selection tokens, additive page/asset/OCR/element copying, page-image and region-crop repair and reversible document-version restore |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
@@ -181,6 +181,7 @@ POST   /api/projects/{id}/backups/{filename}/selection
 POST   /api/projects/{id}/backup/selection/{token}/pages
 POST   /api/projects/{id}/backup/selection/{token}/document
 POST   /api/projects/{id}/backup/selection/{token}/page-assets
+POST   /api/projects/{id}/backup/selection/{token}/element-assets
 POST   /api/projects/restore
 GET    /api/projects/{id}/document
 PUT    /api/projects/{id}/document
@@ -870,13 +871,17 @@ src/
 - Selective restore (`app/services/page_restore.py`) reuses
   `project_backup.extract_validated()`, so an uploaded or stored archive passes the
   same path, size, format, SQLite and migration checks. `inspect()` extracts it once,
-  lists the pages and the document versions read-only, writes `selection.json`, then
-  renames the staging folder to `tmp/select-<token>/`. The current project database
-  is opened read-only and best effort, so each page also carries `in_project`,
-  `missing_slots` and `restorable_slots` for page-image repair; a missing or
-  unreadable current database reports pages as not in the project instead of failing
-  the inspection. A null display slot is normal for formats that use the original
-  directly and is not reported as missing. The token is a 32-hex UUID
+  lists the pages, damaged region crops and document versions read-only, writes
+  `selection.json`, then renames the staging folder to `tmp/select-<token>/`. The
+  current project database is opened read-only and best effort, so each page also
+  carries `in_project`, `missing_slots` and `restorable_slots` for page-image repair;
+  a missing or unreadable current database reports pages as not in the project
+  instead of failing the inspection. A null display slot is normal for formats that
+  use the original directly and is not reported as missing. Region inspection lists
+  only elements that still exist in the project and whose crop file is missing, with
+  a `restorable` flag; it is capped at `MAX_SELECTED_ELEMENTS` and sets
+  `elements_truncated` when more damaged regions remain, so the payload stays bounded
+  without hiding the fact. The token is a 32-hex UUID
   bound to the inspecting project and expires after one hour; `load()` returns
   `410 restore_selection_expired` for a missing, expired, malformed or other-project
   selection, so a stale dialog cannot apply a selection to a different project.
@@ -914,6 +919,16 @@ src/
   overwritten. Copied files are removed if the transaction fails, and a
   `page_assets_restored` event records the page id, number, slots and source. The
   inspection token is not discarded, so several pages can be repaired from one
+  inspection.
+- `apply_element_asset()` repairs one region crop in the current project. It also
+  recomputes the live element and only copies when its crop is missing. A present
+  crop is never overwritten, and the region's rectangle, caption, extracted text,
+  verification state and `source_asset_id` are untouched. A surviving asset row is
+  rewritten in place so OCR and editor references stay valid; otherwise the crop is
+  copied under a new id and `elements.asset_id` is updated. Backup checksums are
+  verified the same way. `updated_at` is refreshed because the crop URL is versioned
+  by it, and an `element_asset_restored` event records the element, page, kind and
+  source. The token survives here too, so several regions can be repaired from one
   inspection.
 - Page restore is additive: it never replaces an existing page. At most 5000 pages are
   inspected or applied in one selection; empty or unknown ids are rejected with
@@ -1095,10 +1110,10 @@ src/
   itself. Only an explicit download can be password-protected (`.drbz`); vault and
   automatic copies stay plaintext, and the password is never persisted, so it cannot
   be recovered. Selective restore stages an extracted archive under `tmp/` for at most
-  one hour and deletes it after a successful page or document apply; page-image
-  repair keeps it so several pages can be repaired from one inspection, and the
-  one-hour cleanup removes it afterwards. A forgotten dialog therefore does not leave
-  a second copy of the project on disk indefinitely.
+  one hour and deletes it after a successful page or document apply; page-image and
+  region-crop repair keep it so several images can be repaired from one inspection,
+  and the one-hour cleanup removes it afterwards. A forgotten dialog therefore does
+  not leave a second copy of the project on disk indefinitely.
 - Document links are validated to `http`, `https` or `mailto` before they enter the
   document, and Markdown export repeats that check. A stored `javascript:` or
   `data:` target is never emitted as a link; only its text is kept.

@@ -120,6 +120,20 @@ class BackupPageSummary(BaseModel):
     restorable_slots: list[str] = Field(default_factory=list)
 
 
+class BackupElementSummary(BaseModel):
+    """One extracted region in the backup whose crop is missing here."""
+
+    id: str
+    page_id: str
+    page_number: int
+    kind: str
+    caption: str
+    verified: bool
+    # Whether the backup can supply the crop file, so the dialog offers only
+    # repairs that can succeed.
+    restorable: bool
+
+
 class BackupDocumentSummary(BaseModel):
     """The live document stored in a backup, without its full content."""
 
@@ -144,12 +158,15 @@ class BackupDocumentOut(BaseModel):
 
 
 class BackupSelectionOut(BaseModel):
-    """Pages and document versions found in an inspected archive."""
+    """Pages, damaged region crops and document versions in an inspected archive."""
 
     token: str
     source_name: str
     created_at: str
     pages: list[BackupPageSummary]
+    elements: list[BackupElementSummary]
+    # True when more damaged regions exist than one inspection lists.
+    elements_truncated: bool = False
     document: BackupDocumentOut
 
 
@@ -170,6 +187,18 @@ class PageAssetRepairOut(BaseModel):
     page_id: str
     page_number: int
     restored_slots: list[str]
+
+
+class ElementAssetRepairRequest(BaseModel):
+    element_id: str = Field(min_length=1, max_length=64)
+
+
+class ElementAssetRepairOut(BaseModel):
+    element_id: str
+    page_id: str
+    page_number: int
+    kind: str
+    restored: bool
 
 
 class DocumentRestoreRequest(BaseModel):

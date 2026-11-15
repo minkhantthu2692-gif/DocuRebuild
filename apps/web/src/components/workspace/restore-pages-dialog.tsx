@@ -1,6 +1,7 @@
 import {
   ArchiveRestore,
   CircleAlert,
+  Crop,
   FileArchive,
   FileText,
   ImageOff,
@@ -16,6 +17,7 @@ import type {
   BackupPageSummary,
   BackupSelection,
   DocumentRestoreResult,
+  ElementAssetRepairResult,
   PageAssetRepairResult,
   PageAssetSlot,
   PageRestoreResult,
@@ -41,6 +43,7 @@ import {
   useInspectStoredBackup,
   useInspectUploadedBackup,
   useProjectBackups,
+  useRepairBackupElementAsset,
   useRepairBackupPageAssets,
   useRestoreBackupDocument,
   useRestoreSelectedPages,
@@ -51,7 +54,7 @@ import { formatDateTime, formatFileSize, resolveLocale } from "@/lib/format";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
 type BackupSource = "copy" | "upload";
-type RestoreMode = "pages" | "document" | "asset";
+type RestoreMode = "pages" | "document" | "asset" | "element";
 const CURRENT_DOCUMENT = "current";
 
 interface RestorePagesDialogProps {
@@ -89,6 +92,7 @@ export function RestorePagesDialog({
   const restore = useRestoreSelectedPages(projectId);
   const restoreDocument = useRestoreBackupDocument(projectId);
   const repairAssets = useRepairBackupPageAssets(projectId);
+  const repairElement = useRepairBackupElementAsset(projectId);
   const { restoreDocumentIntoEditor } = useWorkspaceActions();
   const inputRef = useRef<HTMLInputElement>(null);
   const passwordId = useId();
@@ -104,6 +108,7 @@ export function RestorePagesDialog({
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [chosenDocument, setChosenDocument] = useState<string | null>(null);
   const [chosenAssetPage, setChosenAssetPage] = useState<string | null>(null);
+  const [chosenElement, setChosenElement] = useState<string | null>(null);
 
   const maxMb = metaQuery.data?.max_backup_mb ?? 2048;
   const inspecting = inspectCopy.isPending || inspectUpload.isPending;
@@ -117,6 +122,7 @@ export function RestorePagesDialog({
     setChosen(new Set());
     setChosenDocument(null);
     setChosenAssetPage(null);
+    setChosenElement(null);
     setError(null);
   };
 
@@ -161,6 +167,7 @@ export function RestorePagesDialog({
     setChosen(new Set());
     setChosenDocument(null);
     setChosenAssetPage(null);
+    setChosenElement(null);
     setError(null);
   };
 
@@ -172,6 +179,7 @@ export function RestorePagesDialog({
       setChosen(new Set());
       setChosenDocument(null);
       setChosenAssetPage(null);
+      setChosenElement(null);
     }
   };
 
@@ -310,12 +318,48 @@ export function RestorePagesDialog({
   const canRepair = Boolean(
     selectedAssetPage && selectedAssetPage.restorable_slots.length > 0,
   );
+
+  const submitElementRepair = () => {
+    if (!selection || !chosenElement || repairElement.isPending) return;
+    repairElement.mutate(
+      { token: selection.token, elementId: chosenElement },
+      {
+        onSuccess: (result: ElementAssetRepairResult) => {
+          if (result.restored) {
+            toast.success(t("restorePages.elementSuccess"));
+          } else {
+            toast.error(t("restorePages.elementNothing"));
+          }
+          // The repaired region no longer needs to appear in this list.
+          setSelection((current) =>
+            current
+              ? {
+                  ...current,
+                  elements: current.elements.filter(
+                    (item) => item.id !== result.element_id,
+                  ),
+                }
+              : current,
+          );
+          setChosenElement(null);
+        },
+        onError: fail,
+      },
+    );
+  };
+
+  const selectedElement =
+    selection?.elements.find((item) => item.id === chosenElement) ?? null;
+  const canRepairElement = Boolean(selectedElement?.restorable);
+
   const modeNote =
     mode === "pages"
       ? t("restorePages.note")
       : mode === "document"
         ? t("restorePages.documentNote")
-        : t("restorePages.assetNote");
+        : mode === "asset"
+          ? t("restorePages.assetNote")
+          : t("restorePages.elementNote");
 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
@@ -345,6 +389,7 @@ export function RestorePagesDialog({
                 { value: "pages", label: t("restorePages.modePages") },
                 { value: "document", label: t("restorePages.modeDocument") },
                 { value: "asset", label: t("restorePages.modeAsset") },
+                { value: "element", label: t("restorePages.modeElement") },
               ]}
             />
           </div>
@@ -724,6 +769,78 @@ export function RestorePagesDialog({
             </div>
           ) : null}
 
+          {mode === "element" && selection ? (
+            <div className="rounded-lg border border-border/70 bg-background/40">
+              <div className="border-b border-border/60 px-3 py-2">
+                <p className="truncate text-xs font-medium">
+                  {t("restorePages.elementTitle")}
+                </p>
+                <p className="truncate text-2xs text-muted-foreground">
+                  {t("restorePages.elementFrom", { name: selection.source_name })}
+                  {" · "}
+                  {t("restorePages.elementCount", {
+                    count: selection.elements.length,
+                  })}
+                </p>
+              </div>
+              {selection.elements.length === 0 ? (
+                <p className="px-3 py-4 text-2xs leading-relaxed text-muted-foreground">
+                  {t("restorePages.noElements")}
+                </p>
+              ) : (
+                <ul className="max-h-56 space-y-0.5 overflow-y-auto p-1.5">
+                  {selection.elements.map((element) => (
+                    <li key={element.id}>
+                      <label
+                        className={
+                          element.restorable
+                            ? "flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 hover:bg-muted/40"
+                            : "flex items-start gap-2.5 rounded-md px-2 py-1.5 opacity-70"
+                        }
+                      >
+                        <input
+                          type="radio"
+                          name="restore-element-asset"
+                          className="mt-0.5 size-3.5 shrink-0 accent-primary"
+                          checked={chosenElement === element.id}
+                          disabled={!element.restorable}
+                          aria-label={t("restorePages.selectElement", {
+                            page: element.page_number,
+                          })}
+                          onChange={() => setChosenElement(element.id)}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-xs font-medium">
+                            {t("restorePages.elementOnPage", {
+                              kind: t(`elements.kind.${element.kind}`),
+                              page: element.page_number,
+                            })}
+                          </span>
+                          <span className="block truncate text-2xs text-muted-foreground">
+                            {element.caption ||
+                              t("restorePages.elementUntitled")}
+                          </span>
+                          <span className="mt-0.5 block text-2xs text-muted-foreground">
+                            {element.restorable
+                              ? t("restorePages.elementMissing")
+                              : t("restorePages.elementUnavailable")}
+                          </span>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {selection.elements_truncated ? (
+                <p className="border-t border-border/60 px-3 py-2 text-2xs leading-relaxed text-muted-foreground">
+                  {t("restorePages.elementsTruncated", {
+                    count: selection.elements.length,
+                  })}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           {selection && mode === "pages" && chosen.size === 0 ? (
             <p className="text-2xs text-muted-foreground">
               {t("restorePages.noSelection")}
@@ -733,6 +850,12 @@ export function RestorePagesDialog({
           {selection && mode === "asset" && !canRepair ? (
             <p className="text-2xs text-muted-foreground">
               {t("restorePages.noAssetSelection")}
+            </p>
+          ) : null}
+
+          {selection && mode === "element" && !canRepairElement ? (
+            <p className="text-2xs text-muted-foreground">
+              {t("restorePages.noElementSelection")}
             </p>
           ) : null}
 
@@ -773,7 +896,7 @@ export function RestorePagesDialog({
                 ? t("restorePages.restoringDocument")
                 : t("restorePages.restoreDocument")}
             </Button>
-          ) : (
+          ) : mode === "asset" ? (
             <Button
               type="button"
               disabled={!canRepair || repairAssets.isPending}
@@ -783,6 +906,17 @@ export function RestorePagesDialog({
               {repairAssets.isPending
                 ? t("restorePages.repairingAsset")
                 : t("restorePages.repairAsset")}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              disabled={!canRepairElement || repairElement.isPending}
+              onClick={submitElementRepair}
+            >
+              {repairElement.isPending ? <Spinner /> : <Crop />}
+              {repairElement.isPending
+                ? t("restorePages.repairingElement")
+                : t("restorePages.repairElement")}
             </Button>
           )}
         </DialogFooter>

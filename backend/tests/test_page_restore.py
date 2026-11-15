@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import get_settings
 from app.db.project_schema import project_db
+from app.services import page_restore
 from tests.conftest import upload_pages
 
 PASSWORD = "correct horse battery"
@@ -513,3 +514,277 @@ def test_repair_reports_when_the_backup_file_is_missing(
     response = _repair(client, project_id, selection["token"], page["id"])
     assert response.status_code == 200, response.text
     assert response.json()["restored_slots"] == []
+
+
+def _create_element(
+    client: TestClient,
+    project_id: str,
+    page_id: str,
+    *,
+    caption: str = "Kept region",
+) -> dict:
+    response = client.post(
+        f"/api/projects/{project_id}/pages/{page_id}/elements",
+        json={
+            "kind": "figure",
+            "x": 10,
+            "y": 20,
+            "width": 100,
+            "height": 80,
+            "caption": caption,
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _element_row(directory: str, element_id: str) -> dict:
+    with project_db(Path(directory)) as conn:
+        row = conn.execute(
+            "SELECT * FROM elements WHERE id = ?", (element_id,)
+        ).fetchone()
+    assert row is not None
+    return dict(row)
+
+
+def _remove_element_crop(directory: str, element_id: str) -> None:
+    element = _element_row(directory, element_id)
+    asset = _asset_row(directory, element["asset_id"])
+    assert asset is not None
+    path = Path(directory) / asset["relative_path"]
+    assert path.is_file()
+    path.unlink()
+
+
+def _drop_element_asset(directory: str, element_id: str) -> None:
+    element = _element_row(directory, element_id)
+    with project_db(Path(directory)) as conn:
+        conn.execute(
+            "UPDATE elements SET asset_id = NULL WHERE id = ?", (element_id,)
+        )
+        conn.execute("DELETE FROM assets WHERE id = ?", (element["asset_id"],))
+
+
+def _repair_element(
+    client: TestClient, project_id: str, token: str, element_id: str
+):
+    return client.post(
+        f"/api/projects/{project_id}/backup/selection/{token}/element-assets",
+        json={"element_id": element_id},
+    )
+
+
+def test_repair_region_crop_in_place_keeps_the_element(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    page = upload_pages(client, project_id, ["page.png"])[0]
+    element = _create_element(client, project_id, page["id"])
+    element_id = element["id"]
+    asset_id = element["asset_id"]
+    assert asset_id is not None
+    text = client.patch(
+        f"/api/projects/{project_id}/elements/{element_id}/text",
+        json={"text": "Kept extracted text"},
+    )
+    assert text.status_code == 200, text.text
+
+    filename = _make_copy(client, project_id)
+    _remove_element_crop(project["directory"], element_id)
+
+    selection = _inspect_copy(client, project_id, filename)
+    assert selection["elements_truncated"] is False
+    assert selection["elements"] == [
+        {
+            "id": element_id,
+            "page_id": page["id"],
+            "page_number": 1,
+            "kind": "figure",
+            "caption": "Kept region",
+            "verified": False,
+            "restorable": True,
+        }
+    ]
+
+    response = _repair_element(client, project_id, selection["token"], element_id)
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "element_id": element_id,
+        "page_id": page["id"],
+        "page_number": 1,
+        "kind": "figure",
+        "restored": True,
+    }
+
+    after = _element_row(project["directory"], element_id)
+    # The existing asset row is reused, so the region keeps its references.
+    assert after["asset_id"] == asset_id
+    asset = _asset_row(project["directory"], asset_id)
+    assert asset is not None
+    assert (Path(project["directory"]) / asset["relative_path"]).stat().st_size > 0
+
+    listed = client.get(
+        f"/api/projects/{project_id}/pages/{page['id']}/elements"
+    ).json()
+    assert listed[0]["caption"] == "Kept region"
+    assert listed[0]["text"] == "Kept extracted text"
+    assert listed[0]["verified"] is False
+
+    # The inspection token survives, and a second repair has nothing to do.
+    again = _repair_element(client, project_id, selection["token"], element_id)
+    assert again.status_code == 200, again.text
+    assert again.json()["restored"] is False
+
+    events = client.get(f"/api/projects/{project_id}/history").json()
+    assert any(event["event_type"] == "element_asset_restored" for event in events)
+
+
+def test_repair_region_crop_uses_a_new_asset_when_the_row_is_gone(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    page = upload_pages(client, project_id, ["page.png"])[0]
+    element = _create_element(client, project_id, page["id"])
+    old_asset_id = element["asset_id"]
+
+    filename = _make_copy(client, project_id)
+    _drop_element_asset(project["directory"], element["id"])
+
+    selection = _inspect_copy(client, project_id, filename)
+    assert [item["id"] for item in selection["elements"]] == [element["id"]]
+    assert selection["elements"][0]["restorable"] is True
+
+    response = _repair_element(
+        client, project_id, selection["token"], element["id"]
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["restored"] is True
+
+    after = _element_row(project["directory"], element["id"])
+    assert after["asset_id"] is not None
+    assert after["asset_id"] != old_asset_id
+    asset = _asset_row(project["directory"], after["asset_id"])
+    assert asset is not None
+    assert (Path(project["directory"]) / asset["relative_path"]).stat().st_size > 0
+
+
+def test_repair_region_leaves_a_present_crop_alone(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    page = upload_pages(client, project_id, ["page.png"])[0]
+    element = _create_element(client, project_id, page["id"])
+    filename = _make_copy(client, project_id)
+
+    selection = _inspect_copy(client, project_id, filename)
+    assert selection["elements"] == []
+
+    response = _repair_element(
+        client, project_id, selection["token"], element["id"]
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "element_selection_invalid"
+
+    after = _element_row(project["directory"], element["id"])
+    assert after["asset_id"] == element["asset_id"]
+
+
+def test_repair_region_rejects_one_that_is_not_in_the_project(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    page = upload_pages(client, project_id, ["page.png"])[0]
+    element = _create_element(client, project_id, page["id"])
+
+    filename = _make_copy(client, project_id)
+    _remove_element_crop(project["directory"], element["id"])
+    selection = _inspect_copy(client, project_id, filename)
+    assert len(selection["elements"]) == 1
+
+    deleted = client.delete(f"/api/projects/{project_id}/elements/{element['id']}")
+    assert deleted.status_code == 200, deleted.text
+
+    response = _repair_element(
+        client, project_id, selection["token"], element["id"]
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "element_not_in_project"
+
+
+def test_repair_region_reports_when_the_backup_crop_is_missing(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    page = upload_pages(client, project_id, ["page.png"])[0]
+    element = _create_element(client, project_id, page["id"])
+    asset_id = element["asset_id"]
+
+    filename = _make_copy(client, project_id)
+    _remove_element_crop(project["directory"], element["id"])
+    selection = _inspect_copy(client, project_id, filename)
+    assert selection["elements"][0]["restorable"] is True
+
+    staging = get_settings().tmp_dir / f"select-{selection['token']}"
+    with sqlite3.connect(staging / "project.db") as conn:
+        row = conn.execute(
+            "SELECT relative_path FROM assets WHERE id = ?", (asset_id,)
+        ).fetchone()
+    assert row is not None
+    (staging / row[0]).unlink()
+
+    response = _repair_element(
+        client, project_id, selection["token"], element["id"]
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["restored"] is False
+
+    asset = _asset_row(project["directory"], asset_id)
+    assert asset is not None
+    assert not (Path(project["directory"]) / asset["relative_path"]).exists()
+
+
+def test_repair_region_reports_one_that_the_backup_does_not_have(
+    client: TestClient, project: dict
+) -> None:
+    project_id = project["id"]
+    page = upload_pages(client, project_id, ["page.png"])[0]
+    filename = _make_copy(client, project_id)
+    element = _create_element(client, project_id, page["id"])
+    _remove_element_crop(project["directory"], element["id"])
+
+    selection = _inspect_copy(client, project_id, filename)
+    assert selection["elements"] == []
+
+    response = _repair_element(
+        client, project_id, selection["token"], element["id"]
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "element_selection_invalid"
+
+
+def test_region_list_is_capped_and_more_appear_after_repair(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    monkeypatch.setattr(page_restore, "MAX_SELECTED_ELEMENTS", 1)
+    project_id = project["id"]
+    page = upload_pages(client, project_id, ["page.png"])[0]
+    first = _create_element(client, project_id, page["id"], caption="First region")
+    second = _create_element(client, project_id, page["id"], caption="Second region")
+
+    filename = _make_copy(client, project_id)
+    _remove_element_crop(project["directory"], first["id"])
+    _remove_element_crop(project["directory"], second["id"])
+
+    selection = _inspect_copy(client, project_id, filename)
+    assert selection["elements_truncated"] is True
+    assert len(selection["elements"]) == 1
+    listed = selection["elements"][0]["id"]
+
+    response = _repair_element(client, project_id, selection["token"], listed)
+    assert response.status_code == 200, response.text
+    assert response.json()["restored"] is True
+
+    remaining = {first["id"], second["id"]} - {listed}
+    again = _inspect_copy(client, project_id, filename)
+    assert again["elements_truncated"] is False
+    assert [item["id"] for item in again["elements"]] == list(remaining)

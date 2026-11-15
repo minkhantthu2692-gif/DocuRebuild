@@ -47,11 +47,13 @@ from app.services import documents, project_backup
 from app.services import projects as project_service
 
 SELECTION_PREFIX = "select-"
-SELECTION_VERSION = 2
+# Version 3 adds the region-crop list; older staged selections expire.
+SELECTION_VERSION = 3
 # Long enough to review a large page list, short enough that an abandoned
 # extraction does not sit in tmp for a whole session.
 SELECTION_TTL_SECONDS = 60 * 60
 MAX_SELECTED_PAGES = 5000
+MAX_SELECTED_ELEMENTS = 5000
 DOCUMENT_PREVIEW_LENGTH = 200
 # Page image slots in display order. The database column keeps the reference.
 ASSET_SLOTS = (
@@ -69,6 +71,8 @@ class Selection:
     source_name: str
     created_at: str
     pages: list[dict[str, Any]]
+    elements: list[dict[str, Any]]
+    elements_truncated: bool
     document: dict[str, Any]
 
 
@@ -243,6 +247,93 @@ def _preview(plain_text: str) -> str:
     return " ".join(plain_text.split())[:DOCUMENT_PREVIEW_LENGTH]
 
 
+def _list_elements(
+    staging: Path, project_dir: Path
+) -> tuple[list[dict[str, Any]], bool]:
+    """List backup regions whose crop file is missing in this project.
+
+    Only regions that still exist here are listed: this mode repairs files and
+    never creates regions. A region that is present with an intact crop needs no
+    action, so it is omitted. The current database is opened best effort; when
+    it is absent or unreadable there is nothing to repair.
+
+    The list is capped so a crafted archive cannot produce an unbounded payload.
+    ``truncated`` tells the dialog that more damaged regions exist beyond it.
+    """
+    current_path = project_dir / "project.db"
+    if not current_path.is_file():
+        return [], False
+    try:
+        current = _open_readonly(current_path)
+    except sqlite3.DatabaseError:
+        return [], False
+
+    try:
+        try:
+            current_elements = {
+                str(row["id"]): row["asset_id"]
+                for row in current.execute("SELECT id, asset_id FROM elements")
+            }
+        except sqlite3.DatabaseError:
+            # An older current database without the elements table cannot have
+            # regions to repair; that must not fail the whole inspection.
+            return [], False
+        if not current_elements:
+            return [], False
+
+        connection = _open_readonly(staging / "project.db")
+        try:
+            rows = connection.execute(
+                "SELECT e.id, e.page_id, e.kind, e.caption, e.verified, e.asset_id,"
+                " p.page_number FROM elements e"
+                " JOIN pages p ON p.id = e.page_id"
+                " ORDER BY p.page_number ASC, e.created_at ASC, e.id ASC"
+            )
+            elements: list[dict[str, Any]] = []
+            truncated = False
+            for row in rows:
+                element_id = str(row["id"])
+                if element_id not in current_elements:
+                    continue
+                try:
+                    missing = _missing_asset(
+                        current, project_dir, current_elements[element_id]
+                    )
+                except sqlite3.DatabaseError:
+                    # The current database became unreadable mid-listing; stop
+                    # here instead of failing the whole inspection.
+                    break
+                if not missing:
+                    continue
+                if len(elements) >= MAX_SELECTED_ELEMENTS:
+                    truncated = True
+                    break
+                elements.append(
+                    {
+                        "id": element_id,
+                        "page_id": row["page_id"],
+                        "page_number": row["page_number"],
+                        "kind": row["kind"],
+                        "caption": row["caption"],
+                        "verified": bool(row["verified"]),
+                        "restorable": _available_asset(
+                            connection, staging, row["asset_id"]
+                        ),
+                    }
+                )
+        finally:
+            connection.close()
+    except sqlite3.DatabaseError as exc:
+        raise AppError(
+            422,
+            "backup_database_invalid",
+            "The project database in the backup cannot be read.",
+        ) from exc
+    finally:
+        current.close()
+    return elements, truncated
+
+
 def _list_document(database_path: Path) -> dict[str, Any]:
     """Summarise the backup's live document and its stored revisions."""
     try:
@@ -311,6 +402,7 @@ def inspect(
     staging = extracted.directory
     try:
         pages = _list_pages(staging, project_dir)
+        elements, elements_truncated = _list_elements(staging, project_dir)
         document = _list_document(staging / "project.db")
         if len(pages) > MAX_SELECTED_PAGES:
             raise AppError(
@@ -325,6 +417,8 @@ def inspect(
             "source_name": source_name,
             "created_at": _created_at(extracted.manifest),
             "pages": pages,
+            "elements": elements,
+            "elements_truncated": elements_truncated,
             "document": document,
         }
         atomic_write_json(staging / "selection.json", payload)
@@ -339,6 +433,8 @@ def inspect(
         "source_name": source_name,
         "created_at": payload["created_at"],
         "pages": pages,
+        "elements": elements,
+        "elements_truncated": elements_truncated,
         "document": document,
     }
 
@@ -365,8 +461,13 @@ def load(token: str, *, project_id: str) -> Selection:
     ):
         raise _expired()
     pages = payload.get("pages")
+    elements = payload.get("elements")
     document = payload.get("document")
-    if not isinstance(pages, list) or not isinstance(document, dict):
+    if (
+        not isinstance(pages, list)
+        or not isinstance(elements, list)
+        or not isinstance(document, dict)
+    ):
         raise _expired()
     return Selection(
         token=token,
@@ -374,6 +475,8 @@ def load(token: str, *, project_id: str) -> Selection:
         source_name=str(payload.get("source_name") or "backup"),
         created_at=str(payload.get("created_at") or ""),
         pages=pages,
+        elements=elements,
+        elements_truncated=bool(payload.get("elements_truncated")),
         document=document,
     )
 
@@ -871,4 +974,130 @@ def apply_page_assets(
         "page_id": page_id,
         "page_number": page_number,
         "restored_slots": restored,
+    }
+
+
+def apply_element_asset(
+    project: Project, selection: Selection, element_id: str
+) -> dict[str, Any]:
+    """Restore a missing region crop for one existing element.
+
+    The region, its rectangle, caption, extracted text and verification state
+    are kept. A present crop is never overwritten. When the element's asset row
+    still exists the file is rewritten under the same id; otherwise the crop is
+    copied under a new id and the element points at it.
+    """
+    if element_id not in {str(item["id"]) for item in selection.elements}:
+        raise AppError(
+            422,
+            "element_selection_invalid",
+            "This region is not part of this repair selection.",
+        )
+
+    project_dir = Path(project.directory)
+    created_files: list[Path] = []
+    restored = False
+    page_id = ""
+    page_number = 0
+    kind = ""
+
+    source = _open_readonly(selection.directory / "project.db")
+    try:
+        with project_db(project_dir) as target:
+            current = target.execute(
+                "SELECT * FROM elements WHERE id = ?", (element_id,)
+            ).fetchone()
+            if current is None:
+                raise AppError(
+                    422,
+                    "element_not_in_project",
+                    "This region is not in the current project.",
+                )
+            page_id = str(current["page_id"])
+            kind = str(current["kind"])
+            page = target.execute(
+                "SELECT page_number FROM pages WHERE id = ?", (page_id,)
+            ).fetchone()
+            if page is not None:
+                page_number = int(page["page_number"])
+
+            backup = source.execute(
+                "SELECT * FROM elements WHERE id = ?", (element_id,)
+            ).fetchone()
+            if backup is None:
+                raise AppError(
+                    422,
+                    "element_selection_invalid",
+                    "The selected region is not in this backup.",
+                )
+
+            if _missing_asset(target, project_dir, current["asset_id"]):
+                found = _backup_asset_file(
+                    source, selection.directory, backup["asset_id"]
+                )
+                if found is not None:
+                    backup_asset, source_path = found
+                    current_id = current["asset_id"]
+                    existing = (
+                        target.execute(
+                            "SELECT 1 FROM assets WHERE id = ?", (current_id,)
+                        ).fetchone()
+                        if current_id
+                        else None
+                    )
+                    if existing is not None:
+                        _restore_asset_in_place(
+                            target, project_dir, current_id, backup_asset, source_path
+                        )
+                        restored = True
+                    else:
+                        new_id = _copy_asset(
+                            source,
+                            target,
+                            selection.directory,
+                            project_dir,
+                            backup["asset_id"],
+                            {},
+                            created_files,
+                        )
+                        if new_id:
+                            target.execute(
+                                "UPDATE elements SET asset_id = ? WHERE id = ?",
+                                (new_id, element_id),
+                            )
+                            restored = True
+
+            if restored:
+                # The crop URL is versioned by updated_at, so the dialog and the
+                # editor fetch the repaired file instead of a cached broken one.
+                target.execute(
+                    "UPDATE elements SET updated_at = ? WHERE id = ?",
+                    (utc_iso(), element_id),
+                )
+    except Exception:
+        for path in created_files:
+            path.unlink(missing_ok=True)
+        raise
+    finally:
+        source.close()
+
+    if restored:
+        project_service.record_history(
+            project_dir,
+            "element_asset_restored",
+            "Region image repaired from backup",
+            {
+                "element_id": element_id,
+                "page_id": page_id,
+                "page_number": page_number,
+                "kind": kind,
+                "source": selection.source_name,
+            },
+        )
+    return {
+        "element_id": element_id,
+        "page_id": page_id,
+        "page_number": page_number,
+        "kind": kind,
+        "restored": restored,
     }

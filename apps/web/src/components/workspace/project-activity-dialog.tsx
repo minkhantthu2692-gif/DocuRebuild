@@ -90,6 +90,7 @@ const KNOWN_EVENTS = new Set([
   "pages_restored",
   "document_restored",
   "page_assets_restored",
+  "element_asset_restored",
   "ocr_started",
   "ocr_succeeded",
   "ocr_failed",

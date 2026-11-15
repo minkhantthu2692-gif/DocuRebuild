@@ -32,6 +32,8 @@ from app.schemas.projects import (
     DocumentRestoreRequest,
     DocumentRevisionOut,
     DocumentRevisionSummary,
+    ElementAssetRepairOut,
+    ElementAssetRepairRequest,
     EncryptedBackupRequest,
     HistoryEventOut,
     PageAssetRepairOut,
@@ -360,6 +362,24 @@ def repair_selected_page_assets(
     selection = page_restore.load(token, project_id=project.id)
     result = page_restore.apply_page_assets(project, selection, payload.page_id)
     if result["restored_slots"]:
+        touch_project(session, project)
+    return result
+
+
+@router.post(
+    "/{project_id}/backup/selection/{token}/element-assets",
+    response_model=ElementAssetRepairOut,
+)
+def repair_selected_element_asset(
+    project: ProjectDep,
+    token: str,
+    payload: ElementAssetRepairRequest,
+    session: DbSession,
+) -> dict[str, Any]:
+    """Restore a missing region crop without replacing a present one."""
+    selection = page_restore.load(token, project_id=project.id)
+    result = page_restore.apply_element_asset(project, selection, payload.element_id)
+    if result["restored"]:
         touch_project(session, project)
     return result
 

@@ -21,6 +21,7 @@ import type {
   DocumentRevision,
   DocumentRevisionSummary,
   EditorSettings,
+  ElementAssetRepairResult,
   ElementSummary,
   ExportSettings,
   HealthStatus,
@@ -222,6 +223,15 @@ export const api = {
     request<PageAssetRepairResult>(
       `/projects/${projectId}/backup/selection/${encodeURIComponent(token)}/page-assets`,
       { method: "POST", body: JSON.stringify({ page_id: pageId }) },
+    ),
+  repairBackupElementAsset: (
+    projectId: string,
+    token: string,
+    elementId: string,
+  ) =>
+    request<ElementAssetRepairResult>(
+      `/projects/${projectId}/backup/selection/${encodeURIComponent(token)}/element-assets`,
+      { method: "POST", body: JSON.stringify({ element_id: elementId }) },
     ),
   listProjectHistory: (projectId: string, limit = 100) =>
     request<HistoryEvent[]>(`/projects/${projectId}/history?limit=${limit}`),

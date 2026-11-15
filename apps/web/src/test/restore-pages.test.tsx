@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   restore: vi.fn(),
   restoreDocument: vi.fn(),
   repairAssets: vi.fn(),
+  repairElement: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
@@ -50,6 +51,10 @@ vi.mock("@/hooks/use-projects", () => ({
   useRepairBackupPageAssets: () => ({
     isPending: false,
     mutate: mocks.repairAssets,
+  }),
+  useRepairBackupElementAsset: () => ({
+    isPending: false,
+    mutate: mocks.repairElement,
   }),
 }));
 
@@ -83,6 +88,18 @@ const selection: BackupSelection = {
       restorable_slots: ["display"],
     },
   ],
+  elements: [
+    {
+      id: "element-1",
+      page_id: "page-2",
+      page_number: 2,
+      kind: "figure",
+      caption: "Damaged figure",
+      verified: false,
+      restorable: true,
+    },
+  ],
+  elements_truncated: false,
   document: {
     current: {
       preview: "Current document text",
@@ -164,6 +181,7 @@ beforeEach(() => {
   mocks.restore.mockReset();
   mocks.restoreDocument.mockReset();
   mocks.repairAssets.mockReset();
+  mocks.repairElement.mockReset();
   mocks.toast.success.mockReset();
   mocks.toast.error.mockReset();
 });
@@ -474,6 +492,93 @@ describe("RestorePagesDialog", () => {
     ).toBeDisabled();
     expect(
       screen.getByRole("radio", { name: "Repair image for page 2" }),
+    ).toBeDisabled();
+  });
+
+  it("repairs a missing region crop without closing", async () => {
+    mocks.inspectCopy.mockImplementation(
+      (_input: unknown, options: { onSuccess: (result: BackupSelection) => void }) =>
+        options.onSuccess(selection),
+    );
+    mocks.repairElement.mockImplementation(
+      (
+        _input: { token: string; elementId: string },
+        options: {
+          onSuccess: (result: {
+            element_id: string;
+            page_id: string;
+            page_number: number;
+            kind: string;
+            restored: boolean;
+          }) => void;
+        },
+      ) =>
+        options.onSuccess({
+          element_id: "element-1",
+          page_id: "page-2",
+          page_number: 2,
+          kind: "figure",
+          restored: true,
+        }),
+    );
+    const { onOpenChange } = renderDialog();
+
+    fireEvent.click(screen.getByText("Region image"));
+    fireEvent.click(screen.getByRole("radio", { name: /book-20261112\.zip/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Inspect backup" }));
+
+    expect(
+      screen.getByText("Region images in this backup"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Figure · page 2")).toBeInTheDocument();
+    expect(screen.getByText("Damaged figure")).toBeInTheDocument();
+    expect(screen.getByText("Crop is missing")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Repair region image" }),
+    ).toBeDisabled();
+
+    fireEvent.click(
+      screen.getByRole("radio", { name: "Repair region image on page 2" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Repair region image" }));
+
+    await waitFor(() =>
+      expect(mocks.repairElement).toHaveBeenCalledWith(
+        { token: selection.token, elementId: "element-1" },
+        expect.any(Object),
+      ),
+    );
+    expect(mocks.toast.success).toHaveBeenCalledWith(
+      "Repaired the region image from this backup.",
+    );
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "No region crop from this backup is missing in this project.",
+        ),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("disables a region crop the backup cannot supply", async () => {
+    const partial: BackupSelection = {
+      ...selection,
+      elements: [{ ...selection.elements[0], restorable: false }],
+    };
+    mocks.inspectCopy.mockImplementation(
+      (_input: unknown, options: { onSuccess: (result: BackupSelection) => void }) =>
+        options.onSuccess(partial),
+    );
+    renderDialog();
+
+    fireEvent.click(screen.getByText("Region image"));
+    fireEvent.click(screen.getByRole("radio", { name: /book-20261112\.zip/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Inspect backup" }));
+
+    expect(screen.getByText("Backup crop is missing")).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: "Repair region image on page 2" }),
     ).toBeDisabled();
   });
 });

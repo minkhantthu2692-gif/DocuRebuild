@@ -217,6 +217,26 @@ export function useRepairBackupPageAssets(projectId: string) {
   });
 }
 
+export function useRepairBackupElementAsset(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ token, elementId }: { token: string; elementId: string }) =>
+      api.repairBackupElementAsset(projectId, token, elementId),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["elements", projectId, result.page_id],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["region-proposals", projectId, result.page_id],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["pages", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["project-history", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
 export function useOpenProject(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({

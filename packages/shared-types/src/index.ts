@@ -106,12 +106,27 @@ export interface BackupPageSummary {
   restorable_slots: PageAssetSlot[];
 }
 
-/** Pages and document versions found in an inspected archive. */
+/** One extracted region in a backup whose crop is missing here. */
+export interface BackupElementSummary {
+  id: string;
+  page_id: string;
+  page_number: number;
+  kind: string;
+  caption: string;
+  verified: boolean;
+  /** Whether the backup can supply the crop file. */
+  restorable: boolean;
+}
+
+/** Pages, damaged region crops and document versions found in an archive. */
 export interface BackupSelection {
   token: string;
   source_name: string;
   created_at: string;
   pages: BackupPageSummary[];
+  elements: BackupElementSummary[];
+  /** True when more damaged regions exist than one inspection lists. */
+  elements_truncated: boolean;
   document: BackupDocument;
 }
 
@@ -157,6 +172,15 @@ export interface PageAssetRepairResult {
   page_id: string;
   page_number: number;
   restored_slots: PageAssetSlot[];
+}
+
+/** Result of repairing a region's missing crop from a backup. */
+export interface ElementAssetRepairResult {
+  element_id: string;
+  page_id: string;
+  page_number: number;
+  kind: string;
+  restored: boolean;
 }
 
 export type SourceKind = "image" | "pdf";
