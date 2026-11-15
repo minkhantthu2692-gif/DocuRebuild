@@ -334,6 +334,61 @@ block boxes on the page with a per-kind legend. The overlay is hidden when the
 stored result no longer matches the page (for example after a rotation) so stale
 coordinates are never drawn.
 
+### Measuring OCR accuracy
+
+OCR quality is measured, not assumed. `python -m app.ocr_benchmark` scores the
+local engine against text a person has checked, using Character Error Rate (CER)
+and Word Error Rate (WER). It runs entirely on this machine: no page, transcript
+or result is uploaded.
+
+Create a fixtures folder outside the repository (real book pages must never be
+committed) with a `manifest.json`:
+
+```json
+{
+  "cases": [
+    {
+      "name": "english-page-1",
+      "category": "english",
+      "languages": ["eng"],
+      "image": "english/page-1.png",
+      "reference": "english/page-1.txt"
+    },
+    {
+      "name": "burmese-page-1",
+      "category": "burmese",
+      "hypothesis": "burmese/page-1.ocr.txt",
+      "reference": "burmese/page-1.txt"
+    }
+  ]
+}
+```
+
+A case with `image` runs the same local Tesseract adapter the application uses. A
+case with `hypothesis` scores an already stored transcript instead, so engine
+output can be compared on a machine without Tesseract. Exactly one of the two is
+required, `reference` is the correct text, and `category` groups results (for
+example `english`, `burmese`, `mixed` or `damaged-scan`). `languages` defaults to
+`["eng"]`, so a Burmese case should name `["mya"]` or `["eng", "mya"]`.
+
+```bash
+cd backend
+.venv/Scripts/python.exe -m app.ocr_benchmark path/to/fixtures
+.venv/Scripts/python.exe -m app.ocr_benchmark path/to/fixtures --json
+.venv/Scripts/python.exe -m app.ocr_benchmark path/to/fixtures --case english-page-1
+```
+
+Text is normalised to NFC with collapsed whitespace before scoring. Case,
+punctuation and Burmese combining marks stay significant, and no Zawgyi/Unicode
+conversion is performed, so the result describes what the engine produced. CER
+and WER are edit-distance ratios over reference characters and words; totals are
+weighted by reference length, so one long page is not given the same weight as
+one short line. A case that cannot be scored (for example a missing language
+file) is reported and excluded from the totals instead of aborting the run. Exit
+codes are `0` when every case was scored, `1` when a case could not be scored and
+`2` for an invalid manifest or argument. The project does not publish accuracy
+numbers until fixtures from real documents have been measured.
+
 ### Optional local AI cleanup
 
 AI cleanup is optional and free to run locally. It is not needed to use the
@@ -859,7 +914,9 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   processing is not claimed.
 - OCR quality depends on the installed Tesseract version, traineddata and page
   quality. Burmese text is especially difficult; layout labels are heuristics and
-  are never presented as certain structure. Table labels only mark a text grid:
+  are never presented as certain structure. Accuracy can be measured with the local
+  benchmark harness, but no figures are published until fixtures from real documents
+  have been scored. Table labels only mark a text grid:
   cells, merged spans and reading order inside the table are not reconstructed,
   and equations are not transcribed.
 - Region extraction does not use a vision model. Suggestions are deterministic
@@ -917,12 +974,12 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 1. Local storage and project management | Complete |
 | 2. Main UI and workspace | Complete |
 | 3. Import and image processing | Complete |
-| 4. Local OCR and layout detection | In progress: OCR + layout hints done; figures, table structure and benchmarks pending |
+| 4. Local OCR and layout detection | In progress: OCR, layout hints and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; automatic table/equation extraction pending |
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
-| 9. History, backup and recovery | In progress: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
+| 9. History, backup and recovery | **Complete**: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned |
 | 11. Final QA and production release | Planned |
 

@@ -48,6 +48,8 @@ coverage.xml
 /thumbnails/
 /cache/
 /.trash/
+# OCR accuracy fixtures hold real page images and their transcripts.
+/backend/ocr-fixtures/
 *.db
 *.sqlite
 *.sqlite3

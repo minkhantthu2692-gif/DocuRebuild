@@ -51,6 +51,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence, corrections, staleness |
+| `app.ocr_benchmark` | Local CER/WER measurement against checked reference transcripts, by running the OCR adapter or scoring a stored transcript; validates fixtures and never uploads |
 | `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, vision region requests, listing and review decisions |
 | `services.ai_vision` | Page-image encoding, normalized-to-source rectangle mapping and filtering for optional vision region proposals |
 | `services.ai_usage` | Local AI request metadata, rolling-window request counting and usage summaries |
@@ -354,6 +355,19 @@ src/
   contains the required traineddata files. If the engine returns plain text
   instead of structured TSV, the run fails explicitly instead of reporting an
   empty success.
+- Accuracy is measured with `app/ocr_benchmark.py`, a separate local CLI rather
+  than an API endpoint, because it scores fixtures on demand and has no project or
+  user state. A fixtures folder holds `manifest.json` plus reference transcripts;
+  each case either names a page image, which is run through the same
+  `extract_image_text` adapter, or a stored transcript, which lets a result be
+  re-scored without Tesseract. CER and WER are Levenshtein edit counts over NFC
+  text with collapsed whitespace, computed with Myers' bit-parallel algorithm, and
+  aggregate as total edits over total reference units so long pages carry
+  proportional weight. An empty reference is reported as `n/a` in the table and
+  never as a perfect score. Fixture paths are resolved inside the fixtures folder,
+  and a case that cannot be scored is reported and excluded rather than aborting
+  the run. No fixture, transcript or result is uploaded, and no accuracy figure is
+  published before real-document fixtures are measured.
 
 ### Region extraction workflow
 

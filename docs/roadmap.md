@@ -12,12 +12,12 @@ presented in the UI until it actually works.
 | 1. Local storage and project management | **Complete** | App/project DBs, folders, manifest, CRUD, trash |
 | 2. Main UI and workspace | **Complete** | Header navigation, dashboard, two-panel workspace, settings, i18n |
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
-| 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI and insertion done; table/figure detection pending |
+| 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word/PDF export; automatic table/equation extraction pending |
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, footnotes, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
-| 9. History, backup and recovery | **In progress** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
+| 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
 
@@ -148,6 +148,11 @@ image processing uses Pillow with no OpenCV dependency.
   successful, non-stale run, a per-kind legend with counts, and explicit
   loading, empty, running, stale and failure states. No box is drawn from a stale
   or incomplete result.
+- Local accuracy benchmark (`python -m app.ocr_benchmark`): CER and WER against
+  checked reference transcripts, either by running the local Tesseract adapter on
+  a page image or by scoring a stored transcript. Results are grouped by category
+  and weighted by reference length; a case that cannot be scored is reported and
+  excluded instead of aborting the run. Nothing is uploaded.
 - Backend tests for persistence, correction, verification, stale detection,
   missing language data and unavailable engines, deterministic classification and
   TSV layout wiring; frontend tests for coordinate scaling/clamping and i18n
@@ -161,7 +166,8 @@ image processing uses Pillow with no OpenCV dependency.
 - Real table structure (rows, cells, merged spans) and equation transcription.
   A table label only marks a text grid; it does not build a table.
 - OCR accuracy benchmarks (CER/WER) for English, Burmese and mixed pages using
-  fixtures from real documents.
+  fixtures from real documents. The local harness exists and is tested, but no
+  fixtures are shipped and no accuracy figures are claimed yet.
 - Optional richer engines (for example PaddleOCR) behind the same adapter, only
   if they can preserve the same review and verification guarantees.
 
@@ -459,7 +465,7 @@ LaTeX source by design.
 **Pending** — per-cell alignment, images inline in text, source page layout,
 headers/footers, broader OMML coverage and a bundled offline LaTeX typesetter.
 
-## Phase 9 — History, backup and recovery (in progress)
+## Phase 9 — History, backup and recovery (complete)
 
 **Delivered**
 
@@ -606,11 +612,11 @@ headers/footers, broader OMML coverage and a bundled offline LaTeX typesetter.
   repairing one region image without closing the dialog. Dialogs, settings and
   strings exist in English and Burmese.
 
-**Pending**
+**Scope note**
 
 - Selective restore covers pages, the document, a page's original, display and
   thumbnail images and an extracted region's crop. Editor undo/redo stays separate
-  from revision history.
+  from revision history: it is an editing convenience, not a stored backup.
 
 ## Phase 10 — Desktop, PWA and mobile distribution (planned)
 
