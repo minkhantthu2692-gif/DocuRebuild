@@ -23,6 +23,7 @@ import { usePageTableProposals } from "@/hooks/use-table-proposal";
 import { api } from "@/lib/api";
 import {
   needsTableAcknowledgement,
+  proposalAlignments,
   tableCandidatePreview,
 } from "@/lib/table-candidates";
 import { TableReview } from "./table-review";
@@ -95,6 +96,7 @@ export function PageTablesDialog({
     if (!candidate || !canInsert) return;
     insertTable({
       rows: draft.rows,
+      alignments: proposalAlignments(candidate),
       headerRow,
       note: includeNote
         ? t("ocr.table.sourceNotePage", { page: page?.page_number ?? "—" })

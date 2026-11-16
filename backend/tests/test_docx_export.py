@@ -479,6 +479,48 @@ def test_docx_heading_honours_text_alignment(tmp_path: Path) -> None:
     assert document.paragraphs[1].alignment == WD_ALIGN_PARAGRAPH.RIGHT
 
 
+def test_docx_table_cell_honours_text_alignment(tmp_path: Path) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "table",
+                "content": [
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            {
+                                "type": "tableCell",
+                                "content": [
+                                    {
+                                        "type": "paragraph",
+                                        "attrs": {"textAlign": "center"},
+                                        "content": [{"type": "text", "text": "Middle"}],
+                                    }
+                                ],
+                            },
+                            {
+                                "type": "tableCell",
+                                "content": [
+                                    {
+                                        "type": "paragraph",
+                                        "attrs": {"textAlign": "right"},
+                                        "content": [{"type": "text", "text": "Right"}],
+                                    }
+                                ],
+                            },
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    document = _open(render_docx(content, tmp_path))
+    table = document.tables[0]
+    assert table.cell(0, 0).paragraphs[0].alignment == WD_ALIGN_PARAGRAPH.CENTER
+    assert table.cell(0, 1).paragraphs[0].alignment == WD_ALIGN_PARAGRAPH.RIGHT
+
+
 def test_export_endpoint_returns_docx(client: TestClient, project: dict) -> None:
     content = {
         "type": "doc",

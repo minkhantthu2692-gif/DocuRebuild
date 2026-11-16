@@ -511,6 +511,12 @@ Rules that keep a proposal honest:
   into fields, edits are counted and highlighted, and "Reset edits" restores the
   extracted text. Changes are inserted only when the table is confirmed, and
   opening another proposal starts a clean draft.
+- Cell alignment is proposed from the same word boxes. Text that leaves clear room
+  inside its column band is marked left, centred or right, shown in the review grid
+  and inserted as paragraph alignment inside the cell. A cell that fills its band,
+  or whose lines disagree, reports no alignment and keeps the default instead of
+  guessing. Word and PDF export keep the alignment; Markdown and plain text cannot
+  express it.
 - Limits are 60 rows, 20 columns and 600 cells per candidate, and at most 20
   candidates per page. A larger or unusable grid is refused with a typed error
   instead of being truncated.

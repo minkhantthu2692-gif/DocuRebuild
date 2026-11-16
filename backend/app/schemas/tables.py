@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 TableWarning = Literal["no_confidence", "low_confidence", "empty_cells"]
+TableAlignment = Literal["left", "center", "right"]
 
 
 class TableCellOut(BaseModel):
@@ -14,6 +15,7 @@ class TableCellOut(BaseModel):
     confidence: float | None
     uncertain: bool
     empty: bool
+    alignment: TableAlignment | None = None
 
 
 class TableSourceOut(BaseModel):

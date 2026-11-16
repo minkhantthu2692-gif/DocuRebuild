@@ -76,6 +76,17 @@ def _grid_words() -> list[dict]:
     ]
 
 
+def _alignment_words() -> list[dict]:
+    return [
+        _word("Name", 0, 100, width=100, line=0),
+        _word("Value", 200, 100, width=100, line=0),
+        _word("Number", 400, 100, width=100, line=0),
+        _word("Mass", 0, 130, width=40, line=1),
+        _word("2", 240, 130, width=20, line=1),
+        _word("7", 480, 130, width=20, line=1),
+    ]
+
+
 def _wait_for_run(
     client: TestClient, project_id: str, page_id: str, timeout: float = 5.0
 ) -> dict:
@@ -146,6 +157,49 @@ def test_proposal_builds_a_reviewable_grid(
     assert cells[(2, 1)]["empty"] is True
     # An empty cell is not "uncertain": there is simply no content to check.
     assert cells[(2, 1)]["uncertain"] is False
+    assert cells[(2, 1)]["alignment"] is None
+
+
+def test_proposal_reports_only_observable_cell_alignment(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    page, run = _run_table_ocr(
+        client, project, monkeypatch, _table_result(_alignment_words())
+    )
+    block = run["blocks"][0]
+
+    response = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}"
+        f"/ocr/blocks/{block['id']}/table-proposal"
+    )
+    assert response.status_code == 200, response.text
+    cells = {(cell["row"], cell["column"]): cell for cell in response.json()["cells"]}
+
+    assert cells[(1, 0)]["alignment"] == "left"
+    assert cells[(1, 1)]["alignment"] == "center"
+    assert cells[(1, 2)]["alignment"] == "right"
+    # The header words fill their column bands, so no alignment is claimed for
+    # them instead of guessing from a single edge.
+    assert cells[(0, 0)]["alignment"] is None
+    assert cells[(0, 1)]["alignment"] is None
+    assert cells[(0, 2)]["alignment"] is None
+
+
+def test_cell_alignment_requires_agreeing_lines() -> None:
+    lines = {
+        0: [_word("Left", 200, 100, width=20)],
+        1: [_word("Centre", 240, 106, width=20)],
+    }
+    assert table_structure._cell_alignment(lines, (200, 300), 20) is None
+
+
+def test_cell_alignment_skips_a_line_that_fills_the_band() -> None:
+    lines = {
+        0: [_word("Full", 200, 100, width=100)],
+        1: [_word("Mid", 240, 106, width=20)],
+    }
+    assert table_structure._cell_alignment(lines, (200, 300), 20) == "center"
+    assert table_structure._cell_alignment(lines, None, 20) is None
 
 
 def test_proposal_is_refused_after_a_manual_correction(

@@ -20,7 +20,7 @@ import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useTableDraft } from "@/hooks/use-table-draft";
 import { useTableProposal } from "@/hooks/use-table-proposal";
 import { api } from "@/lib/api";
-import { needsTableAcknowledgement } from "@/lib/table-candidates";
+import { needsTableAcknowledgement, proposalAlignments } from "@/lib/table-candidates";
 import { TableReview } from "./table-review";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
@@ -86,6 +86,7 @@ export function TableProposalDialog({
     if (!proposal || !canInsert) return;
     insertTable({
       rows: draft.rows,
+      alignments: proposalAlignments(proposal),
       headerRow,
       note: includeNote
         ? t("ocr.table.sourceNote", { page: page?.page_number ?? "—" })

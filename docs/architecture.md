@@ -377,6 +377,15 @@ src/
   and a different block or candidate key starts with no edits. The dialog resets
   the draft when it opens or switches proposal, so a discarded draft cannot leak
   into the next table.
+- Cell alignment is inferred in `services.table_structure` from each cell's word
+  boxes: the gaps to its column band edges are compared with a tolerance derived
+  from the typical word height and band width. A line that fills the band is
+  ignored, because left, centre and right look identical there, and all lines in a
+  cell must agree or the cell reports no alignment. Each proposed cell carries
+  `alignment`; `proposalAlignments` builds a matrix beside `proposalRows`, the
+  review grid shows it, and insertion sets the paragraph's `textAlign` attribute
+  only for centre and right (left is the default). The document therefore uses
+  ordinary paragraph alignment, with no new node or schema.
 - Selected blocks are appended to the Tiptap document through the workspace
   actions context. The insertion is a normal document edit and is autosaved; an
   optional localized source note records the page and verification status.

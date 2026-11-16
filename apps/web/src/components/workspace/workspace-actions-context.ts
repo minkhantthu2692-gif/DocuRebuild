@@ -1,6 +1,9 @@
 import { createContext, useContext } from "react";
 
-import type { DocumentRecord } from "@docurebuild/shared-types";
+import type {
+  DocumentRecord,
+  TableAlignment,
+} from "@docurebuild/shared-types";
 
 export interface WorkspaceTextInsertion {
   id: number;
@@ -25,6 +28,8 @@ export interface WorkspaceTableInsertion {
   type: "table";
   /** Final reviewed cell text. Empty strings stay empty. */
   rows: string[][];
+  /** Per-cell alignment observed in the source; null keeps the default. */
+  alignments: (TableAlignment | null)[][];
   headerRow: boolean;
   note: string | null;
 }

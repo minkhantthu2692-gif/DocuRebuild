@@ -18,6 +18,9 @@ The rules are deliberately conservative:
 * A block the user corrected by hand is refused, because its stored word boxes
   describe the engine's original text rather than the corrected text.
 * Caps keep a damaged scan from producing an unusable grid.
+* Cell alignment is inferred only when the free space inside the column band
+  makes left, centre and right clearly different. A cell whose lines disagree or
+  nearly fill the band reports no alignment and keeps the default.
 * A page-level detector groups consecutive blocks whose rows share aligned
   columns. This is how embedded PDF text becomes a table when the PDF layer
   stores one block per row. A group is accepted only when the deterministic
@@ -225,13 +228,18 @@ def _best_band(word: Word, bands: list[Band]) -> int:
     return best
 
 
-def _cell_payload(words: list[Word]) -> dict[str, Any]:
+def _cell_payload(
+    words: list[Word],
+    band: Band | None = None,
+    typical_height: float = 1.0,
+) -> dict[str, Any]:
     if not words:
         return {
             "text": "",
             "confidence": None,
             "uncertain": False,
             "empty": True,
+            "alignment": None,
         }
 
     lines: dict[int, list[Word]] = {}
@@ -258,7 +266,54 @@ def _cell_payload(words: list[Word]) -> dict[str, Any]:
         "confidence": confidence,
         "uncertain": uncertain,
         "empty": False,
+        "alignment": _cell_alignment(lines, band, typical_height),
     }
+
+
+def _cell_alignment(
+    lines: dict[int, list[Word]],
+    band: Band | None,
+    typical_height: float,
+) -> str | None:
+    """Infer the cell's text alignment from its position inside its column band.
+
+    Alignment is only reported when the text leaves enough room in the band for
+    the choice to be visible. A cell that fills the band looks identical whether
+    it is left, centred or right aligned, so it reports nothing and keeps the
+    default instead of claiming a value that cannot be observed. Lines inside one
+    cell must agree; mixed alignment also reports nothing.
+    """
+    if band is None:
+        return None
+    band_start, band_end = band
+    width = band_end - band_start
+    if width <= 0:
+        return None
+
+    # A gap difference smaller than this cannot be told apart from rounding in
+    # the OCR boxes, so the cell is treated as centred only when both margins are
+    # comparable to this tolerance.
+    tolerance = max(typical_height * 0.4, width * 0.08)
+    votes: set[str] = set()
+    for line_words in lines.values():
+        left = min(word["x"] for word in line_words)
+        right = max(_right(word) for word in line_words)
+        free = width - (right - left)
+        if free <= tolerance:
+            # The line fills the band; no alignment can be observed.
+            continue
+        left_gap = left - band_start
+        right_gap = band_end - right
+        if abs(left_gap - right_gap) <= tolerance:
+            votes.add("center")
+        elif right_gap > left_gap:
+            votes.add("left")
+        else:
+            votes.add("right")
+
+    if len(votes) != 1:
+        return None
+    return votes.pop()
 
 
 def _source_box(words: list[Word]) -> dict[str, float]:
@@ -284,13 +339,15 @@ def _grid_payload(rows: list[list[Word]], bands: list[Band]) -> dict[str, Any]:
     uncertain_cells = 0
     empty_cells = 0
     has_confidence = False
+    heights = [word["height"] for row in rows for word in row if word["height"] > 0]
+    typical_height = median(heights) if heights else 1.0
 
     for row_index, row in enumerate(rows):
         buckets: list[list[Word]] = [[] for _ in bands]
         for word in row:
             buckets[_best_band(word, bands)].append(word)
         for column_index, bucket in enumerate(buckets):
-            cell = _cell_payload(bucket)
+            cell = _cell_payload(bucket, bands[column_index], typical_height)
             cells.append(
                 {
                     "row": row_index,

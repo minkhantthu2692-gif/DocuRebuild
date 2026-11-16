@@ -176,6 +176,7 @@ export function TableReview({
                     const isHeader = headerRow && rowIndex === 0;
                     const isEdited = draft.edited.has(coordinate);
                     const value = draft.rows[rowIndex]?.[columnIndex] ?? "";
+                    const alignment = cell?.alignment ?? null;
                     const confidence =
                       cell?.confidence === null || cell?.confidence === undefined
                         ? null
@@ -205,24 +206,24 @@ export function TableReview({
                         onChange={(event) =>
                           draft.setCell(rowIndex, columnIndex, event.target.value)
                         }
+                        style={alignment ? { textAlign: alignment } : undefined}
                         className={cn(
                           "block w-full resize-y bg-transparent p-0 text-xs leading-relaxed outline-none focus-visible:ring-1 focus-visible:ring-ring",
                           isHeader && "font-semibold",
                         )}
                       />
                     ) : (
-                      <span className="flex items-start gap-1">
+                      <span
+                        className="block whitespace-pre-wrap break-words"
+                        style={alignment ? { textAlign: alignment } : undefined}
+                      >
                         {cell?.uncertain ? (
                           <CircleAlert
-                            className="mt-0.5 size-3 shrink-0 text-warning"
+                            className="mr-1 inline-block size-3 align-text-top text-warning"
                             aria-hidden="true"
                           />
                         ) : null}
-                        {value ? (
-                          <span className="whitespace-pre-wrap break-words">
-                            {value}
-                          </span>
-                        ) : (
+                        {value || (
                           <span className="sr-only">{t("ocr.table.emptyCell")}</span>
                         )}
                       </span>

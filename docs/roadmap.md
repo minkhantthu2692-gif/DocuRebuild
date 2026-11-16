@@ -15,7 +15,7 @@ presented in the UI until it actually works.
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates) and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word/PDF export; vision tables, merged-cell detection and automatic equation extraction pending |
+| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word/PDF export; vision tables, merged-cell detection and automatic equation extraction pending |
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, footnotes, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
@@ -353,6 +353,12 @@ the user must review every region before extracting it.
   uses the corrected text; the proposal and its confidence flags stay unchanged,
   so a manual fix is never presented as extracted text. Edits are discarded when
   the dialog is reopened or another proposal is opened.
+- Per-cell alignment inferred from the stored word boxes. Text that leaves clear
+  room inside its column band becomes a left, centred or right proposal, shown in
+  the review grid and inserted as paragraph alignment inside the cell. A cell that
+  fills its band, or whose lines disagree, keeps the default instead of claiming
+  an alignment that cannot be observed. Word and PDF export keep the alignment;
+  Markdown and plain text cannot express it.
 - Tables are ordinary Tiptap nodes, so saving, version history and project backups
   need no special handling. Column resizing is disabled deliberately because pixel
   widths are screen-dependent and cannot survive Markdown.
@@ -398,7 +404,6 @@ the user must review every region before extracting it.
 
 **Pending**
 
-- Per-cell alignment beyond paragraph alignment.
 - Automatic table extraction beyond deterministic word-box grouping: vision-based
   tables, merged-cell detection and nested tables, always as a reviewable proposal
   that is never inserted without approval. Cross-block grouping of vertically
@@ -494,8 +499,8 @@ flow rather than the source page geometry, and a formula the local Word converte
 cannot handle is written as its LaTeX source. PDF export keeps every equation as
 LaTeX source by design.
 
-**Pending** — per-cell alignment, images inline in text, source page layout,
-headers/footers, broader OMML coverage and a bundled offline LaTeX typesetter.
+**Pending** - images inline in text, source page layout, headers/footers, broader
+OMML coverage and a bundled offline LaTeX typesetter.
 
 ## Phase 9 — History, backup and recovery (complete)
 

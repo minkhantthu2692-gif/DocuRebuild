@@ -174,6 +174,17 @@ def _content() -> dict:
     }
 
 
+def test_pdf_export_keeps_table_cell_alignment(tmp_path: Path) -> None:
+    data = render_pdf(_content(), tmp_path, "Alignment")
+    document = _open(data)
+    page = document[0]
+    number = next(word for word in page.get_text("words") if word[4] == "1")
+
+    # The right-aligned cell text ends near the table's right edge. Without the
+    # alignment it would sit at the start of the second column.
+    assert number[2] > page.rect.width * 0.8
+
+
 def test_pdf_export_renders_structure_links_and_metadata(tmp_path: Path) -> None:
     data = render_pdf(_content(), tmp_path, "Quantum Mechanics")
     document = _open(data)

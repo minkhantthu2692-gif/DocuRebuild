@@ -1,14 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import type { TableProposalCandidate, TableProposalCell } from "@docurebuild/shared-types";
+import type {
+  TableAlignment,
+  TableProposalCandidate,
+  TableProposalCell,
+} from "@docurebuild/shared-types";
 
-import { proposalRows, sourceCropGeometry, tableCandidatePreview } from "@/lib/table-candidates";
+import {
+  proposalAlignments,
+  proposalRows,
+  sourceCropGeometry,
+  tableCandidatePreview,
+} from "@/lib/table-candidates";
 
 function cell(
   row: number,
   column: number,
   text: string,
   empty = false,
+  alignment: TableAlignment | null = null,
 ): TableProposalCell {
   return {
     row,
@@ -17,6 +27,7 @@ function cell(
     confidence: null,
     uncertain: false,
     empty,
+    alignment,
   };
 }
 
@@ -75,6 +86,31 @@ describe("tableCandidatePreview", () => {
 
   it("returns an empty string when the first row has no text", () => {
     expect(tableCandidatePreview(candidate([cell(0, 0, "", true)]))).toBe("");
+  });
+});
+
+describe("proposalAlignments", () => {
+  it("places alignments at their coordinates and leaves missing cells null", () => {
+    expect(
+      proposalAlignments({
+        rows: 2,
+        columns: 2,
+        cells: [cell(0, 0, "Name", false, "left"), cell(1, 1, "2", false, "right")],
+      }),
+    ).toEqual([
+      ["left", null],
+      [null, "right"],
+    ]);
+  });
+
+  it("ignores a cell outside the declared grid", () => {
+    expect(
+      proposalAlignments({
+        rows: 1,
+        columns: 1,
+        cells: [cell(0, 0, "A", false, "center"), cell(2, 2, "B", false, "right")],
+      }),
+    ).toEqual([["center"]]);
   });
 });
 

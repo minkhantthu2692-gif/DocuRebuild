@@ -350,6 +350,9 @@ export interface OcrCapabilities {
 
 export type TableProposalWarning = "no_confidence" | "low_confidence" | "empty_cells";
 
+/** Alignment proposed for a cell; `null` means it cannot be observed. */
+export type TableAlignment = "left" | "center" | "right";
+
 /** One proposed cell. Empty cells stay empty; nothing is invented. */
 export interface TableProposalCell {
   row: number;
@@ -359,6 +362,11 @@ export interface TableProposalCell {
   /** At least one word is low-confidence or has no score. */
   uncertain: boolean;
   empty: boolean;
+  /**
+   * Alignment inferred from the cell's word boxes inside its column band, or
+   * null when the text fills the band and the choice is not observable.
+   */
+  alignment: TableAlignment | null;
 }
 
 /** Pixel region a proposal was read from, in OCR image coordinates. */

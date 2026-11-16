@@ -24,10 +24,42 @@ function proposal(): TableProposalCandidate {
     warnings: [],
     source: { x: 0, y: 100, width: 240, height: 80 },
     cells: [
-      { row: 0, column: 0, text: "Name", confidence: null, uncertain: false, empty: false },
-      { row: 0, column: 1, text: "Value", confidence: null, uncertain: false, empty: false },
-      { row: 1, column: 0, text: "Mass", confidence: null, uncertain: false, empty: false },
-      { row: 1, column: 1, text: "2", confidence: null, uncertain: false, empty: false },
+      {
+        row: 0,
+        column: 0,
+        text: "Name",
+        confidence: null,
+        uncertain: false,
+        empty: false,
+        alignment: "left",
+      },
+      {
+        row: 0,
+        column: 1,
+        text: "Value",
+        confidence: null,
+        uncertain: false,
+        empty: false,
+        alignment: "center",
+      },
+      {
+        row: 1,
+        column: 0,
+        text: "Mass",
+        confidence: null,
+        uncertain: false,
+        empty: false,
+        alignment: "left",
+      },
+      {
+        row: 1,
+        column: 1,
+        text: "2",
+        confidence: null,
+        uncertain: false,
+        empty: false,
+        alignment: "right",
+      },
     ],
   };
 }
@@ -107,6 +139,25 @@ describe("TableReview source comparison", () => {
     expect(
       screen.queryByRole("button", { name: "Hide source" }),
     ).toBeNull();
+  });
+});
+
+describe("TableReview alignment", () => {
+  it("applies the detected alignment to cell text", () => {
+    renderReview();
+
+    expect(screen.getByText("Value")).toHaveStyle({ textAlign: "center" });
+    expect(screen.getByText("2")).toHaveStyle({ textAlign: "right" });
+    expect(screen.getByText("Mass")).toHaveStyle({ textAlign: "left" });
+  });
+
+  it("keeps the alignment while a cell is edited", () => {
+    renderReview();
+    fireEvent.click(screen.getByRole("button", { name: "Edit cells" }));
+
+    expect(
+      screen.getByRole("textbox", { name: "Cell row 1, column 2" }),
+    ).toHaveStyle({ textAlign: "center" });
   });
 });
 

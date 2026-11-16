@@ -1,4 +1,5 @@
 import type {
+  TableAlignment,
   TableProposalCandidate,
   TableProposalCell,
   TableProposalWarning,
@@ -47,6 +48,25 @@ export function tableCandidatePreview(candidate: TableProposalCandidate): string
     .map((cell) => cell.text.trim())
     .filter(Boolean)
     .join(" · ");
+}
+
+/**
+ * Alignment matrix in the same shape as `proposalRows`. A coordinate the
+ * proposal does not include keeps `null`, so insertion does not apply an
+ * alignment the backend never observed.
+ */
+export function proposalAlignments(
+  proposal: Pick<TableGridProposal, "rows" | "columns" | "cells">,
+): (TableAlignment | null)[][] {
+  const grid = Array.from({ length: proposal.rows }, () =>
+    Array.from({ length: proposal.columns }, () => null as TableAlignment | null),
+  );
+  for (const cell of proposal.cells) {
+    if (grid[cell.row]?.[cell.column] !== undefined) {
+      grid[cell.row][cell.column] = cell.alignment;
+    }
+  }
+  return grid;
 }
 
 /** Positioning for a crop preview, as percentages of the preview box. */

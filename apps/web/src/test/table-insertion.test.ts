@@ -84,6 +84,48 @@ describe("tableInsertionContent", () => {
     expect(nodes[1]?.content?.[0]?.content?.[0]?.text).toBe("Source: page 2");
   });
 
+  it("applies only the alignments the proposal observed", () => {
+    const [table] = tableInsertionContent({
+      rows: [
+        ["Name", "Value"],
+        ["Mass", "2"],
+      ],
+      alignments: [
+        ["left", "center"],
+        [null, "right"],
+      ],
+      headerRow: false,
+      note: null,
+    });
+    const paragraphs = (table.content ?? []).map((row) =>
+      (row.content ?? []).map((cell) => cell.content?.[0]),
+    );
+
+    // Left is the paragraph default, so it needs no attribute; a coordinate the
+    // proposal did not include must not receive an invented alignment.
+    expect(paragraphs[0]?.[0]?.attrs).toBeUndefined();
+    expect(paragraphs[0]?.[1]?.attrs).toEqual({ textAlign: "center" });
+    expect(paragraphs[1]?.[0]?.attrs).toBeUndefined();
+    expect(paragraphs[1]?.[1]?.attrs).toEqual({ textAlign: "right" });
+  });
+
+  it("keeps cell alignment in the real editor schema", () => {
+    const instance = createEditor();
+    instance.commands.insertContent(
+      tableInsertionContent({
+        rows: [["Name", "Value"]],
+        alignments: [["left", "center"]],
+        headerRow: false,
+        note: null,
+      }) as Content,
+    );
+
+    const table = documentJSON(instance).content?.find((node) => node.type === "table");
+    const cells = table?.content?.[0]?.content ?? [];
+    expect(cells[0]?.content?.[0]?.attrs?.textAlign ?? null).toBeNull();
+    expect(cells[1]?.content?.[0]?.attrs?.textAlign).toBe("center");
+  });
+
   it("inserts into the real editor schema", () => {
     const instance = createEditor();
     instance.commands.insertContent(
