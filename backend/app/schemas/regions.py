@@ -12,7 +12,13 @@ ProposalStatus = Literal[
     "ocr_stale",
     "no_geometry",
 ]
-ProposalReason = Literal["table_text_grid", "equation_text", "figure_caption_gap", "ai_vision"]
+ProposalReason = Literal[
+    "table_text_grid",
+    "equation_text",
+    "figure_caption_gap",
+    "pdf_image_region",
+    "ai_vision",
+]
 
 
 class RegionProposalOut(BaseModel):

@@ -12,8 +12,8 @@ presented in the UI until it actually works.
 | 1. Local storage and project management | **Complete** | App/project DBs, folders, manifest, CRUD, trash |
 | 2. Main UI and workspace | **Complete** | Header navigation, dashboard, two-panel workspace, settings, i18n |
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
-| 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates) and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
-| 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
+| 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates), deterministic figure suggestions from embedded PDF images and a local CER/WER benchmark harness done; measured real-document accuracy and PDF vector-figure detection pending |
+| 5. Element extraction | **In progress** | Manual region crop, local region text extraction, OCR-layout and embedded-PDF-image region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word/PDF export; vision tables, merged-cell detection and automatic equation extraction pending |
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, footnotes, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
@@ -210,16 +210,21 @@ described as universally free or universally accurate.
   Manual transcription and correction work without OCR.
 - Reviewable region suggestions derived from the latest local OCR layout. Table
   and equation blocks are clustered into suggestions, and a figure band is
-  suggested above figure-like captions. Suggestions are read-only, never saved
-  automatically, and prefill the normal extraction dialog. Expected states such as
-  no OCR run, stale, failed or missing geometry are reported in the response.
+  suggested above figure-like captions. On imported PDF pages, raster images
+  embedded in the page are proposed as uncaptioned figures from their actual
+  placement; full-page backgrounds and tiny images are skipped, and a caption
+  covering the same artwork is merged into the image proposal. Suggestions are
+  read-only, never saved automatically, and prefill the normal extraction dialog.
+  Expected states such as no OCR run, stale, failed or missing geometry are
+  reported in the response.
 - `element_extraction` and `region_proposals` capability flags, plus English and
   Burmese interface strings.
 
 **Remaining**
 
-- Uncaptioned figure detection and artwork separated from its caption when no AI
-  vision model is configured; these currently require manual selection.
+- Figures that exist only as vector drawings, and artwork in photographed pages
+  without a caption or an embedded raster image; these currently require manual
+  selection.
 - Structured table cells and equation transcription, which belong to Phase 7.
 
 ## Phase 6 — AI integration and free usage first (in progress)

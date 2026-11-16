@@ -22,8 +22,9 @@ data on your device, and treats every AI result as a reviewable proposal.
 > providers, free-tier adapters, paid usage, image generation and automatic
 > equation/figure reconstruction are **not implemented yet** and are clearly marked
 > as unavailable in the UI. Table cells can be proposed from stored OCR word boxes,
-> including table rows that a PDF stored as separate text blocks, but only as a
-> reviewed, user-confirmed grid. Nothing in this repository fakes those features.
+> including table rows that a PDF stored as separate text blocks, and raster images
+> embedded in a PDF can be proposed as figure regions, but only as reviewed,
+> user-confirmed content. Nothing in this repository fakes those features.
 
 ---
 
@@ -90,8 +91,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   deletion to local trash. If the page was changed after extraction, the region is
   marked stale; the saved crop is never silently treated as matching a newer page.
   A "Suggest regions" overlay derives reviewable figure, table and equation
-  suggestions from the latest local OCR layout. Suggestions are never saved on
-  their own: choosing one only prefills the normal extraction dialog.
+  suggestions from the latest local OCR layout. On imported PDF pages, images
+  embedded in the page file are proposed as uncaptioned figures from their real
+  placement, while full-page scan backgrounds and tiny logos are skipped; a
+  caption that describes the same artwork supplies its text. Suggestions are never
+  saved on their own: choosing one only prefills the normal extraction dialog.
   When a vision model is saved in Settings, "Ask AI for regions" sends only the
   current page image to that configured local server and shows its figure, table
   and equation proposals as clearly marked low-confidence regions. Nothing is

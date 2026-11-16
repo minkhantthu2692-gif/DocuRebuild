@@ -48,7 +48,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.local_backups` | Local backup vault: verified copy creation, retention pruning, safe name resolution and opt-in automatic copies |
 | `services.page_restore` | Selective restore: staged archive inspection, short-lived selection tokens, additive page/asset/OCR/element copying, page-image and region-crop repair and reversible document-version restore |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
-| `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
+| `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout and, on PDF pages, embedded raster-image placement |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness |
 | `services.table_structure` | Reviewable table proposals from stored OCR word boxes: row clustering, whitespace column bands, cell text/confidence/flags, page-level grouping of vertically contiguous row blocks, source pixel box, size caps and typed refusal errors |
@@ -485,11 +485,25 @@ src/
 
 ### Region suggestions
 
-- Suggestions reuse the OCR text layout instead of a vision model, so they stay
-  free, local and explainable. Three signals are recognised:
-  `table_text_grid` (merged OCR `table` blocks), `equation_text` (OCR `equation`
-  blocks) and `figure_caption_gap` (the empty band above a `caption` block whose
-  text starts with figure/diagram/chart/plate/photo/image/illustration).
+- Suggestions reuse the OCR text layout and, on PDF pages, the placement of
+  embedded raster images instead of a vision model, so they stay free, local and
+  explainable. Four signals are recognised: `table_text_grid` (merged OCR `table`
+  blocks), `equation_text` (OCR `equation` blocks), `figure_caption_gap` (the empty
+  band above a `caption` block whose text starts with
+  figure/diagram/chart/plate/photo/image/illustration) and `pdf_image_region` (a
+  raster image drawn on the PDF page).
+- `services.pdf.image_regions` reads `Page.get_image_info()`, applies the page's
+  own `/Rotate` matrix and converts PDF points to the stored page's pixel width.
+  Boundaries are converted to the rendered page width, so a figure box stays in the
+  same coordinate system as the displayed image and the OCR blocks. Only geometry
+  is read; the pixels are not classified.
+- An image box is proposed as a figure only when it is at least 5 % of the page
+  wide and 3 % tall. A raster covering at least 80 % of both dimensions is treated
+  as a scanned page background rather than artwork, and a caption band that covers
+  most of the same area is merged into the image proposal so the user sees one
+  precise rectangle with the caption text. Image boxes are read from the immutable
+  PDF only when the page has no rotation or geometry edit; a stale OCR run withholds
+  every suggestion, so a box is never drawn against a different render.
 - Clustering merges vertically adjacent blocks of the same kind only when their
   columns overlap and the gap is small relative to their height, so a table split
   into several blocks becomes one suggestion. Rectangles are padded by 0.8 % of
@@ -503,9 +517,10 @@ src/
   frame. Choosing one opens the normal extraction dialog prefilled with the kind,
   caption and rectangle and marked as a suggestion; nothing is saved until the
   user confirms through the existing crop path.
-- Limitations: uncaptioned figures, artwork separated from its caption and regions
-  OCR did not read are not suggested, and no cell or equation structure is
-  derived. `region_proposals` in `/api/meta` advertises the feature.
+- Limitations: PDF vector drawings and artwork in photographed pages are not
+  detected, an embedded image on a page with no text run is not suggested, and no
+  cell or equation structure is derived. `region_proposals` in `/api/meta`
+  advertises the feature.
 
 ### Document tables
 
@@ -1220,8 +1235,9 @@ src/
   model is bundled, so labels can be wrong but never fabricated, require no model
   download, and are cheap to explain and test. Simple table structure can be
   derived from stored word boxes, including vertically contiguous row blocks, but
-  without merged cells; figure regions still need a later engine adapter rather
-  than more regexes.
+  without merged cells. Embedded PDF raster images supply precise figure boxes
+  without a model; vector drawings and artwork in photographed pages still need
+  manual selection or a later detector.
 - **AI starts local and proposal-only** — the AI workflows correct one OCR block
   or propose reviewable page regions through a user-configured server. Loopback is
   allowed by default and any other host needs stored remote consent, with

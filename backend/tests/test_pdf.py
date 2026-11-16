@@ -148,6 +148,39 @@ def test_extract_text_attaches_real_word_boxes_to_blocks() -> None:
     ]
 
 
+def test_image_regions_convert_pdf_boxes_to_rendered_pixels() -> None:
+    from app.services import pdf
+
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=600, height=800)
+        page.insert_image(pymupdf.Rect(100, 200, 300, 350), stream=make_png(40, 30))
+
+        # A 600 pt wide page rendered 1200 px wide doubles every coordinate.
+        regions = pdf.image_regions(document, 0, 1200)
+        assert len(regions) == 1
+        assert regions[0] == {"x": 200.0, "y": 400.0, "width": 400.0, "height": 300.0}
+
+        # A page-level /Rotate is applied so the box stays aligned with the
+        # pixmap the workspace displays.
+        page.set_rotation(90)
+        rotated = pdf.image_regions(document, 0, 1600)
+        assert len(rotated) == 1
+        assert rotated[0] == {"x": 900.0, "y": 200.0, "width": 300.0, "height": 400.0}
+    finally:
+        document.close()
+
+
+def test_image_regions_returns_nothing_for_an_unreadable_page() -> None:
+    from app.services import pdf
+
+    class FakeDocument:
+        def load_page(self, index: int):
+            raise RuntimeError("cannot read")
+
+    assert pdf.image_regions(FakeDocument(), 0, 1200) == []
+
+
 def test_image_only_pdf_page_has_no_embedded_text_run(
     client: TestClient, project: dict
 ) -> None:

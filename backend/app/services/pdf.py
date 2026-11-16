@@ -78,6 +78,48 @@ def render_page(document, index: int, dpi: int) -> Image.Image:
         ) from exc
 
 
+def image_regions(document, index: int, target_width: int) -> list[dict[str, float]]:
+    """Return the boxes of raster images drawn on a PDF page.
+
+    ``Page.get_image_info`` reports where each embedded image is placed, not
+    what it contains. Coordinates are converted to rendered-page pixels with
+    the same width as the stored page, so a caller can compare them with the
+    image the user sees. The page's own ``/Rotate`` value is applied; an
+    unreadable page yields no regions instead of failing a whole request.
+
+    Only geometry is returned. A box is a candidate, never proof that the
+    region is a figure; the caller decides which boxes are worth proposing.
+    """
+    try:
+        page = document.load_page(index)
+        if page.rect.width <= 0:
+            return []
+        scale = target_width / float(page.rect.width)
+        info = page.get_image_info()
+        regions: list[dict[str, float]] = []
+        for item in info:
+            bbox = item.get("bbox")
+            if not bbox or len(bbox) < 4:
+                continue
+            rect = pymupdf.Rect(*[float(value) for value in bbox[:4]])
+            rect = rect * page.rotation_matrix
+            width = rect.width * scale
+            height = rect.height * scale
+            if width < 1 or height < 1:
+                continue
+            regions.append(
+                {
+                    "x": rect.x0 * scale,
+                    "y": rect.y0 * scale,
+                    "width": width,
+                    "height": height,
+                }
+            )
+        return regions
+    except Exception:
+        return []
+
+
 def extract_text(
     document, index: int, scale: float
 ) -> tuple[str, list[dict[str, Any]]]:

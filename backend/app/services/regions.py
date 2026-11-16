@@ -5,11 +5,15 @@ from pathlib import Path
 from typing import Any
 
 from app.core.errors import AppError
+from app.core.storage import resolve_within
 from app.db.project_schema import project_db
+from app.services import image_edits as edits_service
+from app.services import pdf as pdf_service
 
-# A figure suggestion is anchored to a figure-like caption. Without a caption
-# there is no reliable local signal that separates a drawing from empty space,
-# so uncaptioned figures are left to manual selection.
+# A figure suggestion is anchored to a figure-like caption, or to a raster
+# image embedded in a PDF. Without either signal there is no reliable local
+# evidence that separates a drawing from empty space, so uncaptioned artwork in
+# a photographed page is left to manual selection.
 FIGURE_CAPTION_RE = re.compile(
     r"^(?:figure|fig\.?|diagram|chart|plate|photo|image|illustration)\b",
     re.IGNORECASE,
@@ -20,6 +24,11 @@ MAX_PROPOSALS = 20
 PADDING_RATIO = 0.008
 FIGURE_GAP_RATIO = 0.06
 DEDUPE_IOU = 0.85
+# A raster image covering almost the whole page is usually a scanned
+# background. Very small images are usually logos, rules or bullets.
+IMAGE_BACKGROUND_SHARE = 0.8
+IMAGE_MIN_WIDTH_RATIO = 0.05
+IMAGE_MIN_HEIGHT_RATIO = 0.03
 
 Rect = dict[str, float]
 
@@ -218,6 +227,48 @@ def _figure_rects(
     return unique
 
 
+def _image_rects(
+    rects: list[Rect], page_width: int, page_height: int
+) -> list[Rect]:
+    """Keep embedded-image boxes that could plausibly be a figure.
+
+    A full-page raster is normally a scanned background, and a very small image
+    is normally a logo or a rule. Both are skipped so the suggestion list stays
+    about content the user may actually want to crop.
+    """
+    minimum_width = max(8.0, page_width * IMAGE_MIN_WIDTH_RATIO)
+    minimum_height = max(8.0, page_height * IMAGE_MIN_HEIGHT_RATIO)
+    kept: list[Rect] = []
+    for rect in rects:
+        if rect["width"] < minimum_width or rect["height"] < minimum_height:
+            continue
+        if (
+            rect["width"] >= page_width * IMAGE_BACKGROUND_SHARE
+            and rect["height"] >= page_height * IMAGE_BACKGROUND_SHARE
+        ):
+            continue
+        kept.append(rect)
+    return kept
+
+
+def _same_area(first: Rect, second: Rect) -> bool:
+    """True when two boxes describe the same artwork.
+
+    A caption band is usually a little wider than the artwork, so the overlap is
+    compared with the smaller box instead of requiring an exact match. Both
+    boxes remain proposals: merging only decides which rectangle and caption
+    the user sees.
+    """
+    intersection = _intersection(first, second)
+    if intersection <= 0:
+        return False
+    smaller = min(
+        first["width"] * first["height"],
+        second["width"] * second["height"],
+    )
+    return smaller > 0 and intersection / smaller >= 0.6
+
+
 def already_extracted(proposal: Rect, element: Rect) -> bool:
     """Treat a proposal as covered when an element holds almost all of it.
 
@@ -275,12 +326,14 @@ def _empty(
 
 
 def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
-    """Derive reviewable region proposals from the latest local OCR layout.
+    """Derive reviewable region proposals from local layout evidence.
 
-    Proposals are not persisted and never become elements on their own. The
-    user reviews the rectangle and caption, then saves it through the normal
-    crop path, so a bad suggestion costs nothing and is never treated as
-    verified content.
+    Text comes from the latest OCR run. PDF pages also expose the placement of
+    embedded raster images, which is a deterministic signal that the region
+    contains artwork even without a caption. Proposals are not persisted and
+    never become elements on their own: the user reviews the rectangle and
+    caption, then saves it through the normal crop path, so a bad suggestion
+    costs nothing and is never treated as verified content.
     """
     with project_db(project_dir) as conn:
         page = _get_page(conn, page_id)
@@ -309,6 +362,26 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
                 (page_id,),
             ).fetchall()
         ]
+        # Embedded raster images are a deterministic local signal that a
+        # region contains artwork. They are only read from the immutable PDF,
+        # so page rotation or a geometry edit makes the boxes unusable.
+        image_source: tuple[Path, int] | None = None
+        if page["source_kind"] == "pdf" and int(page["rotation"]) == 0:
+            if not edits_service.has_edits(edits_service.decode_edits(page["edits"])):
+                asset = conn.execute(
+                    "SELECT relative_path FROM assets WHERE id = ?",
+                    (page["original_asset_id"],),
+                ).fetchone()
+                if asset is not None:
+                    try:
+                        pdf_path = resolve_within(project_dir, asset["relative_path"])
+                    except ValueError:
+                        pdf_path = None
+                    if pdf_path is not None and pdf_path.exists():
+                        image_source = (
+                            pdf_path,
+                            max(0, int(page["pdf_page_number"] or 1) - 1),
+                        )
 
     base_width = int(page_width) if page_width else None
     base_height = int(page_height) if page_height else None
@@ -352,18 +425,73 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
                 )
             )
 
+    image_rects: list[Rect] = []
+    if image_source is not None:
+        pdf_path, pdf_index = image_source
+        document = None
+        try:
+            document = pdf_service.open_document(pdf_path)
+        except Exception:
+            document = None
+        if document is not None:
+            try:
+                image_rects = _image_rects(
+                    pdf_service.image_regions(document, pdf_index, int(page_width)),
+                    int(page_width),
+                    int(page_height),
+                )
+            finally:
+                document.close()
+
+    # An embedded image gives the precise artwork box. A caption band gives the
+    # text but only approximates the artwork, so when both describe the same
+    # area the image rectangle is kept and the caption is attached to it. A
+    # caption without matching artwork still becomes its own suggestion.
+    figures: list[dict[str, Any]] = [
+        {
+            "rect": rect,
+            "caption": "",
+            "reason": "pdf_image_region",
+            "block_ids": [],
+        }
+        for rect in image_rects
+    ]
     for rect, caption in _figure_rects(blocks, int(page_width), int(page_height)):
-        clamped = clamp_rect(rect, int(page_width), int(page_height))
+        caption_text = caption["text"].strip()[:500]
+        matched = next(
+            (
+                candidate
+                for candidate in figures
+                if _same_area(candidate["rect"], rect)
+            ),
+            None,
+        )
+        if matched is not None:
+            if not matched["caption"]:
+                matched["caption"] = caption_text
+                matched["block_ids"] = [caption["id"]]
+            continue
+        figures.append(
+            {
+                "rect": rect,
+                "caption": caption_text,
+                "reason": "figure_caption_gap",
+                "block_ids": [caption["id"]],
+            }
+        )
+
+    for figure in figures:
+        clamped = clamp_rect(figure["rect"], int(page_width), int(page_height))
         if clamped is None:
             continue
         proposals.append(
             _proposal(
                 clamped,
                 kind="figure",
-                reason="figure_caption_gap",
+                reason=figure["reason"],
                 confidence="medium",
-                caption=caption["text"].strip()[:500],
-                block_ids=[caption["id"]],
+                caption=figure["caption"],
+                block_ids=figure["block_ids"],
             )
         )
 

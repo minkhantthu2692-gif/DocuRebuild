@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import time
 
+import pymupdf
 from fastapi.testclient import TestClient
 
-from tests.conftest import upload_pages
+from tests.conftest import make_png, upload_pages
 
 
 def _engine_available() -> dict:
@@ -43,6 +44,57 @@ def _fake_result(blocks: list[dict]) -> dict:
         "mean_confidence": 90.0,
         "blocks": blocks,
     }
+
+
+def _figure_pdf(
+    *,
+    caption: str | None = None,
+    background: bool = False,
+    logo: bool = False,
+) -> bytes:
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=600, height=800)
+        if background:
+            page.insert_image(
+                pymupdf.Rect(0, 0, 600, 800), stream=make_png(300, 400)
+            )
+        elif logo:
+            page.insert_image(pymupdf.Rect(72, 40, 92, 50), stream=make_png(20, 10))
+        else:
+            page.insert_image(
+                pymupdf.Rect(100, 200, 400, 400), stream=make_png(300, 200)
+            )
+        page.insert_text((72, 100), "Body text on the same page.", fontsize=12)
+        if caption:
+            page.insert_text((100, 460), caption, fontsize=12)
+        return document.tobytes()
+    finally:
+        document.close()
+
+
+def _upload_pdf(
+    client: TestClient, project_id: str, name: str, data: bytes
+) -> dict:
+    response = client.post(
+        f"/api/projects/{project_id}/pages/import",
+        files=[("files", (name, data, "application/pdf"))],
+    )
+    assert response.status_code == 200, response.text
+    return response.json()[0]
+
+
+def _figure_proposals(
+    client: TestClient, project_id: str, page_id: str
+) -> tuple[dict, list[dict]]:
+    response = client.get(
+        f"/api/projects/{project_id}/pages/{page_id}/region-proposals"
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    return body, [
+        proposal for proposal in body["proposals"] if proposal["kind"] == "figure"
+    ]
 
 
 def _run_ocr(client: TestClient, project_id: str, page_id: str) -> dict:
@@ -236,3 +288,80 @@ def test_region_proposals_report_a_failed_ocr_run(
     ).json()
     assert body["status"] == "ocr_failed"
     assert body["proposals"] == []
+
+
+def test_pdf_image_region_proposes_an_uncaptioned_figure(
+    client: TestClient, project: dict
+) -> None:
+    page = _upload_pdf(client, project["id"], "figure.pdf", _figure_pdf())
+    body, figures = _figure_proposals(client, project["id"], page["id"])
+
+    assert body["status"] == "ready"
+    assert len(figures) == 1
+    figure = figures[0]
+    assert figure["reason"] == "pdf_image_region"
+    assert figure["confidence"] == "medium"
+    assert figure["caption"] == ""
+    assert figure["block_ids"] == []
+    # The box is the image's own placement, padded and clamped like any other
+    # proposal, not the empty band a caption heuristic would estimate.
+    scale = body["page_width"] / 600
+    assert abs(figure["x"] - round(100 * scale)) <= 20
+    assert abs(figure["y"] - round(200 * scale)) <= 20
+    assert abs(figure["width"] - round(300 * scale)) <= 40
+    assert abs(figure["height"] - round(200 * scale)) <= 40
+
+
+def test_pdf_image_region_merges_a_matching_caption(
+    client: TestClient, project: dict
+) -> None:
+    caption = "Figure 1. Measured mass spectrum of the sample"
+    page = _upload_pdf(
+        client, project["id"], "captioned-figure.pdf", _figure_pdf(caption=caption)
+    )
+    body, figures = _figure_proposals(client, project["id"], page["id"])
+
+    assert len(figures) == 1
+    # One proposal instead of a close image box plus an estimated caption band.
+    assert figures[0]["reason"] == "pdf_image_region"
+    assert figures[0]["caption"] == caption
+    assert len(figures[0]["block_ids"]) == 1
+    assert all(
+        proposal["reason"] != "figure_caption_gap" for proposal in body["proposals"]
+    )
+
+
+def test_pdf_full_page_background_is_not_a_figure(
+    client: TestClient, project: dict
+) -> None:
+    page = _upload_pdf(
+        client, project["id"], "scanned.pdf", _figure_pdf(background=True)
+    )
+    body, figures = _figure_proposals(client, project["id"], page["id"])
+
+    assert body["status"] == "ready"
+    assert figures == []
+
+
+def test_pdf_small_logo_is_not_a_figure(client: TestClient, project: dict) -> None:
+    page = _upload_pdf(client, project["id"], "logo.pdf", _figure_pdf(logo=True))
+    _, figures = _figure_proposals(client, project["id"], page["id"])
+
+    assert figures == []
+
+
+def test_pdf_image_regions_are_not_proposed_after_a_page_change(
+    client: TestClient, project: dict
+) -> None:
+    page = _upload_pdf(client, project["id"], "rotated.pdf", _figure_pdf())
+    rotated = client.post(
+        f"/api/projects/{project['id']}/pages/{page['id']}/rotate",
+        json={"degrees": 90},
+    )
+    assert rotated.status_code == 200, rotated.text
+
+    body, figures = _figure_proposals(client, project["id"], page["id"])
+    # The image boxes describe the unrotated render, so they are withheld until
+    # the page is processed again rather than displayed in the wrong place.
+    assert body["status"] == "ocr_stale"
+    assert figures == []

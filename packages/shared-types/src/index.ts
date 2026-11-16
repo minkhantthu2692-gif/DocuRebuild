@@ -593,6 +593,7 @@ export type RegionProposalReason =
   | "table_text_grid"
   | "equation_text"
   | "figure_caption_gap"
+  | "pdf_image_region"
   | "ai_vision";
 
 export interface RegionProposal {
