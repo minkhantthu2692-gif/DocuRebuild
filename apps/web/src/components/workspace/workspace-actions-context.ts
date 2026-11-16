@@ -30,6 +30,10 @@ export interface WorkspaceTableInsertion {
   rows: string[][];
   /** Per-cell alignment observed in the source; null keeps the default. */
   alignments: (TableAlignment | null)[][];
+  /** Merged-cell row spans; 0 marks a coordinate covered by another cell. */
+  rowSpans: number[][];
+  /** Merged-cell column spans; 0 marks a covered coordinate. */
+  colSpans: number[][];
   headerRow: boolean;
   note: string | null;
 }

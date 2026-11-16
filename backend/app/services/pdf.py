@@ -120,6 +120,88 @@ def image_regions(document, index: int, target_width: int) -> list[dict[str, flo
         return []
 
 
+def table_lines(
+    document, index: int, target_width: int
+) -> tuple[
+    list[tuple[float, float, float]],
+    list[tuple[float, float, float]],
+]:
+    """Return horizontal and vertical rule segments drawn on a PDF page.
+
+    Each horizontal rule is ``(y, x0, x1)`` and each vertical rule is
+    ``(x, y0, y1)`` in rendered-page pixels. Only axis-aligned strokes and thin
+    filled rectangles are returned. Curves, diagonal lines and filled areas are
+    ignored because they cannot describe a rectangular cell. A page that cannot
+    be read yields no rules instead of failing the request.
+    """
+    try:
+        page = document.load_page(index)
+        if page.rect.width <= 0:
+            return [], []
+        scale = target_width / float(page.rect.width)
+        drawings = page.get_drawings()
+    except Exception:
+        return [], []
+
+    matrix = page.rotation_matrix
+    horizontals: list[tuple[float, float, float]] = []
+    verticals: list[tuple[float, float, float]] = []
+
+    def add_segment(ax: float, ay: float, bx: float, by: float) -> None:
+        if abs(ay - by) <= 1.0 and abs(bx - ax) >= 2.0:
+            horizontals.append(
+                (
+                    round(((ay + by) / 2) * scale, 2),
+                    round(min(ax, bx) * scale, 2),
+                    round(max(ax, bx) * scale, 2),
+                )
+            )
+        elif abs(ax - bx) <= 1.0 and abs(by - ay) >= 2.0:
+            verticals.append(
+                (
+                    round(((ax + bx) / 2) * scale, 2),
+                    round(min(ay, by) * scale, 2),
+                    round(max(ay, by) * scale, 2),
+                )
+            )
+
+    for path in drawings:
+        # A filled cell background may also be stroked; its outline is still a
+        # real rule, so the stroke presence decides and the fill does not matter.
+        stroked = path.get("color") is not None
+        for item in path.get("items", ()):
+            if not item:
+                continue
+            kind = item[0]
+            if kind == "l" and len(item) >= 3:
+                start = item[1] * matrix
+                end = item[2] * matrix
+                add_segment(start.x, start.y, end.x, end.y)
+            elif kind == "re" and len(item) >= 2:
+                rect = _module_rect(item[1], matrix)
+                width = rect.width
+                height = rect.height
+                if height <= 2.0 and width >= 8.0:
+                    middle = (rect.y0 + rect.y1) / 2
+                    add_segment(rect.x0, middle, rect.x1, middle)
+                elif width <= 2.0 and height >= 8.0:
+                    middle = (rect.x0 + rect.x1) / 2
+                    add_segment(middle, rect.y0, middle, rect.y1)
+                elif stroked:
+                    # A stroked rectangle's four edges are real rules, even
+                    # though the whole rectangle is not a thin fill.
+                    add_segment(rect.x0, rect.y0, rect.x1, rect.y0)
+                    add_segment(rect.x0, rect.y1, rect.x1, rect.y1)
+                    add_segment(rect.x0, rect.y0, rect.x0, rect.y1)
+                    add_segment(rect.x1, rect.y0, rect.x1, rect.y1)
+    return horizontals, verticals
+
+
+def _module_rect(rect, matrix):
+    """Return a page rectangle transformed and normalised by a page matrix."""
+    return pymupdf.Rect(rect) * matrix
+
+
 def extract_text(
     document, index: int, scale: float
 ) -> tuple[str, list[dict[str, Any]]]:

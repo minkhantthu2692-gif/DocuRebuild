@@ -100,6 +100,110 @@ function renderReview(sourceImageUrl: string | null = null, data?: TableProposal
   return render(<ReviewHarness sourceImageUrl={sourceImageUrl} data={data} />);
 }
 
+function mergedProposal(): TableProposalCandidate {
+  return {
+    block_ids: ["a"],
+    rows: 3,
+    columns: 3,
+    has_confidence: false,
+    uncertain_cells: 0,
+    empty_cells: 0,
+    warnings: [],
+    source: { x: 0, y: 100, width: 300, height: 120 },
+    cells: [
+      {
+        row: 0,
+        column: 0,
+        text: "Merged header",
+        confidence: null,
+        uncertain: false,
+        empty: false,
+        alignment: null,
+        colspan: 3,
+      },
+      {
+        row: 1,
+        column: 0,
+        text: "Group",
+        confidence: null,
+        uncertain: false,
+        empty: false,
+        alignment: "left",
+        rowspan: 2,
+      },
+      {
+        row: 1,
+        column: 1,
+        text: "1.2",
+        confidence: null,
+        uncertain: false,
+        empty: false,
+        alignment: null,
+      },
+      {
+        row: 1,
+        column: 2,
+        text: "3.4",
+        confidence: null,
+        uncertain: false,
+        empty: false,
+        alignment: null,
+      },
+      {
+        row: 2,
+        column: 1,
+        text: "5.6",
+        confidence: null,
+        uncertain: false,
+        empty: false,
+        alignment: null,
+      },
+      {
+        row: 2,
+        column: 2,
+        text: "7.8",
+        confidence: null,
+        uncertain: false,
+        empty: false,
+        alignment: null,
+      },
+    ],
+  };
+}
+
+describe("TableReview merged cells", () => {
+  it("renders spans and skips the coordinates another cell covers", () => {
+    const { container } = renderReview(null, mergedProposal());
+
+    const rows = container.querySelectorAll("tbody tr");
+    expect(rows).toHaveLength(3);
+    expect(rows[0]?.querySelectorAll("td")).toHaveLength(1);
+    expect(screen.getByText("Merged header").closest("td")).toHaveAttribute(
+      "colspan",
+      "3",
+    );
+    expect(rows[1]?.querySelectorAll("td")).toHaveLength(3);
+    expect(screen.getByText("Group").closest("td")).toHaveAttribute("rowspan", "2");
+    // The covered coordinate under "Group" is not a cell of its own.
+    expect(rows[2]?.querySelectorAll("td")).toHaveLength(2);
+    expect(screen.getAllByText("Group")).toHaveLength(1);
+
+    expect(screen.getByText("2 merged cell(s)")).toBeInTheDocument();
+  });
+
+  it("keeps the merged coordinates empty in the inserted rows", () => {
+    renderReview(null, mergedProposal());
+
+    expect(screen.getByTestId("rows").textContent).toBe(
+      JSON.stringify([
+        ["Merged header", "", ""],
+        ["Group", "1.2", "3.4"],
+        ["", "5.6", "7.8"],
+      ]),
+    );
+  });
+});
+
 describe("TableReview source comparison", () => {
   it("shows the source crop positioned from the proposal box", () => {
     const { container } = renderReview("http://api/pages/1/image");

@@ -9,6 +9,7 @@ import type {
 import {
   proposalAlignments,
   proposalRows,
+  proposalSpans,
   sourceCropGeometry,
   tableCandidatePreview,
 } from "@/lib/table-candidates";
@@ -111,6 +112,47 @@ describe("proposalAlignments", () => {
         cells: [cell(0, 0, "A", false, "center"), cell(2, 2, "B", false, "right")],
       }),
     ).toEqual([["center"]]);
+  });
+});
+
+describe("proposalSpans", () => {
+  it("marks covered coordinates while keeping the anchors", () => {
+    const spans = proposalSpans({
+      rows: 3,
+      columns: 3,
+      cells: [
+        { ...cell(0, 0, "Merged header"), colspan: 3 },
+        { ...cell(1, 0, "Group"), rowspan: 2 },
+        cell(1, 1, "1.2"),
+        cell(1, 2, "3.4"),
+        cell(2, 1, "5.6"),
+        cell(2, 2, "7.8"),
+      ],
+    });
+
+    expect(spans.merged).toBe(true);
+    expect(spans.rowSpan).toEqual([
+      [1, 0, 0],
+      [2, 1, 1],
+      [0, 1, 1],
+    ]);
+    expect(spans.colSpan).toEqual([
+      [3, 0, 0],
+      [1, 1, 1],
+      [0, 1, 1],
+    ]);
+  });
+
+  it("treats missing spans as a plain grid and ignores an oversized cell", () => {
+    const spans = proposalSpans({
+      rows: 1,
+      columns: 1,
+      cells: [{ ...cell(0, 0, "A"), colspan: 2 }, cell(3, 3, "outside")],
+    });
+
+    expect(spans.merged).toBe(false);
+    expect(spans.rowSpan).toEqual([[1]]);
+    expect(spans.colSpan).toEqual([[1]]);
   });
 });
 

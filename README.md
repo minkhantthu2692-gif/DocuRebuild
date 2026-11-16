@@ -22,9 +22,10 @@ data on your device, and treats every AI result as a reviewable proposal.
 > providers, free-tier adapters, paid usage, image generation and automatic
 > equation/figure reconstruction are **not implemented yet** and are clearly marked
 > as unavailable in the UI. Table cells can be proposed from stored OCR word boxes,
-> including table rows that a PDF stored as separate text blocks, and raster images
-> embedded in a PDF can be proposed as figure regions, but only as reviewed,
-> user-confirmed content. Nothing in this repository fakes those features.
+> including table rows that a PDF stored as separate text blocks; merged cells are
+> also taken from a PDF's own drawn table lines, and raster images embedded in a PDF
+> can be proposed as figure regions — but only as reviewed, user-confirmed content.
+> Nothing in this repository fakes those features.
 
 ---
 
@@ -148,10 +149,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   columns and an optional header row, then add or delete rows and columns, toggle
   the header, or delete the table. Cells are normally typed by hand. The OCR
   dialog can build a cell-grid proposal from the stored word boxes, either for one
-  block labelled as a table or for the tables it detects across a whole page; the
-  grid is shown for review with per-cell confidence and the source crop beside it,
-  and is only inserted after you confirm it. Tables are part of the saved document,
-  version history, backups and Markdown/TXT/Word/PDF export.
+  block labelled as a table or for the tables it detects across a whole page; when
+  a PDF draws the table with vector rules, those rules give the exact grid and its
+  merged cells. The grid is shown for review with per-cell confidence and the
+  source crop beside it, and is only inserted after you confirm it. Tables are part
+  of the saved document, version history, backups and Markdown/TXT/Word/PDF export.
 - **Equations** — insert a display equation or an inline formula from the toolbar
   dialog and check the local KaTeX preview before inserting it. Empty or invalid
   LaTeX is refused rather than saved. Display equations can be given an optional
@@ -187,15 +189,18 @@ Automatic equation transcription, generative figure detection, cloud/free-tier A
 providers, image-generation profiles, desktop packaging and PWA install support are
 planned but not implemented. OCR extracts text blocks, reading order and
 conservative layout hints. It can turn a block the layout labels as a table into a
-reviewable cell grid derived from its word boxes, and it can group vertically
-contiguous paragraph blocks into one page-level candidate when the deterministic
-layout classifier calls the merged rows a table. It never inserts a grid on its own,
-never invents a cell, and does not transcribe equations.
+reviewable cell grid derived from its word boxes, group vertically contiguous
+paragraph blocks into one page-level candidate, and read a PDF's drawn table rules so
+merged cells keep exactly the shape the document drew. It never inserts a grid on its
+own, never invents a cell, and does not transcribe equations. Nested tables and
+vision-based table reading are not implemented.
 Region extraction produces exact pixel crops and can read their plain text locally;
 it does not build structured table cells or equation markup. Deterministic region
-suggestions are heuristics over the OCR text layout,
-not a vision model: they cover OCR table/equation blocks and the empty band above a
-figure-like caption, and they are skipped when no suitable layout exists. The
+suggestions are heuristics over the OCR text layout and, on PDF pages, the placement
+of embedded raster images,
+not a vision model: they cover OCR table/equation blocks, embedded images and the
+empty band above a figure-like caption, and they are skipped when no suitable signal
+exists. The
 optional vision path only proposes rectangles for review; it does not read their
 text, invent content or change the document. The local AI workflow does not switch
 providers silently or use any remote service without consent.
@@ -492,8 +497,9 @@ are two entry points in the OCR dialog:
   includes single blocks already labelled `table` and groups vertically contiguous
   paragraph blocks whose merged visual rows still pass the same deterministic layout
   classifier. This is what makes an embedded PDF table reviewable when the PDF text
-  layer stores one paragraph block per row. One dialog lists every candidate, so a
-  page with several tables is reviewed in one place.
+  layer stores one paragraph block per row. For an unrotated PDF page, the same
+  endpoint also reads the table rules drawn in the document. One dialog lists every
+  candidate, so a page with several tables is reviewed in one place.
 
 Rules that keep a proposal honest:
 
@@ -521,11 +527,18 @@ Rules that keep a proposal honest:
   or whose lines disagree, reports no alignment and keeps the default instead of
   guessing. Word and PDF export keep the alignment; Markdown and plain text cannot
   express it.
+- Merged cells are read from the PDF's drawn rules, never guessed from word gaps. A
+  separator that the document does not draw across a cell becomes a real
+  `colspan`/`rowspan`: the review grid renders the merge and insertion writes the
+  same spans into the Tiptap table. Only a closed grid whose cells mostly contain
+  text is accepted, so a chart's axis frame is not offered as a table, and an OCR
+  candidate that lies inside a vector grid is dropped rather than shown twice. A
+  rotated page, a geometry edit or a stale run falls back to the word-box grid.
 - Limits are 60 rows, 20 columns and 600 cells per candidate, and at most 20
   candidates per page. A larger or unusable grid is refused with a typed error
   instead of being truncated.
-- Merged cells, nested tables and vision-based table reading are still not
-  implemented. A candidate is a plain grid the user can edit after insertion.
+- Nested tables and vision-based table reading are still not implemented. A
+  word-box proposal remains a plain grid the user can edit after insertion.
 
 ### Document export
 
@@ -940,12 +953,11 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   text a `Notes:` section, Word a native footnote and PDF a numbered notes list.
 - Table limits: inserting offers 1–10 rows and columns, and merged cells can be
   created by selecting multiple cells and choosing merge/split. There is no
-  per-cell alignment beyond paragraph alignment and no column resizing. An OCR
-  table block can produce a reviewable cell grid from its word boxes, but that grid
-  is a proposal: it is capped at 60 rows, 20 columns and 600 cells, it only covers
-  one block, and it cannot recover merged spans, cell alignment or reading order
-  beyond simple row clustering. PDF text split into one block per row is not
-  proposed. A table is only as accurate as the text you confirm.
+  per-cell alignment beyond paragraph alignment and no column resizing. Table
+  proposals are capped at 60 rows, 20 columns and 600 cells per candidate. Merged
+  spans are proposed only from a PDF's drawn rules; a word-box grid stays a plain
+  grid, so uneven spacing can still produce a wrong shape. A table is only as
+  accurate as the text you confirm.
 - Word export converts equations locally through MathML, so a formula using LaTeX
   constructs that the converter does not support is written as its italic LaTeX
   source instead of a native equation. Figures are embedded from this project's
@@ -983,9 +995,10 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   are never presented as certain structure. Accuracy can be measured with the local
   benchmark harness, but no figures are published until fixtures from real documents
   have been scored. A table label only marks a text grid, and the optional cell-grid
-  proposal derives rows and columns from word-box geometry: merged cells, nested
-  tables and uneven spacing can produce a wrong shape, which is why every cell must
-  be reviewed before insertion. Equations are not transcribed.
+  proposal derives rows and columns from word-box geometry; merged cells come only
+  from a PDF's drawn rules, and nested tables or uneven spacing can still produce a
+  wrong shape, which is why every cell must be reviewed before insertion. Equations
+  are not transcribed.
 - Region extraction does not use a vision model. Suggestions are deterministic
   heuristics over the latest OCR text layout: OCR table/equation blocks and the
   empty band above a figure-like caption. Uncaptioned figures, artwork separated
@@ -1044,7 +1057,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 4. Local OCR and layout detection | In progress: OCR, layout hints, reviewable table proposals and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, reviewable automatic table proposals from OCR word boxes, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; vision tables, merged-cell detection and automatic equation extraction pending |
+| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, reviewable automatic table proposals from OCR word boxes, merged-cell spans read from PDF vector rules, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; vision tables, nested tables and automatic equation extraction pending |
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
 | 9. History, backup and recovery | **Complete**: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned |

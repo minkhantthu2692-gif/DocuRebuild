@@ -24,6 +24,7 @@ import { api } from "@/lib/api";
 import {
   needsTableAcknowledgement,
   proposalAlignments,
+  proposalSpans,
   tableCandidatePreview,
 } from "@/lib/table-candidates";
 import { TableReview } from "./table-review";
@@ -63,7 +64,12 @@ export function PageTablesDialog({
   const [acknowledged, setAcknowledged] = useState(false);
 
   const candidate = selected !== null ? (candidates[selected] ?? null) : null;
-  const draft = useTableDraft(candidate, candidate?.block_ids.join("|") ?? "");
+  // A vector-grid candidate may not have any block ids, so the selected index
+  // is the only stable identity while the list is open.
+  const draft = useTableDraft(
+    candidate,
+    selected === null ? "" : `candidate:${selected}`,
+  );
   const resetDraft = draft.reset;
 
   useEffect(() => {
@@ -94,9 +100,12 @@ export function PageTablesDialog({
 
   const handleInsert = () => {
     if (!candidate || !canInsert) return;
+    const spans = proposalSpans(candidate);
     insertTable({
       rows: draft.rows,
       alignments: proposalAlignments(candidate),
+      rowSpans: spans.rowSpan,
+      colSpans: spans.colSpan,
       headerRow,
       note: includeNote
         ? t("ocr.table.sourceNotePage", { page: page?.page_number ?? "—" })
@@ -167,7 +176,7 @@ export function PageTablesDialog({
               {candidates.map((item, index) => {
                 const preview = tableCandidatePreview(item);
                 return (
-                  <li key={item.block_ids.join(":")}>
+                  <li key={index}>
                     <button
                       type="button"
                       className="flex w-full items-center gap-3 rounded-lg border border-border/70 bg-background/50 p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

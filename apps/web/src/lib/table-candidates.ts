@@ -69,6 +69,62 @@ export function proposalAlignments(
   return grid;
 }
 
+/** Merge geometry in the same shape as `proposalRows`. */
+export interface TableSpanGrid {
+  /** An anchor holds its row span; a covered coordinate holds 0. */
+  rowSpan: number[][];
+  /** An anchor holds its column span; a covered coordinate holds 0. */
+  colSpan: number[][];
+  /** True when at least one cell was merged in the source. */
+  merged: boolean;
+}
+
+/**
+ * Build the merged-cell geometry of a proposal.
+ *
+ * The backend reports only the anchor of a merged cell; the coordinates it
+ * covers are not repeated. This turns that sparse list into a matrix so the
+ * review grid and the inserted table skip exactly those coordinates instead of
+ * producing an extra empty cell.
+ */
+export function proposalSpans(
+  proposal: Pick<TableGridProposal, "rows" | "columns" | "cells">,
+): TableSpanGrid {
+  const rowSpan = Array.from({ length: proposal.rows }, () =>
+    Array.from({ length: proposal.columns }, () => 1),
+  );
+  const colSpan = Array.from({ length: proposal.rows }, () =>
+    Array.from({ length: proposal.columns }, () => 1),
+  );
+  const covered = Array.from({ length: proposal.rows }, () =>
+    Array.from({ length: proposal.columns }, () => false),
+  );
+  let merged = false;
+
+  for (const cell of proposal.cells) {
+    if (rowSpan[cell.row]?.[cell.column] === undefined) continue;
+    if (covered[cell.row][cell.column]) continue;
+    const rows = Math.max(1, Math.round(cell.rowspan ?? 1));
+    const columns = Math.max(1, Math.round(cell.colspan ?? 1));
+    if (cell.row + rows > proposal.rows || cell.column + columns > proposal.columns) {
+      continue;
+    }
+    rowSpan[cell.row][cell.column] = rows;
+    colSpan[cell.row][cell.column] = columns;
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        if (row === 0 && column === 0) continue;
+        rowSpan[cell.row + row][cell.column + column] = 0;
+        colSpan[cell.row + row][cell.column + column] = 0;
+        covered[cell.row + row][cell.column + column] = true;
+      }
+    }
+    if (rows > 1 || columns > 1) merged = true;
+  }
+
+  return { rowSpan, colSpan, merged };
+}
+
 /** Positioning for a crop preview, as percentages of the preview box. */
 export interface SourceCropGeometry {
   /** Width divided by height of the visible crop. */

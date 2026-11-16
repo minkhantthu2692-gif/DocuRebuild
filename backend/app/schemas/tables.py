@@ -16,6 +16,10 @@ class TableCellOut(BaseModel):
     uncertain: bool
     empty: bool
     alignment: TableAlignment | None = None
+    # A merged cell is anchored at `row`/`column`; the covered coordinates are
+    # not repeated as cells. Both stay 1 for a plain grid.
+    rowspan: int = 1
+    colspan: int = 1
 
 
 class TableSourceOut(BaseModel):

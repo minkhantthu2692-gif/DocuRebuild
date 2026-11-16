@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import type { TableDraft } from "@/hooks/use-table-draft";
 import {
   needsTableAcknowledgement,
+  proposalSpans,
   sourceCropGeometry,
   type TableGridProposal,
 } from "@/lib/table-candidates";
@@ -65,6 +66,15 @@ export function TableReview({
     return rows;
   }, [proposal]);
 
+  const spans = useMemo(() => proposalSpans(proposal), [proposal]);
+  const mergedCells = useMemo(
+    () =>
+      proposal.cells.filter(
+        (cell) => (cell.rowspan ?? 1) > 1 || (cell.colspan ?? 1) > 1,
+      ).length,
+    [proposal],
+  );
+
   return (
     <>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -82,6 +92,11 @@ export function TableReview({
         {proposal.empty_cells > 0 ? (
           <Badge variant="outline">
             {t("ocr.table.empty", { count: proposal.empty_cells })}
+          </Badge>
+        ) : null}
+        {mergedCells > 0 ? (
+          <Badge variant="outline">
+            {t("ocr.table.mergedCells", { count: mergedCells })}
           </Badge>
         ) : null}
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
@@ -172,6 +187,11 @@ export function TableReview({
               {matrix.map((row, rowIndex) => (
                 <tr key={rowIndex}>
                   {row.map((cell, columnIndex) => {
+                    const rowSpan = spans.rowSpan[rowIndex]?.[columnIndex] ?? 1;
+                    const colSpan = spans.colSpan[rowIndex]?.[columnIndex] ?? 1;
+                    // A merged cell's covered coordinates are not rendered, so
+                    // the browser lays the anchor across exactly that many cells.
+                    if (rowSpan === 0 || colSpan === 0) return null;
                     const coordinate = `${rowIndex}:${columnIndex}`;
                     const isHeader = headerRow && rowIndex === 0;
                     const isEdited = draft.edited.has(coordinate);
@@ -229,11 +249,24 @@ export function TableReview({
                       </span>
                     );
                     return isHeader ? (
-                      <th key={columnIndex} scope="col" title={title} className={className}>
+                      <th
+                        key={columnIndex}
+                        scope="col"
+                        title={title}
+                        className={className}
+                        rowSpan={rowSpan > 1 ? rowSpan : undefined}
+                        colSpan={colSpan > 1 ? colSpan : undefined}
+                      >
                         {content}
                       </th>
                     ) : (
-                      <td key={columnIndex} title={title} className={className}>
+                      <td
+                        key={columnIndex}
+                        title={title}
+                        className={className}
+                        rowSpan={rowSpan > 1 ? rowSpan : undefined}
+                        colSpan={colSpan > 1 ? colSpan : undefined}
+                      >
                         {content}
                       </td>
                     );

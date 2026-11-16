@@ -181,6 +181,50 @@ def test_image_regions_returns_nothing_for_an_unreadable_page() -> None:
     assert pdf.image_regions(FakeDocument(), 0, 1200) == []
 
 
+def test_table_lines_reads_strokes_thin_fills_and_stroked_rectangles() -> None:
+    from app.services import pdf
+
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=400, height=300)
+        page.draw_line((50, 50), (350, 50), color=(0, 0, 0), width=0.8)
+        page.draw_rect(
+            pymupdf.Rect(50, 100, 350, 101), color=None, fill=(0, 0, 0)
+        )
+        page.draw_rect(
+            pymupdf.Rect(50, 150, 350, 250), color=(0, 0, 0), width=0.8
+        )
+        # A diagonal cannot describe a cell edge and must be ignored.
+        page.draw_line((50, 50), (100, 90), color=(0, 0, 0), width=0.8)
+
+        # A 400 pt wide page rendered 800 px wide doubles every coordinate.
+        horizontals, verticals = pdf.table_lines(document, 0, 800)
+    finally:
+        document.close()
+
+    assert sorted(horizontals) == [
+        (100.0, 100.0, 700.0),
+        (201.0, 100.0, 700.0),
+        (300.0, 100.0, 700.0),
+        (500.0, 100.0, 700.0),
+    ]
+    # The stroked rectangle contributes its four edges.
+    assert sorted(verticals) == [
+        (100.0, 300.0, 500.0),
+        (700.0, 300.0, 500.0),
+    ]
+
+
+def test_table_lines_returns_nothing_for_an_unreadable_page() -> None:
+    from app.services import pdf
+
+    class FakeDocument:
+        def load_page(self, index: int):
+            raise RuntimeError("cannot read")
+
+    assert pdf.table_lines(FakeDocument(), 0, 1200) == ([], [])
+
+
 def test_image_only_pdf_page_has_no_embedded_text_run(
     client: TestClient, project: dict
 ) -> None:

@@ -39,7 +39,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.pages` | Import validation, per-file/per-page import execution with progress and cancellation, image processing, display copies, thumbnails, PDF page records, rotation, ordering, stored-edit rendering, reference-counted deletion |
 | `services.imports` | Import job lifecycle: bounded worker, persisted progress, cooperative cancellation, interrupted-job recovery, localized failure codes |
 | `services.image_edits` | Canonical edit validation, geometry pipeline (crop/perspective/deskew), filter pipeline (grayscale, contrast, brightness, sharpness, denoise, threshold, shadow/background cleanup) and skew estimation |
-| `services.pdf` | PDF open/validation, page rendering, embedded text extraction, capability detection |
+| `services.pdf` | PDF open/validation, page rendering, embedded text extraction, embedded raster-image boxes, axis-aligned table rule extraction, capability detection |
 | `services.layout` | Shared deterministic block classification (heading, list, caption, equation, table-like grid, running header/footer, page number) for OCR and embedded PDF text |
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps, coalesced revision snapshots, manual checkpoints and restore |
 | `services.document_export` | Deterministic Tiptap-to-Markdown/TXT/DOCX/PDF rendering, escaping, OMML equations, figure embedding, native footnotes, PDF layout and download names |
@@ -51,7 +51,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout and, on PDF pages, embedded raster-image placement |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness |
-| `services.table_structure` | Reviewable table proposals from stored OCR word boxes: row clustering, whitespace column bands, cell text/confidence/flags, page-level grouping of vertically contiguous row blocks, source pixel box, size caps and typed refusal errors |
+| `services.table_structure` | Reviewable table proposals: word-box row clustering and whitespace column bands, plus exact merged-cell grids from a PDF's drawn rules; cell text/confidence/flags/alignment, page-level grouping of vertically contiguous row blocks, vector/OCR de-duplication, source pixel box, size caps and typed refusal errors |
 | `app.ocr_benchmark` | Local CER/WER measurement against checked reference transcripts, by running the OCR adapter or scoring a stored transcript; validates fixtures and never uploads |
 | `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, vision region requests, listing and review decisions |
 | `services.ai_vision` | Page-image encoding, normalized-to-source rectangle mapping and filtering for optional vision region proposals |
@@ -359,6 +359,27 @@ src/
   barrier, so a candidate never bridges across a row whose stored words no longer
   match its text. At most 20 candidates are returned per page; each candidate keeps
   the 60 rows / 20 columns / 600 cells caps.
+- Drawn PDF rules take precedence over word-box whitespace. `services.pdf.table_lines`
+  extracts axis-aligned strokes and thin filled or stroked rectangles from the
+  immutable PDF in rendered-pixel coordinates; curves, diagonals and wide filled
+  areas are ignored. `services.table_structure` clusters segments into row and
+  column boundaries, groups touching rules into separate tables, requires a closed
+  outer boundary with at least two rows and two columns, and treats a missing
+  internal separator as a merged cell. Rectangles are built by claiming every base
+  coordinate exactly once; a stepped or overlapping shape is refused instead of
+  being approximated. Words are assigned by centre to exactly one rectangle and
+  re-lined per cell, because PDF line numbers are block-local. A candidate must
+  contain at least two filled cells and a conservative share of filled cells, so an
+  empty chart frame is not proposed.
+- Vector candidates are built before word-box candidates and sorted by source
+  position. An OCR candidate whose source box is at least 85% inside a vector grid
+  is dropped, because the vector grid already describes the same table with exact
+  spans. Rules are used only for a page whose `source_kind` is `pdf`, whose rotation
+  is zero, whose immutable original is still present and whose `edits` contain no
+  geometry change; anything else keeps the word-box path. Merged anchors carry
+  `rowspan`/`colspan`; covered coordinates are not repeated. The review grid renders
+  the anchors with those spans and insertion skips the covered coordinates, so the
+  saved Tiptap table uses the same ordinary cell attributes as a manual merge.
 - The proposal dialogs show the grid and its per-cell flags before anything is
   inserted. A single-block proposal and a page candidate share one `TableReview`
   component, so a cell is presented identically in both. The API also returns the

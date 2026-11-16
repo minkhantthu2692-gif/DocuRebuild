@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import time
 
+import pymupdf
 from fastapi.testclient import TestClient
 
 from app.services import table_structure
 from tests.conftest import upload_pages
+from tests.test_pdf import upload_pdf
 
 
 def _engine_available() -> dict:
@@ -481,3 +483,191 @@ def test_row_clustering_keeps_baseline_variation_in_one_row() -> None:
         ]
     )
     assert [[word["text"] for word in row] for row in rows] == [["A", "B"], ["C"]]
+
+
+def _merged_rule_grid() -> tuple[
+    list[tuple[float, float, float]], list[tuple[float, float, float]]
+]:
+    """A 3x3 grid with a full-width header and a two-row cell in column 0."""
+    horizontals = [
+        (100.0, 50.0, 550.0),
+        (150.0, 50.0, 550.0),
+        # Missing between the two data rows in column 0, so that cell spans them.
+        (250.0, 250.0, 550.0),
+        (350.0, 50.0, 550.0),
+    ]
+    verticals = [
+        (50.0, 100.0, 350.0),
+        # The column separators start below the merged header row.
+        (250.0, 150.0, 350.0),
+        (400.0, 150.0, 350.0),
+        (550.0, 100.0, 350.0),
+    ]
+    return horizontals, verticals
+
+
+def _merged_rule_words() -> list[tuple[str, dict]]:
+    return [
+        ("b1", _word("Merged", 60, 132, width=40, height=16, confidence=None, line=0)),
+        ("b1", _word("header", 110, 132, width=40, height=16, confidence=None, line=0)),
+        # Both words land in the row-spanning cell but their stored line numbers
+        # collide with the header's, so the cell must re-line them by position.
+        ("b2", _word("Group", 60, 200, width=40, height=16, confidence=None, line=0)),
+        ("b3", _word("A", 60, 300, width=10, height=16, confidence=None, line=0)),
+        ("b2", _word("1.2", 260, 200, width=20, height=16, confidence=None, line=0)),
+        ("b2", _word("3.4", 410, 200, width=20, height=16, confidence=None, line=0)),
+        ("b3", _word("5.6", 260, 300, width=20, height=16, confidence=None, line=0)),
+        ("b3", _word("7.8", 410, 300, width=20, height=16, confidence=None, line=0)),
+    ]
+
+
+def test_vector_candidates_derive_merged_cells_from_missing_rules() -> None:
+    horizontals, verticals = _merged_rule_grid()
+
+    candidates = table_structure._vector_candidates(
+        horizontals, verticals, _merged_rule_words()
+    )
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate["rows"] == 3
+    assert candidate["columns"] == 3
+    assert candidate["block_ids"] == ["b1", "b2", "b3"]
+    assert candidate["source"] == {"x": 50.0, "y": 100.0, "width": 500.0, "height": 250.0}
+    assert candidate["warnings"] == ["no_confidence"]
+    assert candidate["uncertain_cells"] == 0
+    assert candidate["empty_cells"] == 0
+
+    cells = {(cell["row"], cell["column"]): cell for cell in candidate["cells"]}
+    # Covered coordinates are not cells; only the anchor carries the span.
+    assert len(cells) == 6
+    assert cells[(0, 0)]["rowspan"] == 1
+    assert cells[(0, 0)]["colspan"] == 3
+    assert cells[(0, 0)]["text"] == "Merged header"
+    assert cells[(1, 0)]["rowspan"] == 2
+    assert cells[(1, 0)]["colspan"] == 1
+    assert cells[(1, 0)]["text"] == "Group\nA"
+    assert cells[(1, 0)]["alignment"] == "left"
+    assert cells[(1, 1)]["text"] == "1.2"
+    assert cells[(2, 2)]["text"] == "7.8"
+    assert (0, 1) not in cells
+    assert (2, 0) not in cells
+
+
+def _plain_rule_grid(
+    xs: list[float], ys: list[float]
+) -> tuple[list[tuple[float, float, float]], list[tuple[float, float, float]]]:
+    horizontals = [(y, xs[0], xs[-1]) for y in ys]
+    verticals = [(x, ys[0], ys[-1]) for x in xs]
+    return horizontals, verticals
+
+
+def test_vector_candidates_reject_an_empty_drawn_frame() -> None:
+    horizontals, verticals = _plain_rule_grid([0.0, 100.0, 200.0], [0.0, 50.0, 100.0])
+
+    # A chart's axis frame is a grid without table text. It must never become a
+    # table candidate just because the rules exist.
+    assert table_structure._vector_candidates(horizontals, verticals, []) == []
+
+
+def test_vector_candidates_reject_a_large_grid_with_too_little_text() -> None:
+    horizontals, verticals = _plain_rule_grid(
+        [0.0, 100.0, 200.0, 300.0, 400.0, 500.0],
+        [0.0, 50.0, 100.0, 150.0, 200.0, 250.0],
+    )
+    words = [
+        ("b1", _word("A", 10, 10, width=20, height=16, confidence=None)),
+        ("b1", _word("B", 110, 60, width=20, height=16, confidence=None)),
+    ]
+
+    # Two labels inside a 25-cell frame look more like a chart than a table.
+    assert table_structure._vector_candidates(horizontals, verticals, words) == []
+
+
+def test_vector_candidates_require_a_closed_grid() -> None:
+    horizontals, verticals = _plain_rule_grid([0.0, 100.0, 200.0], [0.0, 50.0, 100.0])
+    # Remove the right border: an open grid cannot bound its last column.
+    verticals = [(x, y0, y1) for x, y0, y1 in verticals if x != 200.0]
+
+    words = [
+        ("b1", _word("A", 10, 10, width=20, height=16, confidence=None)),
+        ("b1", _word("B", 110, 10, width=20, height=16, confidence=None)),
+        ("b1", _word("C", 10, 60, width=20, height=16, confidence=None)),
+        ("b1", _word("D", 110, 60, width=20, height=16, confidence=None)),
+    ]
+
+    assert table_structure._vector_candidates(horizontals, verticals, words) == []
+
+
+def test_covered_ratio_measures_the_share_inside_a_vector_grid() -> None:
+    grid = {"x": 50.0, "y": 100.0, "width": 500.0, "height": 250.0}
+    inside = {"x": 60.0, "y": 110.0, "width": 100.0, "height": 50.0}
+    half = {"x": 500.0, "y": 110.0, "width": 100.0, "height": 50.0}
+
+    assert table_structure._covered_ratio(inside, grid) == 1.0
+    assert table_structure._covered_ratio(half, grid) == 0.5
+
+
+def _merged_table_pdf() -> bytes:
+    """A PDF whose drawn rules merge the header and column 0's data rows."""
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=600, height=800)
+        black = (0, 0, 0)
+        for y in (100, 150, 350):
+            page.draw_line((50, y), (550, y), color=black, width=0.8)
+        page.draw_line((250, 250), (550, 250), color=black, width=0.8)
+        for x in (50, 550):
+            page.draw_line((x, 100), (x, 350), color=black, width=0.8)
+        for x in (250, 400):
+            page.draw_line((x, 150), (x, 350), color=black, width=0.8)
+
+        page.insert_text((60, 138), "Merged header", fontsize=10)
+        page.insert_text((60, 210), "Group", fontsize=10)
+        page.insert_text((60, 310), "A", fontsize=10)
+        page.insert_text((260, 210), "1.2", fontsize=10)
+        page.insert_text((410, 210), "3.4", fontsize=10)
+        page.insert_text((260, 310), "5.6", fontsize=10)
+        page.insert_text((410, 310), "7.8", fontsize=10)
+        return document.tobytes()
+    finally:
+        document.close()
+
+
+def test_page_candidates_prefer_the_drawn_grid_with_merged_cells(
+    client: TestClient, project: dict
+) -> None:
+    pages = upload_pdf(client, project["id"], "merged.pdf", _merged_table_pdf())
+    page = pages[0]
+
+    response = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/table-proposals"
+    )
+    assert response.status_code == 200, response.text
+    candidates = response.json()["candidates"]
+
+    # The OCR candidate describing the same words is dropped in favour of the
+    # exact rule grid, so one table is not offered twice.
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate["rows"] == 3
+    assert candidate["columns"] == 3
+    cells = {(cell["row"], cell["column"]): cell for cell in candidate["cells"]}
+    assert cells[(0, 0)]["colspan"] == 3
+    assert cells[(0, 0)]["text"] == "Merged header"
+    assert cells[(1, 0)]["rowspan"] == 2
+    assert cells[(1, 0)]["text"] == "Group\nA"
+    assert cells[(1, 1)]["text"] == "1.2"
+    assert cells[(2, 1)]["text"] == "5.6"
+    assert (0, 2) not in cells
+    assert (2, 0) not in cells
+
+    # The single-block proposal path is unchanged: it still describes a plain
+    # grid from word boxes and never invents a span.
+    block = candidate["block_ids"][0]
+    single = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}"
+        f"/ocr/blocks/{block}/table-proposal"
+    )
+    if single.status_code == 200:
+        assert all(cell["rowspan"] == 1 for cell in single.json()["cells"])

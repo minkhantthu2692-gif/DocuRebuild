@@ -13,6 +13,10 @@ export interface TableInsertionData {
   rows: string[][];
   /** Per-cell alignment; a missing or `null` value keeps the default. */
   alignments?: (TableAlignment | null)[][];
+  /** Row span per anchor cell; 0 marks a coordinate covered by another cell. */
+  rowSpans?: number[][];
+  /** Column span per anchor cell; 0 marks a covered coordinate. */
+  colSpans?: number[][];
   headerRow: boolean;
   note: string | null;
 }
@@ -44,6 +48,14 @@ export function normalizeTableRows(rows: string[][]): string[][] {
   );
 }
 
+function cellSpan(
+  spans: number[][] | undefined,
+  row: number,
+  column: number,
+): number {
+  return Math.max(0, Math.round(spans?.[row]?.[column] ?? 1));
+}
+
 export function tableInsertionContent(data: TableInsertionData): JSONContent[] {
   const rows = normalizeTableRows(data.rows);
   if (rows.length === 0 || (rows[0]?.length ?? 0) === 0) return [];
@@ -53,12 +65,22 @@ export function tableInsertionContent(data: TableInsertionData): JSONContent[] {
       type: "table",
       content: rows.map((row, rowIndex) => ({
         type: "tableRow",
-        content: row.map((text, columnIndex) => ({
-          type: data.headerRow && rowIndex === 0 ? "tableHeader" : "tableCell",
-          content: [
-            paragraphFromText(text, data.alignments?.[rowIndex]?.[columnIndex]),
-          ],
-        })),
+        content: row.flatMap((text, columnIndex) => {
+          const rowSpan = cellSpan(data.rowSpans, rowIndex, columnIndex);
+          const colSpan = cellSpan(data.colSpans, rowIndex, columnIndex);
+          // A coordinate covered by a merged cell is not a cell of its own.
+          if (rowSpan === 0 || colSpan === 0) return [];
+          const node: JSONContent = {
+            type: data.headerRow && rowIndex === 0 ? "tableHeader" : "tableCell",
+            content: [
+              paragraphFromText(text, data.alignments?.[rowIndex]?.[columnIndex]),
+            ],
+          };
+          if (rowSpan > 1 || colSpan > 1) {
+            node.attrs = { rowspan: rowSpan, colspan: colSpan };
+          }
+          return [node];
+        }),
       })),
     },
   ];

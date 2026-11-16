@@ -145,4 +145,42 @@ describe("tableInsertionContent", () => {
     expect(instance.getText()).toContain("Mass");
     expect(instance.getText()).toContain("2");
   });
+
+  it("skips covered coordinates and keeps merged spans in the editor schema", () => {
+    const instance = createEditor();
+    instance.commands.insertContent(
+      tableInsertionContent({
+        rows: [
+          ["Merged header", "", ""],
+          ["Group", "1.2", "3.4"],
+          ["", "5.6", "7.8"],
+        ],
+        rowSpans: [
+          [1, 0, 0],
+          [2, 1, 1],
+          [0, 1, 1],
+        ],
+        colSpans: [
+          [3, 0, 0],
+          [1, 1, 1],
+          [1, 1, 1],
+        ],
+        headerRow: true,
+        note: null,
+      }) as Content,
+    );
+
+    const table = documentJSON(instance).content?.find((node) => node.type === "table");
+    const rows = table?.content ?? [];
+    expect(rows).toHaveLength(3);
+    expect(rows[0]?.content).toHaveLength(1);
+    expect(rows[0]?.content?.[0]?.type).toBe("tableHeader");
+    expect(rows[0]?.content?.[0]?.attrs?.colspan).toBe(3);
+    expect(rows[1]?.content).toHaveLength(3);
+    expect(rows[1]?.content?.[0]?.attrs?.rowspan).toBe(2);
+    expect(rows[2]?.content).toHaveLength(2);
+    expect(instance.getText()).toContain("Merged header");
+    expect(instance.getText()).toContain("Group");
+    expect(instance.getText()).toContain("7.8");
+  });
 });

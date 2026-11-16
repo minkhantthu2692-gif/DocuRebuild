@@ -171,11 +171,11 @@ image processing uses Pillow with no OpenCV dependency.
 - Figure (image region) detection inside the OCR layout. The classifier never
   guesses a figure; Phase 5 approximates the band above a figure-like caption, but
   this phase does not mark figures itself.
-- Merged spans, nested tables and vision-based table reading. Cross-block grouping
-  now covers vertically contiguous row blocks that still classify as a table, but a
-  candidate is always a plain grid: merged cells are not detected, and a
-  hand-corrected block is a barrier instead of being bridged. Equation transcription
-  is still pending.
+- Nested tables and vision-based table reading. Cross-block grouping covers
+  vertically contiguous row blocks, and a PDF page's drawn rules provide exact
+  merged-cell spans, but a word-box candidate remains a plain grid, a nested table
+  is not separated from its parent, and a hand-corrected block is a barrier instead
+  of being bridged. Equation transcription is still pending.
 - OCR accuracy benchmarks (CER/WER) for English, Burmese and mixed pages using
   fixtures from real documents. The local harness exists and is tested, but no
   fixtures are shipped and no accuracy figures are claimed yet.
@@ -348,6 +348,14 @@ the user must review every region before extracting it.
   acknowledges any uncertain or unscored cell). Nothing is generated for paragraphs
   outside an accepted group, corrected blocks or stale runs, and each candidate is
   capped at 60 rows / 20 columns / 600 cells.
+- Merged-cell table proposals from a PDF's own vector rules. The page endpoint
+  extracts axis-aligned strokes and thin filled or stroked rectangles from the
+  immutable PDF, groups them into drawn grids, and treats a missing internal
+  separator as a `colspan`/`rowspan`. The review grid renders the merge, and
+  insertion writes the same spans into an ordinary Tiptap table. A rotated page, a
+  geometry edit or a stale run falls back to the word-box grid, and a closed,
+  mostly filled grid is required so a chart's axis frame is not offered. A vector
+  grid replaces an OCR candidate that lies at least 85% inside it.
 - Side-by-side source comparison in the table review dialog. The backend reports
   the proposal's pixel box and the page dimensions, and the dialog crops the page
   image to that box next to the grid. The crop can be hidden, and it is read-only:
@@ -409,10 +417,10 @@ the user must review every region before extracting it.
 
 **Pending**
 
-- Automatic table extraction beyond deterministic word-box grouping: vision-based
-  tables, merged-cell detection and nested tables, always as a reviewable proposal
-  that is never inserted without approval. Cross-block grouping of vertically
-  contiguous row blocks is delivered.
+- Automatic table extraction beyond deterministic word-box grouping and drawn PDF
+  rules: vision-based tables and nested tables, always as a reviewable proposal that
+  is never inserted without approval. Cross-block grouping and merged-cell spans
+  from a PDF's vector rules are delivered.
 - Inline images in running text and optional structured figure reconstruction with
   approval. Figure numbering and prose cross-references are delivered.
 - Automatic equation recognition from OCR/vision as a reviewable proposal. Word

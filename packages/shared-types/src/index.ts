@@ -367,6 +367,13 @@ export interface TableProposalCell {
    * null when the text fills the band and the choice is not observable.
    */
   alignment: TableAlignment | null;
+  /**
+   * Rows covered from this anchor, when the PDF draws the cell as a merge.
+   * Covered coordinates are not repeated as cells; a missing value is 1.
+   */
+  rowspan?: number;
+  /** Columns covered from this anchor. A missing value is 1. */
+  colspan?: number;
 }
 
 /** Pixel region a proposal was read from, in OCR image coordinates. */
