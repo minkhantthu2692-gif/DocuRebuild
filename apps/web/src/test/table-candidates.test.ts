@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TableProposalCandidate, TableProposalCell } from "@docurebuild/shared-types";
 
-import { proposalRows, tableCandidatePreview } from "@/lib/table-candidates";
+import { proposalRows, sourceCropGeometry, tableCandidatePreview } from "@/lib/table-candidates";
 
 function cell(
   row: number,
@@ -29,6 +29,7 @@ function candidate(cells: TableProposalCell[]): TableProposalCandidate {
     uncertain_cells: 0,
     empty_cells: 0,
     warnings: [],
+    source: { x: 0, y: 0, width: 100, height: 100 },
     cells,
   };
 }
@@ -74,5 +75,31 @@ describe("tableCandidatePreview", () => {
 
   it("returns an empty string when the first row has no text", () => {
     expect(tableCandidatePreview(candidate([cell(0, 0, "", true)]))).toBe("");
+  });
+});
+
+describe("sourceCropGeometry", () => {
+  it("maps the box onto the full page as percentages", () => {
+    expect(
+      sourceCropGeometry({ x: 0, y: 100, width: 240, height: 80 }, 1200, 800),
+    ).toEqual({
+      aspectRatio: 3,
+      image: { left: 0, top: -125, width: 500, height: 1000 },
+    });
+  });
+
+  it("clamps a box that runs past the page edge", () => {
+    expect(
+      sourceCropGeometry({ x: -20, y: 0, width: 1220, height: 800 }, 1200, 800),
+    ).toEqual({
+      aspectRatio: 1.5,
+      image: { left: 0, top: 0, width: 100, height: 100 },
+    });
+  });
+
+  it("returns null when the page size or box is unusable", () => {
+    expect(sourceCropGeometry({ x: 0, y: 0, width: 10, height: 10 }, null, 800)).toBeNull();
+    expect(sourceCropGeometry({ x: 0, y: 0, width: 0, height: 10 }, 1200, 800)).toBeNull();
+    expect(sourceCropGeometry({ x: 1300, y: 0, width: 10, height: 10 }, 1200, 800)).toBeNull();
   });
 });

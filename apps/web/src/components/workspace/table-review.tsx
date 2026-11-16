@@ -1,12 +1,18 @@
-import { CircleAlert } from "lucide-react";
-import { useMemo } from "react";
+import { CircleAlert, ScanEye } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { TableProposalCell } from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
-import { needsTableAcknowledgement, type TableGridProposal } from "@/lib/table-candidates";
+import { Button } from "@/components/ui/button";
+import {
+  needsTableAcknowledgement,
+  sourceCropGeometry,
+  type TableGridProposal,
+} from "@/lib/table-candidates";
 import { cn } from "@/lib/utils";
+import { TableSourcePreview } from "./table-source-preview";
 
 /**
  * The reviewable part of a table proposal. Both the single-block dialog and the
@@ -15,6 +21,10 @@ import { cn } from "@/lib/utils";
  */
 interface TableReviewProps {
   proposal: TableGridProposal;
+  /** Page image the proposal was read from, when one is available. */
+  sourceImageUrl?: string | null;
+  pageWidth?: number | null;
+  pageHeight?: number | null;
   headerRow: boolean;
   onHeaderRowChange: (checked: boolean) => void;
   acknowledged: boolean;
@@ -23,6 +33,9 @@ interface TableReviewProps {
 
 export function TableReview({
   proposal,
+  sourceImageUrl,
+  pageWidth = null,
+  pageHeight = null,
   headerRow,
   onHeaderRowChange,
   acknowledged,
@@ -30,6 +43,10 @@ export function TableReview({
 }: TableReviewProps) {
   const { t } = useTranslation("workspace");
   const needsReview = needsTableAcknowledgement(proposal);
+  const [showSource, setShowSource] = useState(true);
+  const canShowSource =
+    Boolean(sourceImageUrl) &&
+    sourceCropGeometry(proposal.source, pageWidth, pageHeight) !== null;
 
   const matrix = useMemo(() => {
     const rows = Array.from({ length: proposal.rows }, () =>
@@ -62,6 +79,17 @@ export function TableReview({
             {t("ocr.table.empty", { count: proposal.empty_cells })}
           </Badge>
         ) : null}
+        {canShowSource ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto gap-1.5"
+            onClick={() => setShowSource((current) => !current)}
+          >
+            <ScanEye />
+            {showSource ? t("ocr.table.hideSource") : t("ocr.table.compareSource")}
+          </Button>
+        ) : null}
       </div>
 
       {proposal.warnings.includes("no_confidence") ? (
@@ -82,59 +110,77 @@ export function TableReview({
         </p>
       ) : null}
 
-      <div className="scrollbar-thin min-h-0 flex-1 overflow-auto rounded-lg border border-border/70 bg-background/40">
-        <table className="w-full border-collapse text-xs">
-          <tbody>
-            {matrix.map((row, rowIndex) => (
-              <tr key={rowIndex}>
-                {row.map((cell, columnIndex) => {
-                  const isHeader = headerRow && rowIndex === 0;
-                  const confidence =
-                    cell?.confidence === null || cell?.confidence === undefined
-                      ? null
-                      : Math.round(cell.confidence);
-                  const title = cell?.uncertain
-                    ? t("ocr.table.uncertainCell")
-                    : confidence !== null
-                      ? t("ocr.table.confidence", { value: confidence })
-                      : undefined;
-                  const className = cn(
-                    "min-w-20 border border-border/60 px-2 py-1.5 align-top font-document leading-relaxed",
-                    isHeader && "bg-muted/40 font-semibold",
-                    cell?.uncertain && "bg-warning/10",
-                    cell?.empty && "bg-muted/20",
-                  );
-                  const content = (
-                    <span className="flex items-start gap-1">
-                      {cell?.uncertain ? (
-                        <CircleAlert
-                          className="mt-0.5 size-3 shrink-0 text-warning"
-                          aria-hidden="true"
-                        />
-                      ) : null}
-                      {cell?.text ? (
-                        <span className="whitespace-pre-wrap break-words">
-                          {cell.text}
-                        </span>
-                      ) : (
-                        <span className="sr-only">{t("ocr.table.emptyCell")}</span>
-                      )}
-                    </span>
-                  );
-                  return isHeader ? (
-                    <th key={columnIndex} scope="col" title={title} className={className}>
-                      {content}
-                    </th>
-                  ) : (
-                    <td key={columnIndex} title={title} className={className}>
-                      {content}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div
+        className={cn(
+          "grid min-h-0 flex-1 gap-3",
+          canShowSource && showSource && sourceImageUrl && "md:grid-cols-2",
+        )}
+      >
+        {canShowSource && showSource && sourceImageUrl ? (
+          <div className="scrollbar-thin min-h-0 overflow-auto">
+            <TableSourcePreview
+              proposal={proposal}
+              pageWidth={pageWidth}
+              pageHeight={pageHeight}
+              imageUrl={sourceImageUrl}
+            />
+          </div>
+        ) : null}
+
+        <div className="scrollbar-thin min-h-0 overflow-auto rounded-lg border border-border/70 bg-background/40">
+          <table className="w-full border-collapse text-xs">
+            <tbody>
+              {matrix.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {row.map((cell, columnIndex) => {
+                    const isHeader = headerRow && rowIndex === 0;
+                    const confidence =
+                      cell?.confidence === null || cell?.confidence === undefined
+                        ? null
+                        : Math.round(cell.confidence);
+                    const title = cell?.uncertain
+                      ? t("ocr.table.uncertainCell")
+                      : confidence !== null
+                        ? t("ocr.table.confidence", { value: confidence })
+                        : undefined;
+                    const className = cn(
+                      "min-w-20 border border-border/60 px-2 py-1.5 align-top font-document leading-relaxed",
+                      isHeader && "bg-muted/40 font-semibold",
+                      cell?.uncertain && "bg-warning/10",
+                      cell?.empty && "bg-muted/20",
+                    );
+                    const content = (
+                      <span className="flex items-start gap-1">
+                        {cell?.uncertain ? (
+                          <CircleAlert
+                            className="mt-0.5 size-3 shrink-0 text-warning"
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                        {cell?.text ? (
+                          <span className="whitespace-pre-wrap break-words">
+                            {cell.text}
+                          </span>
+                        ) : (
+                          <span className="sr-only">{t("ocr.table.emptyCell")}</span>
+                        )}
+                      </span>
+                    );
+                    return isHeader ? (
+                      <th key={columnIndex} scope="col" title={title} className={className}>
+                        {content}
+                      </th>
+                    ) : (
+                      <td key={columnIndex} title={title} className={className}>
+                        {content}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="space-y-2 rounded-lg border border-border/60 bg-background/45 p-3">

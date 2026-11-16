@@ -343,6 +343,10 @@ the user must review every region before extracting it.
   acknowledges any uncertain or unscored cell). Nothing is generated for paragraphs
   outside an accepted group, corrected blocks or stale runs, and each candidate is
   capped at 60 rows / 20 columns / 600 cells.
+- Side-by-side source comparison in the table review dialog. The backend reports
+  the proposal's pixel box and the page dimensions, and the dialog crops the page
+  image to that box next to the grid. The crop can be hidden, and it is read-only:
+  comparing or hiding it never changes the proposal or the document.
 - Tables are ordinary Tiptap nodes, so saving, version history and project backups
   need no special handling. Column resizing is disabled deliberately because pixel
   widths are screen-dependent and cannot survive Markdown.
@@ -388,8 +392,7 @@ the user must review every region before extracting it.
 
 **Pending**
 
-- Per-cell alignment (beyond paragraph alignment) and a source-to-result comparison
-  view.
+- Per-cell alignment beyond paragraph alignment.
 - Automatic table extraction beyond deterministic word-box grouping: vision-based
   tables, merged-cell detection and nested tables, always as a reviewable proposal
   that is never inserted without approval. Cross-block grouping of vertically

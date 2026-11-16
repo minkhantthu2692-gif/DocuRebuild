@@ -24,7 +24,8 @@ The rules are deliberately conservative:
   layout classifier that labels single blocks also calls the merged rows a table.
 
 The frontend shows the proposal for review and inserts it only when the user
-approves it.
+approves it. The proposal also reports the pixel region it was read from, so the
+review dialog can show the source crop beside the grid.
 """
 
 from __future__ import annotations
@@ -260,6 +261,24 @@ def _cell_payload(words: list[Word]) -> dict[str, Any]:
     }
 
 
+def _source_box(words: list[Word]) -> dict[str, float]:
+    """Pixel region the proposal was read from, in the OCR image's coordinates.
+
+    The frontend uses it to show the source crop next to the review grid. It is
+    derived from the word boxes, so it always matches what was actually read.
+    """
+    left = min(word["x"] for word in words)
+    top = min(word["y"] for word in words)
+    right = max(_right(word) for word in words)
+    bottom = max(word["y"] + word["height"] for word in words)
+    return {
+        "x": round(left, 1),
+        "y": round(top, 1),
+        "width": round(right - left, 1),
+        "height": round(bottom - top, 1),
+    }
+
+
 def _grid_payload(rows: list[list[Word]], bands: list[Band]) -> dict[str, Any]:
     cells: list[dict[str, Any]] = []
     uncertain_cells = 0
@@ -301,11 +320,13 @@ def _grid_payload(rows: list[list[Word]], bands: list[Band]) -> dict[str, Any]:
         "uncertain_cells": uncertain_cells,
         "empty_cells": empty_cells,
         "warnings": warnings,
+        "source": _source_box([word for row in rows for word in row]),
         "cells": cells,
     }
 
 
 def _proposal(
+    page,
     page_id: str,
     block_id: str,
     run_id: str,
@@ -318,6 +339,8 @@ def _proposal(
         "block_id": block_id,
         "run_id": run_id,
         "engine": engine,
+        "page_width": page["width"],
+        "page_height": page["height"],
         **_grid_payload(rows, bands),
     }
 
@@ -473,6 +496,7 @@ def propose_table(project_dir: Path, page_id: str, block_id: str) -> dict[str, A
         )
 
     return _proposal(
+        page=page,
         page_id=page_id,
         block_id=block_id,
         run_id=run["id"],
@@ -572,5 +596,7 @@ def propose_page_tables(project_dir: Path, page_id: str) -> dict[str, Any]:
         "page_id": page_id,
         "run_id": run["id"],
         "engine": run["engine"],
+        "page_width": page["width"],
+        "page_height": page["height"],
         "candidates": candidates,
     }

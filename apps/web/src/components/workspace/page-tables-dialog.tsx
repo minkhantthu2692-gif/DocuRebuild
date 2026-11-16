@@ -19,6 +19,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Spinner } from "@/components/ui/spinner";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { usePageTableProposals } from "@/hooks/use-table-proposal";
+import { api } from "@/lib/api";
 import {
   needsTableAcknowledgement,
   proposalRows,
@@ -78,6 +79,13 @@ export function PageTablesDialog({
   const candidate = selected !== null ? (candidates[selected] ?? null) : null;
   const needsReview = candidate ? needsTableAcknowledgement(candidate) : false;
   const canInsert = Boolean(candidate) && (!needsReview || acknowledged);
+  const sourceImageUrl = page
+    ? api.assetUrl(
+        projectId,
+        page.display_asset_id ?? page.original_asset_id,
+        page.updated_at,
+      )
+    : null;
 
   const handleInsert = () => {
     if (!candidate || !canInsert) return;
@@ -128,6 +136,9 @@ export function PageTablesDialog({
         ) : candidate ? (
           <TableReview
             proposal={candidate}
+            sourceImageUrl={sourceImageUrl}
+            pageWidth={proposalsQuery.data?.page_width}
+            pageHeight={proposalsQuery.data?.page_height}
             headerRow={headerRow}
             onHeaderRowChange={setHeaderRow}
             acknowledged={acknowledged}

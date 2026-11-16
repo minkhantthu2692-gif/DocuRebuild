@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Spinner } from "@/components/ui/spinner";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useTableProposal } from "@/hooks/use-table-proposal";
+import { api } from "@/lib/api";
 import { needsTableAcknowledgement, proposalRows } from "@/lib/table-candidates";
 import { TableReview } from "./table-review";
 import { useWorkspaceActions } from "./workspace-actions-context";
@@ -69,6 +70,13 @@ export function TableProposalDialog({
 
   const needsReview = proposal ? needsTableAcknowledgement(proposal) : false;
   const canInsert = Boolean(proposal) && (!needsReview || acknowledged);
+  const sourceImageUrl = page
+    ? api.assetUrl(
+        projectId,
+        page.display_asset_id ?? page.original_asset_id,
+        page.updated_at,
+      )
+    : null;
 
   const handleInsert = () => {
     if (!proposal || !canInsert) return;
@@ -119,6 +127,9 @@ export function TableProposalDialog({
         ) : proposal ? (
           <TableReview
             proposal={proposal}
+            sourceImageUrl={sourceImageUrl}
+            pageWidth={proposal.page_width}
+            pageHeight={proposal.page_height}
             headerRow={headerRow}
             onHeaderRowChange={setHeaderRow}
             acknowledged={acknowledged}

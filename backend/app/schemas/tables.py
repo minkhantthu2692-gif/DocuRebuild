@@ -16,17 +16,29 @@ class TableCellOut(BaseModel):
     empty: bool
 
 
+class TableSourceOut(BaseModel):
+    """Pixel region the proposal was read from, in OCR image coordinates."""
+
+    x: float
+    y: float
+    width: float
+    height: float
+
+
 class TableProposalOut(BaseModel):
     page_id: str
     block_id: str
     run_id: str
     engine: str
+    page_width: int | None
+    page_height: int | None
     rows: int
     columns: int
     has_confidence: bool
     uncertain_cells: int
     empty_cells: int
     warnings: list[TableWarning]
+    source: TableSourceOut
     cells: list[TableCellOut]
 
 
@@ -38,6 +50,7 @@ class TableCandidateOut(BaseModel):
     uncertain_cells: int
     empty_cells: int
     warnings: list[TableWarning]
+    source: TableSourceOut
     cells: list[TableCellOut]
 
 
@@ -45,4 +58,6 @@ class PageTableProposalsOut(BaseModel):
     page_id: str
     run_id: str
     engine: str
+    page_width: int | None
+    page_height: int | None
     candidates: list[TableCandidateOut]

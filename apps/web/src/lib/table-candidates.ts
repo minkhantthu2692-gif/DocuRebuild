@@ -2,6 +2,7 @@ import type {
   TableProposalCandidate,
   TableProposalCell,
   TableProposalWarning,
+  TableSourceBox,
 } from "@docurebuild/shared-types";
 
 /** Fields shared by a single-block proposal and a page-level candidate. */
@@ -11,6 +12,7 @@ export interface TableGridProposal {
   uncertain_cells: number;
   empty_cells: number;
   warnings: TableProposalWarning[];
+  source: TableSourceBox;
   cells: TableProposalCell[];
 }
 
@@ -45,4 +47,61 @@ export function tableCandidatePreview(candidate: TableProposalCandidate): string
     .map((cell) => cell.text.trim())
     .filter(Boolean)
     .join(" · ");
+}
+
+/** Positioning for a crop preview, as percentages of the preview box. */
+export interface SourceCropGeometry {
+  /** Width divided by height of the visible crop. */
+  aspectRatio: number;
+  image: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  };
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+/**
+ * Map the proposal's source box onto the whole page image so it can be shown as
+ * a crop. A box outside the page is clamped rather than scaled, and an unusable
+ * box returns null instead of an empty preview.
+ */
+export function sourceCropGeometry(
+  box: TableSourceBox,
+  pageWidth: number | null,
+  pageHeight: number | null,
+): SourceCropGeometry | null {
+  if (
+    !pageWidth ||
+    !pageHeight ||
+    pageWidth <= 0 ||
+    pageHeight <= 0 ||
+    box.width <= 0 ||
+    box.height <= 0
+  ) {
+    return null;
+  }
+  const left = clamp(box.x, 0, pageWidth);
+  const top = clamp(box.y, 0, pageHeight);
+  const right = clamp(box.x + box.width, 0, pageWidth);
+  const bottom = clamp(box.y + box.height, 0, pageHeight);
+  const width = right - left;
+  const height = bottom - top;
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
+  return {
+    aspectRatio: width / height,
+    image: {
+      // `0 - value` avoids a negative zero when the crop starts at the edge.
+      left: 0 - (left / width) * 100,
+      top: 0 - (top / height) * 100,
+      width: (pageWidth / width) * 100,
+      height: (pageHeight / height) * 100,
+    },
+  };
 }

@@ -51,7 +51,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness |
-| `services.table_structure` | Reviewable table proposals from stored OCR word boxes: row clustering, whitespace column bands, cell text/confidence/flags, page-level grouping of vertically contiguous row blocks, size caps and typed refusal errors |
+| `services.table_structure` | Reviewable table proposals from stored OCR word boxes: row clustering, whitespace column bands, cell text/confidence/flags, page-level grouping of vertically contiguous row blocks, source pixel box, size caps and typed refusal errors |
 | `app.ocr_benchmark` | Local CER/WER measurement against checked reference transcripts, by running the OCR adapter or scoring a stored transcript; validates fixtures and never uploads |
 | `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, vision region requests, listing and review decisions |
 | `services.ai_vision` | Page-image encoding, normalized-to-source rectangle mapping and filtering for optional vision region proposals |
@@ -361,11 +361,14 @@ src/
   the 60 rows / 20 columns / 600 cells caps.
 - The proposal dialogs show the grid and its per-cell flags before anything is
   inserted. A single-block proposal and a page candidate share one `TableReview`
-  component, so a cell is presented identically in both. Insertion uses the same
-  workspace actions context as other document edits and builds a normal Tiptap
-  table. The first row becomes a header only when the user selects it, and an
-  acknowledgement checkbox is required when any cell is uncertain or has no
-  confidence. The proposal is never saved on its own.
+  component, so a cell is presented identically in both. The API also returns the
+  proposal's `source` pixel box and the page dimensions; the dialog crops the page
+  image to that box by positioning it with percentages, so the source can be
+  compared side by side without measuring the DOM or loading extra images.
+  Insertion uses the same workspace actions context as other document edits and
+  builds a normal Tiptap table. The first row becomes a header only when the user
+  selects it, and an acknowledgement checkbox is required when any cell is
+  uncertain or has no confidence. The proposal is never saved on its own.
 - Selected blocks are appended to the Tiptap document through the workspace
   actions context. The insertion is a normal document edit and is autosaved; an
   optional localized source note records the page and verification status.

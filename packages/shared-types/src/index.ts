@@ -361,18 +361,29 @@ export interface TableProposalCell {
   empty: boolean;
 }
 
+/** Pixel region a proposal was read from, in OCR image coordinates. */
+export interface TableSourceBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /** A reviewable table built from stored OCR word boxes. Never saved on its own. */
 export interface TableProposal {
   page_id: string;
   block_id: string;
   run_id: string;
   engine: string;
+  page_width: number | null;
+  page_height: number | null;
   rows: number;
   columns: number;
   has_confidence: boolean;
   uncertain_cells: number;
   empty_cells: number;
   warnings: TableProposalWarning[];
+  source: TableSourceBox;
   cells: TableProposalCell[];
 }
 
@@ -385,6 +396,7 @@ export interface TableProposalCandidate {
   uncertain_cells: number;
   empty_cells: number;
   warnings: TableProposalWarning[];
+  source: TableSourceBox;
   cells: TableProposalCell[];
 }
 
@@ -392,6 +404,8 @@ export interface PageTableProposals {
   page_id: string;
   run_id: string;
   engine: string;
+  page_width: number | null;
+  page_height: number | null;
   candidates: TableProposalCandidate[];
 }
 

@@ -128,6 +128,11 @@ def test_proposal_builds_a_reviewable_grid(
     assert proposal["uncertain_cells"] == 1
     assert proposal["empty_cells"] == 1
     assert set(proposal["warnings"]) == {"low_confidence", "empty_cells"}
+    assert proposal["page_width"] == 1200
+    assert proposal["page_height"] == 800
+    # The source box covers exactly the words that were read, so the review
+    # dialog can crop the page without guessing.
+    assert proposal["source"] == {"x": 0.0, "y": 100.0, "width": 240.0, "height": 80.0}
 
     cells = {(cell["row"], cell["column"]): cell for cell in proposal["cells"]}
     assert cells[(0, 0)]["text"] == "Name"
@@ -292,11 +297,14 @@ def test_page_candidates_merge_adjacent_row_blocks(
     data = response.json()
 
     assert data["run_id"] == run["id"]
+    assert data["page_width"] == 1200
+    assert data["page_height"] == 800
     assert len(data["candidates"]) == 1
     candidate = data["candidates"][0]
     assert candidate["block_ids"] == [block["id"] for block in run["blocks"]]
     assert candidate["rows"] == 3
     assert candidate["columns"] == 2
+    assert candidate["source"] == {"x": 0.0, "y": 100.0, "width": 260.0, "height": 80.0}
     cells = {(cell["row"], cell["column"]): cell for cell in candidate["cells"]}
     assert cells[(0, 0)]["text"] == "Element"
     assert cells[(0, 1)]["text"] == "Symbol"

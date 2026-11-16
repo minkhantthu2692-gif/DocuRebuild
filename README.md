@@ -145,9 +145,9 @@ data on your device, and treats every AI result as a reviewable proposal.
   the header, or delete the table. Cells are normally typed by hand. The OCR
   dialog can build a cell-grid proposal from the stored word boxes, either for one
   block labelled as a table or for the tables it detects across a whole page; the
-  grid is shown for review with per-cell confidence and is only inserted after you
-  confirm it. Tables are part of the saved document, version history, backups and
-  Markdown/TXT/Word/PDF export.
+  grid is shown for review with per-cell confidence and the source crop beside it,
+  and is only inserted after you confirm it. Tables are part of the saved document,
+  version history, backups and Markdown/TXT/Word/PDF export.
 - **Equations** — insert a display equation or an inline formula from the toolbar
   dialog and check the local KaTeX preview before inserting it. Empty or invalid
   LaTeX is refused rather than saved. Display equations can be given an optional
@@ -501,10 +501,12 @@ Rules that keep a proposal honest:
 - Empty cells stay empty. A cell built from low-confidence words, or from words with
   mixed confidence, is flagged. Embedded PDF text has no confidence score, so its
   cells are reported as `no_confidence` rather than given a fake score.
-- The dialog shows the whole grid before anything changes. Insertion is a separate
-  confirmation, and an acknowledgement checkbox is required when any cell is
-  uncertain or has no confidence. The first row can be marked as a header; it is
-  off by default.
+- The dialog shows the whole grid before anything changes, with the matching page
+  region beside it so every cell can be compared with the source. The crop is
+  positioned from the proposal's own pixel box, so it always shows the area the
+  words came from; it can be hidden. Insertion is a separate confirmation, and an
+  acknowledgement checkbox is required when any cell is uncertain or has no
+  confidence. The first row can be marked as a header; it is off by default.
 - Limits are 60 rows, 20 columns and 600 cells per candidate, and at most 20
   candidates per page. A larger or unusable grid is refused with a typed error
   instead of being truncated.
