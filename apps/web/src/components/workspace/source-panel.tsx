@@ -1348,39 +1348,45 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
                           height: imageFrame.height,
                         }}
                       >
-                        {proposalBoxes.map(({ proposal, box }) => (
-                          <button
-                            key={proposal.key}
-                            type="button"
-                            onClick={() => applyProposal(proposal)}
-                            aria-label={t("elements.proposals.use", {
-                              kind: t(`elements.kind.${proposal.kind}`),
-                            })}
-                            className={cn(
-                              "focus-ring absolute rounded-xs border-2 border-dashed transition-colors",
-                              proposal.reason === "ai_vision"
-                                ? "border-warning/80 bg-warning/10 hover:bg-warning/20"
-                                : "border-primary/70 bg-primary/10 hover:bg-primary/20",
-                            )}
-                            style={{
-                              left: box.left,
-                              top: box.top,
-                              width: box.width,
-                              height: box.height,
-                            }}
-                          >
-                            <span
+                        {proposalBoxes.map(({ proposal, box }) => {
+                          // A low-confidence region (an AI guess or ink that no
+                          // text layout explains) is marked like a warning, so a
+                          // weak suggestion never looks as certain as OCR text.
+                          const uncertain =
+                            proposal.reason === "ai_vision" ||
+                            proposal.confidence === "low";
+                          return (
+                            <button
+                              key={proposal.key}
+                              type="button"
+                              onClick={() => applyProposal(proposal)}
+                              aria-label={t("elements.proposals.use", {
+                                kind: t(`elements.kind.${proposal.kind}`),
+                              })}
                               className={cn(
-                                "pointer-events-none absolute left-1 top-1 rounded-pill bg-background/90 px-1.5 py-0.5 text-[0.625rem] font-medium leading-4 shadow-xs",
-                                proposal.reason === "ai_vision"
-                                  ? "text-warning"
-                                  : "text-primary",
+                                "focus-ring absolute rounded-xs border-2 border-dashed transition-colors",
+                                uncertain
+                                  ? "border-warning/80 bg-warning/10 hover:bg-warning/20"
+                                  : "border-primary/70 bg-primary/10 hover:bg-primary/20",
                               )}
+                              style={{
+                                left: box.left,
+                                top: box.top,
+                                width: box.width,
+                                height: box.height,
+                              }}
                             >
-                              {t(`elements.kind.${proposal.kind}`)}
-                            </span>
-                          </button>
-                        ))}
+                              <span
+                                className={cn(
+                                  "pointer-events-none absolute left-1 top-1 rounded-pill bg-background/90 px-1.5 py-0.5 text-[0.625rem] font-medium leading-4 shadow-xs",
+                                  uncertain ? "text-warning" : "text-primary",
+                                )}
+                              >
+                                {t(`elements.kind.${proposal.kind}`)}
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
                     ) : null}
                     {selectMode && dragStart && dragCurrent ? (

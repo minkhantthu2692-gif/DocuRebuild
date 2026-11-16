@@ -47,8 +47,9 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.backup_crypto` | Optional `.drbz` container for downloaded backups: scrypt key derivation, chunked AES-256-GCM, password and corruption errors |
 | `services.local_backups` | Local backup vault: verified copy creation, retention pruning, safe name resolution and opt-in automatic copies |
 | `services.page_restore` | Selective restore: staged archive inspection, short-lived selection tokens, additive page/asset/OCR/element copying, page-image and region-crop repair and reversible document-version restore |
+| `services.artwork` | Deterministic locator for large ink clusters that the OCR text layout does not explain on a photographed page: grayscale grid, text masking, cluster joining and size filters; returns boxes only |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
-| `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout and, on PDF pages, embedded raster-image placement and vector-drawing geometry |
+| `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout, raster-page ink, and embedded PDF raster-image placement and vector-drawing geometry |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness |
 | `services.table_structure` | Reviewable table proposals: word-box row clustering and whitespace column bands, plus exact merged-cell grids from a PDF's drawn rules; cell text/confidence/flags/alignment, page-level grouping of vertically contiguous row blocks, vector/OCR de-duplication, source pixel box, size caps and typed refusal errors |
@@ -508,12 +509,14 @@ src/
 
 - Suggestions reuse the OCR text layout and, on PDF pages, the placement of
   embedded raster images and the geometry of vector drawings instead of a vision
-  model, so they stay free, local and explainable. Five signals are recognised:
+  model, so they stay free, local and explainable. Six signals are recognised:
   `table_text_grid` (merged OCR `table` blocks), `equation_text` (OCR `equation`
   blocks), `figure_caption_gap` (the empty band above a `caption` block whose text
   starts with figure/diagram/chart/plate/photo/image/illustration),
-  `pdf_image_region` (a raster image drawn on the PDF page) and
-  `pdf_drawing_region` (vector artwork drawn on the page).
+  `pdf_image_region` (a raster image drawn on the PDF page),
+  `pdf_drawing_region` (vector artwork drawn on the page) and
+  `page_artwork_region` (large ink on a photographed page that the OCR layout does
+  not explain).
 - `services.pdf.image_regions` reads `Page.get_image_info()`, applies the page's
   own `/Rotate` matrix and converts PDF points to the stored page's pixel width.
   Boundaries are converted to the rendered page width, so a figure box stays in the
@@ -540,6 +543,25 @@ src/
   inside a detected table or equation, is dropped: those regions already have a
   better proposal, and a shaded cell or a frame around an image is not a second
   figure.
+- `services.artwork.artwork_regions` handles a page without any PDF layer. The
+  current render is converted to a grayscale copy 480 px wide, and the page's own
+  background is measured from the 90th luma percentile. A page whose background is
+  darker than 140 is not analysed, because ink and background cannot be separated.
+  A grid cell is inked when at least 8 % of its pixels are clearly darker than that
+  background. Cells whose centre lies inside an OCR block are removed, because the
+  text is already explained by the layout; everything left is content the engine
+  did not read as text. Touching cells are clustered, neighbouring clusters within
+  3 % of the page are joined into one drawing, and a group becomes a figure only
+  when it covers at least 15 % of the page width and 10 % of its height, is not
+  page-sized in both directions, is not a thin rule, and does not touch three page
+  edges (a frame or the background around the paper). At most five such regions are
+  returned, largest first.
+- Ink boxes are a weaker signal than PDF geometry, because a ruled table that the
+  OCR engine did not classify, or an ornamental border the engine read as text,
+  can look like artwork. They are therefore proposed as `low` confidence with no
+  caption, unless a caption band covers the same area, in which case the caption
+  is attached. A box that lies mostly inside a detected table or equation proposal
+  is dropped. The region still only prefills the extraction dialog.
 - Clustering merges vertically adjacent blocks of the same kind only when their
   columns overlap and the gap is small relative to their height, so a table split
   into several blocks becomes one suggestion. Rectangles are padded by 0.8 % of

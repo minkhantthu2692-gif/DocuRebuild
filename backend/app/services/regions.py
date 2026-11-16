@@ -7,14 +7,15 @@ from typing import Any
 from app.core.errors import AppError
 from app.core.storage import resolve_within
 from app.db.project_schema import project_db
+from app.services import artwork as artwork_service
 from app.services import image_edits as edits_service
 from app.services import pdf as pdf_service
 
-# A figure suggestion is anchored to a figure-like caption, to a raster image
-# embedded in a PDF, or to vector artwork drawn on a PDF page. Without one of
-# those signals there is no reliable local evidence that separates a drawing from
-# empty space, so uncaptioned artwork in a photographed page is left to manual
-# selection.
+# A figure suggestion is anchored to a figure-like caption, to artwork the page
+# itself exposes (an embedded PDF image or vector drawing), or, on a photographed
+# page, to large ink clusters that the OCR text layout does not explain. Without
+# one of those signals there is no reliable local evidence that separates a
+# drawing from empty space, so the region is left to manual selection.
 FIGURE_CAPTION_RE = re.compile(
     r"^(?:figure|fig\.?|diagram|chart|plate|photo|image|illustration)\b",
     re.IGNORECASE,
@@ -393,9 +394,11 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
     Text comes from the latest OCR run. PDF pages also expose the placement of
     embedded raster images and the shapes of vector drawings, which are
     deterministic signals that a region contains artwork even without a caption.
-    Proposals are not persisted and never become elements on their own: the user
-    reviews the rectangle and caption, then saves it through the normal crop path,
-    so a bad suggestion costs nothing and is never treated as verified content.
+    On a photographed page, large ink clusters outside the OCR text blocks are the
+    remaining local signal and are offered as low-confidence figures. Proposals are
+    not persisted and never become elements on their own: the user reviews the
+    rectangle and caption, then saves it through the normal crop path, so a bad
+    suggestion costs nothing and is never treated as verified content.
     """
     with project_db(project_dir) as conn:
         page = _get_page(conn, page_id)
@@ -445,6 +448,21 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
                             pdf_path,
                             max(0, int(page["pdf_page_number"] or 1) - 1),
                         )
+        # A photographed page has no PDF layer. Its current render is read so
+        # ink that the OCR text layout does not explain can be proposed too.
+        raster_source: Path | None = None
+        if page["source_kind"] != "pdf":
+            asset = conn.execute(
+                "SELECT relative_path FROM assets WHERE id = ?",
+                (page["display_asset_id"] or page["original_asset_id"],),
+            ).fetchone()
+            if asset is not None:
+                try:
+                    raster_path = resolve_within(project_dir, asset["relative_path"])
+                except ValueError:
+                    raster_path = None
+                if raster_path is not None and raster_path.exists():
+                    raster_source = raster_path
 
     base_width = int(page_width) if page_width else None
     base_height = int(page_height) if page_height else None
@@ -490,6 +508,7 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
 
     image_rects: list[Rect] = []
     drawing_rects: list[Rect] = []
+    raster_rects: list[Rect] = []
     if pdf_source is not None:
         pdf_path, pdf_index = pdf_source
         document = None
@@ -511,6 +530,10 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
                 )
             finally:
                 document.close()
+    elif raster_source is not None:
+        raster_rects = artwork_service.artwork_regions(
+            raster_source, blocks, int(page_width), int(page_height)
+        )
 
     # An embedded image gives the precise artwork box. A caption band gives the
     # text but only approximates the artwork, so when both describe the same
@@ -521,25 +544,43 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
             "rect": rect,
             "caption": "",
             "reason": "pdf_image_region",
+            "confidence": "medium",
             "block_ids": [],
         }
         for rect in image_rects
     ]
-    # A drawing is a weaker signal than an image: it may be shading or a border
-    # around content that is already proposed. It is only kept when it is not
-    # the same area as an image and does not sit inside a detected table, which
-    # is where cell shading and rules usually appear.
     text_regions = [
         proposal
         for proposal in proposals
         if proposal["kind"] in {"table", "equation"}
     ]
+    # Ink outside the OCR text blocks is the only local signal left on a
+    # photographed page. It is weaker than PDF geometry: a ruled table the engine
+    # did not read as a table, or a header, can look like artwork. The region is
+    # therefore offered as a low-confidence figure and never saved on its own.
+    for rect in raster_rects:
+        if any(_inside(rect, proposal) for proposal in text_regions):
+            continue
+        figures.append(
+            {
+                "rect": rect,
+                "caption": "",
+                "reason": "page_artwork_region",
+                "confidence": "low",
+                "block_ids": [],
+            }
+        )
+    # A drawing is a weaker signal than an image: it may be shading or a border
+    # around content that is already proposed. It is only kept when it is not
+    # the same area as an image and does not sit inside a detected table, which
+    # is where cell shading and rules usually appear.
     for rect in _drawing_figures(drawing_rects, image_rects, text_regions):
         figures.append(
             {
                 "rect": rect,
                 "caption": "",
                 "reason": "pdf_drawing_region",
+                "confidence": "medium",
                 "block_ids": [],
             }
         )
@@ -563,6 +604,7 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
                 "rect": rect,
                 "caption": caption_text,
                 "reason": "figure_caption_gap",
+                "confidence": "medium",
                 "block_ids": [caption["id"]],
             }
         )
@@ -576,7 +618,7 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
                 clamped,
                 kind="figure",
                 reason=figure["reason"],
-                confidence="medium",
+                confidence=figure["confidence"],
                 caption=figure["caption"],
                 block_ids=figure["block_ids"],
             )

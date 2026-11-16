@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import io
 import time
 
 import pymupdf
 from fastapi.testclient import TestClient
+from PIL import Image, ImageDraw
 
 from tests.conftest import make_png, upload_pages
 
@@ -121,6 +123,37 @@ def _upload_pdf(
     response = client.post(
         f"/api/projects/{project_id}/pages/import",
         files=[("files", (name, data, "application/pdf"))],
+    )
+    assert response.status_code == 200, response.text
+    return response.json()[0]
+
+
+def _page_artwork_png(*, text_only: bool = False, caption: str | None = None) -> bytes:
+    image = Image.new("RGB", (1200, 800), (252, 252, 252))
+    draw = ImageDraw.Draw(image)
+    # Body text the OCR run locates, so its ink is never treated as artwork.
+    for y in range(100, 180, 26):
+        draw.rectangle((100, y, 520, y + 10), fill=(30, 30, 30))
+    if not text_only:
+        # A chart made of separate parts: rules, filled bars and a trend line.
+        draw.line((700, 560, 1060, 560), fill=(20, 20, 20), width=2)
+        draw.line((700, 260, 700, 560), fill=(20, 20, 20), width=2)
+        for x, top in ((740, 420), (800, 340), (860, 260)):
+            draw.rectangle((x, top, x + 34, 560), fill=(40, 80, 160))
+        draw.line((700, 440, 1060, 300), fill=(160, 40, 40), width=3)
+    if caption:
+        draw.rectangle((740, 620, 1040, 634), fill=(30, 30, 30))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _upload_png(
+    client: TestClient, project_id: str, name: str, data: bytes
+) -> dict:
+    response = client.post(
+        f"/api/projects/{project_id}/pages/import",
+        files=[("files", (name, data, "image/png"))],
     )
     assert response.status_code == 200, response.text
     return response.json()[0]
@@ -479,3 +512,97 @@ def test_drawing_figures_skip_areas_other_signals_already_cover() -> None:
     # A drawing next to another region is its own suggestion.
     assert regions._drawing_figures([aside], [image], [table]) == [aside]
     assert regions._drawing_figures([beside], [image], []) == [beside]
+
+
+def test_page_artwork_region_proposes_ink_the_ocr_text_does_not_explain(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(
+        ocr,
+        "_perform_ocr",
+        lambda *args, **kwargs: _fake_result(
+            [_block(1, "paragraph", "Body text.", 90, 90, 450, 100)]
+        ),
+    )
+    page = _upload_png(
+        client, project["id"], "photographed-page.png", _page_artwork_png()
+    )
+    _run_ocr(client, project["id"], page["id"])
+
+    body, figures = _figure_proposals(client, project["id"], page["id"])
+
+    assert body["status"] == "ready"
+    assert len(body["proposals"]) == 1
+    figure = figures[0]
+    # Ink outside every OCR block is the only local signal on a raster page, so
+    # the region is offered for review with a low confidence and no caption.
+    assert figure["reason"] == "page_artwork_region"
+    assert figure["confidence"] == "low"
+    assert figure["caption"] == ""
+    assert figure["block_ids"] == []
+    assert abs(figure["x"] - 700) <= 30
+    assert abs(figure["y"] - 260) <= 30
+    assert abs(figure["x"] + figure["width"] - 1060) <= 40
+    assert abs(figure["y"] + figure["height"] - 560) <= 40
+
+
+def test_page_artwork_region_attaches_a_caption_below_the_drawing(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    caption = "Figure 7. Measured response on paper"
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(
+        ocr,
+        "_perform_ocr",
+        lambda *args, **kwargs: _fake_result(
+            [
+                _block(1, "paragraph", "Body text.", 90, 90, 450, 100),
+                _block(2, "caption", caption, 740, 610, 300, 40),
+            ]
+        ),
+    )
+    page = _upload_png(
+        client,
+        project["id"],
+        "captioned-photo.png",
+        _page_artwork_png(caption=caption),
+    )
+    _run_ocr(client, project["id"], page["id"])
+
+    body, figures = _figure_proposals(client, project["id"], page["id"])
+
+    assert len(figures) == 1
+    assert figures[0]["reason"] == "page_artwork_region"
+    assert figures[0]["caption"] == caption
+    assert len(figures[0]["block_ids"]) == 1
+    assert all(
+        proposal["reason"] != "figure_caption_gap" for proposal in body["proposals"]
+    )
+
+
+def test_page_artwork_region_ignores_text_the_ocr_layout_explains(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(
+        ocr,
+        "_perform_ocr",
+        lambda *args, **kwargs: _fake_result(
+            [_block(1, "paragraph", "Body text.", 90, 90, 450, 100)]
+        ),
+    )
+    page = _upload_png(
+        client, project["id"], "text-page.png", _page_artwork_png(text_only=True)
+    )
+    _run_ocr(client, project["id"], page["id"])
+
+    _, figures = _figure_proposals(client, project["id"], page["id"])
+
+    assert figures == []

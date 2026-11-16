@@ -96,7 +96,10 @@ data on your device, and treats every AI result as a reviewable proposal.
   embedded in the page file are proposed as uncaptioned figures from their real
   placement, and so is vector artwork the page draws itself (charts, diagrams);
   full-page scan backgrounds, page frames, table rules and tiny logos are skipped.
-  A caption that describes the same artwork supplies its text. Suggestions are never
+  On a photographed or scanned page, large ink that lies outside every OCR text
+  block is proposed as a low-confidence figure, so an uncaptioned picture can be
+  reviewed without a vision model. A caption that describes the same artwork
+  supplies its text. Suggestions are never
   saved on their own: choosing one only prefills the normal extraction dialog.
   When a vision model is saved in Settings, "Ask AI for regions" sends only the
   current page image to that configured local server and shows its figure, table
@@ -197,11 +200,12 @@ own, never invents a cell, and does not transcribe equations. Nested tables and
 vision-based table reading are not implemented.
 Region extraction produces exact pixel crops and can read their plain text locally;
 it does not build structured table cells or equation markup. Deterministic region
-suggestions are heuristics over the OCR text layout and, on PDF pages, the placement
-of embedded raster images and the shapes of vector drawings,
+suggestions are heuristics over the OCR text layout, on PDF pages over the placement
+of embedded raster images and the shapes of vector drawings, and on a photographed
+page over ink that the text layout does not explain,
 not a vision model: they cover OCR table/equation blocks, embedded images, vector
-artwork and the empty band above a figure-like caption, and they are skipped when no
-suitable signal exists. The
+artwork, unexplained ink and the empty band above a figure-like caption, and they are
+skipped when no suitable signal exists. The
 optional vision path only proposes rectangles for review; it does not read their
 text, invent content or change the document. The local AI workflow does not switch
 providers silently or use any remote service without consent.
@@ -1001,16 +1005,20 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   wrong shape, which is why every cell must be reviewed before insertion. Equations
   are not transcribed.
 - Region extraction does not use a vision model. Suggestions are deterministic
-  heuristics over the latest OCR text layout and, on PDF pages, over embedded raster
-  images and vector drawings: OCR table/equation blocks, uncaptioned artwork and the
-  empty band above a figure-like caption. Artwork in a photographed page that has no
-  caption, drawings the PDF layer does not expose as paths, and regions OCR did not
-  read are not suggested, so manual selection remains the fallback. A vector drawing
-  is separated from table rules by geometry, so an unusual drawing can still be
-  missed or proposed with an imprecise box. A suggestion is never saved
-  automatically; it only prefills the extraction dialog. The stored element is an
-  exact pixel crop rather than cells or LaTeX. A crop is marked stale when the page
-  is re-rendered after extraction, but the crop file itself remains unchanged.
+  heuristics over the latest OCR text layout, on PDF pages over embedded raster
+  images and vector drawings, and on a photographed page over ink that the text
+  layout does not explain: OCR table/equation blocks, uncaptioned artwork and the
+  empty band above a figure-like caption. Artwork the OCR engine read as text,
+  drawings the PDF layer does not expose as paths, dark pages that cannot be
+  separated from their content, and regions smaller than the size filters are not
+  suggested, so manual selection remains the fallback. A vector drawing is separated
+  from table rules by geometry, so an unusual drawing can still be missed or proposed
+  with an imprecise box. On a photographed page, a ruled table the engine did not
+  classify, a decorative border it did not read as text, or a shaded area can look
+  like a figure; such suggestions are marked low confidence and are never saved
+  automatically. A suggestion only prefills the extraction dialog. The stored element
+  is an exact pixel crop rather than cells or LaTeX. A crop is marked stale when the
+  page is re-rendered after extraction, but the crop file itself remains unchanged.
 - Region text extraction returns plain text from the crop through local Tesseract.
   It does not reconstruct table cells, merged spans, reading order inside tables or
   equation markup. The text is an unverified proposal and may omit or misread

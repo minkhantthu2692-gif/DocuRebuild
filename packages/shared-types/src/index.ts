@@ -602,6 +602,7 @@ export type RegionProposalReason =
   | "figure_caption_gap"
   | "pdf_image_region"
   | "pdf_drawing_region"
+  | "page_artwork_region"
   | "ai_vision";
 
 export interface RegionProposal {
