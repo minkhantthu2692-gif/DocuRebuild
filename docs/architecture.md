@@ -51,7 +51,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness |
-| `services.table_structure` | Reviewable table proposals from stored OCR word boxes: row clustering, whitespace column bands, cell text/confidence/flags, size caps and typed refusal errors |
+| `services.table_structure` | Reviewable table proposals from stored OCR word boxes: row clustering, whitespace column bands, cell text/confidence/flags, page-level grouping of vertically contiguous row blocks, size caps and typed refusal errors |
 | `app.ocr_benchmark` | Local CER/WER measurement against checked reference transcripts, by running the OCR adapter or scoring a stored transcript; validates fixtures and never uploads |
 | `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, vision region requests, listing and review decisions |
 | `services.ai_vision` | Page-image encoding, normalized-to-source rectangle mapping and filtering for optional vision region proposals |
@@ -211,6 +211,7 @@ POST   /api/projects/{id}/pages/{page_id}/ocr
 GET    /api/projects/{id}/ocr/runs/{run_id}
 PATCH  /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}
 GET    /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}/table-proposal
+GET    /api/projects/{id}/pages/{page_id}/table-proposals
 GET    /api/projects/{id}/pages/{page_id}/ai-suggestions
 POST   /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}/ai-suggestions
 PATCH  /api/projects/{id}/ai-suggestions/{suggestion_id}
@@ -345,15 +346,26 @@ src/
   `table` is accepted; a corrected block is refused because its words no longer
   match the edited text. Caps are 60 rows, 20 columns and 600 cells, with typed
   errors for unusable or oversized grids.
-- The proposal dialog shows the grid and its per-cell flags before anything is
-  inserted. Insertion uses the same workspace actions context as other document
-  edits and builds a normal Tiptap table. The first row becomes a header only when
-  the user selects it, and an acknowledgement checkbox is required when any cell
-  is uncertain or has no confidence. The proposal is never saved on its own.
 - PDF word boxes come from PyMuPDF `get_text("words")` and are attached to a block
   by centre containment, so embedded-text blocks also carry geometry. PyMuPDF
-  often emits one block per row, however; those blocks stay separate paragraphs
-  and are not merged into a single table yet.
+  often emits one block per row, so a single block is rarely labelled `table`.
+- `GET .../pages/{page_id}/table-proposals` therefore returns every reviewable
+  table on a page. Single blocks already labelled `table` are built directly.
+  Vertically contiguous paragraph blocks are grouped when their merged visual rows
+  still pass the same deterministic classifier (`classify_text_block` plus the
+  wide-gap test) used for one block, and only a `table` label is accepted. Visual
+  rows are rebuilt from word boxes rather than stored line indices, because
+  PyMuPDF splits same-row words into separate lines. A hand-corrected block is a
+  barrier, so a candidate never bridges across a row whose stored words no longer
+  match its text. At most 20 candidates are returned per page; each candidate keeps
+  the 60 rows / 20 columns / 600 cells caps.
+- The proposal dialogs show the grid and its per-cell flags before anything is
+  inserted. A single-block proposal and a page candidate share one `TableReview`
+  component, so a cell is presented identically in both. Insertion uses the same
+  workspace actions context as other document edits and builds a normal Tiptap
+  table. The first row becomes a header only when the user selects it, and an
+  acknowledgement checkbox is required when any cell is uncertain or has no
+  confidence. The proposal is never saved on its own.
 - Selected blocks are appended to the Tiptap document through the workspace
   actions context. The insertion is a normal document edit and is autosaved; an
   optional localized source note records the page and verification status.
@@ -1187,9 +1199,9 @@ src/
 - **Layout detection stays heuristic and deterministic** — no learned layout
   model is bundled, so labels can be wrong but never fabricated, require no model
   download, and are cheap to explain and test. Simple table structure can be
-  derived from stored word boxes, but only inside one labelled block and without
-  merged cells; figure regions still need a later engine adapter rather than more
-  regexes.
+  derived from stored word boxes, including vertically contiguous row blocks, but
+  without merged cells; figure regions still need a later engine adapter rather
+  than more regexes.
 - **AI starts local and proposal-only** — the AI workflows correct one OCR block
   or propose reviewable page regions through a user-configured server. Loopback is
   allowed by default and any other host needs stored remote consent, with

@@ -376,6 +376,25 @@ export interface TableProposal {
   cells: TableProposalCell[];
 }
 
+/** A table candidate that may span several blocks, typically PDF rows. */
+export interface TableProposalCandidate {
+  block_ids: string[];
+  rows: number;
+  columns: number;
+  has_confidence: boolean;
+  uncertain_cells: number;
+  empty_cells: number;
+  warnings: TableProposalWarning[];
+  cells: TableProposalCell[];
+}
+
+export interface PageTableProposals {
+  page_id: string;
+  run_id: string;
+  engine: string;
+  candidates: TableProposalCandidate[];
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                    AI                                      */
 /* -------------------------------------------------------------------------- */

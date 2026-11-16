@@ -18,6 +18,10 @@ The rules are deliberately conservative:
 * A block the user corrected by hand is refused, because its stored word boxes
   describe the engine's original text rather than the corrected text.
 * Caps keep a damaged scan from producing an unusable grid.
+* A page-level detector groups consecutive blocks whose rows share aligned
+  columns. This is how embedded PDF text becomes a table when the PDF layer
+  stores one block per row. A group is accepted only when the deterministic
+  layout classifier that labels single blocks also calls the merged rows a table.
 
 The frontend shows the proposal for review and inserts it only when the user
 approves it.
@@ -32,10 +36,12 @@ from typing import Any
 
 from app.core.errors import AppError
 from app.db.project_schema import project_db
+from app.services.layout import classify_text_block
 
 MAX_ROWS = 60
 MAX_COLUMNS = 20
 MAX_CELLS = 600
+MAX_CANDIDATES = 20
 MIN_ROWS = 2
 MIN_COLUMNS = 2
 LOW_CONFIDENCE = 60.0
@@ -43,9 +49,12 @@ ROW_TOLERANCE_RATIO = 0.6
 COLUMN_GAP_RATIO = 0.6
 MIN_BAND_WIDTH = 2.0
 MIN_BAND_SUPPORT = 2
+GROUP_GAP_RATIO = 2.0
+MIN_GROUP_GAP = 24.0
 
 Word = dict[str, Any]
 Band = tuple[float, float]
+Grid = tuple[list[list[Word]], list[Band]]
 
 
 def _page(conn, page_id: str):
@@ -251,14 +260,7 @@ def _cell_payload(words: list[Word]) -> dict[str, Any]:
     }
 
 
-def _proposal(
-    page_id: str,
-    block_id: str,
-    run_id: str,
-    engine: str,
-    rows: list[list[Word]],
-    bands: list[Band],
-) -> dict[str, Any]:
+def _grid_payload(rows: list[list[Word]], bands: list[Band]) -> dict[str, Any]:
     cells: list[dict[str, Any]] = []
     uncertain_cells = 0
     empty_cells = 0
@@ -293,10 +295,6 @@ def _proposal(
         warnings.append("empty_cells")
 
     return {
-        "page_id": page_id,
-        "block_id": block_id,
-        "run_id": run_id,
-        "engine": engine,
         "rows": len(rows),
         "columns": len(bands),
         "has_confidence": has_confidence,
@@ -305,6 +303,102 @@ def _proposal(
         "warnings": warnings,
         "cells": cells,
     }
+
+
+def _proposal(
+    page_id: str,
+    block_id: str,
+    run_id: str,
+    engine: str,
+    rows: list[list[Word]],
+    bands: list[Band],
+) -> dict[str, Any]:
+    return {
+        "page_id": page_id,
+        "block_id": block_id,
+        "run_id": run_id,
+        "engine": engine,
+        **_grid_payload(rows, bands),
+    }
+
+
+def _build_grid(words: list[Word]) -> Grid | None:
+    """Return a grid that respects every cap, or ``None`` for an unusable shape."""
+    if not words:
+        return None
+    heights = [word["height"] for word in words if word["height"] > 0]
+    typical_height = median(heights) if heights else 1.0
+    rows = _cluster_rows(words)
+    if len(rows) < MIN_ROWS:
+        return None
+    bands = _column_bands(rows, typical_height)
+    if len(bands) < MIN_COLUMNS:
+        return None
+    if len(rows) > MAX_ROWS or len(bands) > MAX_COLUMNS:
+        return None
+    if len(rows) * len(bands) > MAX_CELLS:
+        return None
+    return rows, bands
+
+
+def _group_is_table(words: list[Word]) -> bool:
+    """Ask the shared layout classifier whether merged rows form a table.
+
+    The stored block labels cannot answer this: a PDF often stores one row per
+    block, so each block is a paragraph. The merged visual rows are classified
+    with the same deterministic rule used for a single block, and only a
+    ``table`` label is accepted.
+    """
+    rows = _cluster_rows(words)
+    if len(rows) < MIN_ROWS:
+        return False
+    heights = [word["height"] for word in words if word["height"] > 0]
+    if not heights:
+        return False
+    line_spans = [
+        sorted((word["x"], _right(word)) for word in row) for row in rows
+    ]
+    text = "\n".join(" ".join(word["text"] for word in row) for row in rows)
+    return (
+        classify_text_block(
+            text,
+            max(heights),
+            median(heights),
+            len(words),
+            line_spans=line_spans,
+        )
+        == "table"
+    )
+
+
+def _blocks_can_join(left, right, typical_height: float) -> bool:
+    """Keep a group vertically contiguous; unrelated blocks stay separate."""
+    gap = float(right["y"]) - (float(left["y"]) + float(left["height"]))
+    limit = max(typical_height * GROUP_GAP_RATIO, MIN_GROUP_GAP)
+    return gap <= limit
+
+
+def _candidate(blocks, rows: list[list[Word]], bands: list[Band]) -> dict[str, Any]:
+    return {
+        "block_ids": [block["id"] for block in blocks],
+        **_grid_payload(rows, bands),
+    }
+
+
+def _ensure_fresh_run(page, run) -> None:
+    """Refuse a proposal when the stored run no longer matches the page."""
+    if run is None or run["status"] != "succeeded":
+        raise AppError(409, "ocr_not_ready", "OCR has not finished for this page.")
+    current_source = page["display_asset_id"] or page["original_asset_id"]
+    if (
+        run["source_asset_id"] != current_source
+        or int(run["rotation"]) != int(page["rotation"])
+    ):
+        raise AppError(
+            409,
+            "ocr_stale",
+            "The page changed after OCR. Run OCR again before building a table.",
+        )
 
 
 def propose_table(project_dir: Path, page_id: str, block_id: str) -> dict[str, Any]:
@@ -324,18 +418,7 @@ def propose_table(project_dir: Path, page_id: str, block_id: str) -> dict[str, A
         run = conn.execute(
             "SELECT * FROM ocr_runs WHERE id = ?", (block["run_id"],)
         ).fetchone()
-        if run is None or run["status"] != "succeeded":
-            raise AppError(409, "ocr_not_ready", "OCR has not finished for this page.")
-        current_source = page["display_asset_id"] or page["original_asset_id"]
-        if (
-            run["source_asset_id"] != current_source
-            or int(run["rotation"]) != int(page["rotation"])
-        ):
-            raise AppError(
-                409,
-                "ocr_stale",
-                "The page changed after OCR. Run OCR again before building a table.",
-            )
+        _ensure_fresh_run(page, run)
         if block["kind"] != "table":
             raise AppError(
                 422,
@@ -397,3 +480,97 @@ def propose_table(project_dir: Path, page_id: str, block_id: str) -> dict[str, A
         rows=rows,
         bands=bands,
     )
+
+
+def propose_page_tables(project_dir: Path, page_id: str) -> dict[str, Any]:
+    """Find reviewable tables on a page, including cross-block ones.
+
+    Embedded PDF text often stores one block per table row, so no single block
+    is labelled ``table``. Consecutive paragraph blocks are merged only when
+    their rows share aligned wide gaps, which is the same deterministic test the
+    layout classifier applies to one block. A single block already labelled
+    ``table`` is also returned, so one dialog can list every table on the page.
+
+    Nothing is saved and no candidate is inserted automatically.
+    """
+    with project_db(project_dir) as conn:
+        page = _page(conn, page_id)
+        run = conn.execute(
+            "SELECT * FROM ocr_runs WHERE page_id = ? AND status = 'succeeded' "
+            "ORDER BY created_at DESC LIMIT 1",
+            (page_id,),
+        ).fetchone()
+        _ensure_fresh_run(page, run)
+        blocks = conn.execute(
+            "SELECT * FROM ocr_blocks WHERE run_id = ? ORDER BY block_index",
+            (run["id"],),
+        ).fetchall()
+
+    eligible: list[tuple[Any, list[Word]]] = []
+    for block in blocks:
+        words = _parse_words(block["words"])
+        if not words:
+            continue
+        eligible.append((block, words))
+
+    heights = [word["height"] for _block, words in eligible for word in words]
+    typical_height = median(heights) if heights else 1.0
+    candidates: list[dict[str, Any]] = []
+
+    index = 0
+    while index < len(eligible) and len(candidates) < MAX_CANDIDATES:
+        block, words = eligible[index]
+        # A corrected block is a barrier: its stored words no longer describe its
+        # text, so a table must not silently bridge across the missing row.
+        if int(block["corrected"]):
+            index += 1
+            continue
+        if block["kind"] == "table":
+            grid = _build_grid(words)
+            if grid is not None:
+                candidates.append(_candidate([block], *grid))
+            index += 1
+            continue
+        if block["kind"] != "paragraph":
+            index += 1
+            continue
+
+        # Extend over vertically contiguous paragraph blocks, then keep the
+        # longest prefix that the layout classifier still calls a table.
+        end = index
+        while end + 1 < len(eligible):
+            next_block, _next_words = eligible[end + 1]
+            if int(next_block["corrected"]):
+                break
+            if next_block["kind"] != "paragraph":
+                break
+            if not _blocks_can_join(eligible[end][0], next_block, typical_height):
+                break
+            end += 1
+
+        chosen: tuple[int, list[tuple[Any, list[Word]]], Grid] | None = None
+        for candidate_end in range(end, index, -1):
+            group = eligible[index : candidate_end + 1]
+            group_words = [word for _block, words in group for word in words]
+            if not _group_is_table(group_words):
+                continue
+            grid = _build_grid(group_words)
+            if grid is None:
+                continue
+            chosen = (candidate_end, group, grid)
+            break
+
+        if chosen is None:
+            index += 1
+            continue
+
+        candidate_end, group, grid = chosen
+        candidates.append(_candidate([item[0] for item in group], *grid))
+        index = candidate_end + 1
+
+    return {
+        "page_id": page_id,
+        "run_id": run["id"],
+        "engine": run["engine"],
+        "candidates": candidates,
+    }

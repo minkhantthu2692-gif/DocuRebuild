@@ -231,6 +231,165 @@ def test_proposal_refuses_a_grid_that_is_too_large(
     assert response.json()["detail"]["code"] == "table_too_large"
 
 
+def _rows_result(
+    rows: list[list[tuple[str, int, int]]],
+    *,
+    kind: str = "paragraph",
+    confidence: float | None = 90.0,
+) -> dict:
+    """Build one block per visual row, the way embedded PDF text often arrives."""
+    blocks = []
+    for index, row in enumerate(rows):
+        y = 100 + index * 30
+        words = [
+            _word(text, x, y, width=width, confidence=confidence, line=0)
+            for text, x, width in row
+        ]
+        left = min(item[1] for item in row)
+        right = max(item[1] + item[2] for item in row)
+        blocks.append(
+            {
+                "block_index": index + 1,
+                "kind": kind,
+                "text": " ".join(item[0] for item in row),
+                "confidence": confidence,
+                "x": left,
+                "y": y,
+                "width": right - left,
+                "height": 20,
+                "line_count": 1,
+                "word_count": len(row),
+                "words": words,
+            }
+        )
+    return {
+        "engine_version": "5.3.3",
+        "text": "\n".join(" ".join(item[0] for item in row) for row in rows),
+        "mean_confidence": confidence,
+        "blocks": blocks,
+    }
+
+
+def _row_table_rows() -> list[list[tuple[str, int, int]]]:
+    return [
+        [("Element", 0, 70), ("Symbol", 200, 60)],
+        [("Hydrogen", 0, 80), ("H", 200, 10)],
+        [("Helium", 0, 60), ("He", 200, 15)],
+    ]
+
+
+def test_page_candidates_merge_adjacent_row_blocks(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    page, run = _run_table_ocr(
+        client, project, monkeypatch, _rows_result(_row_table_rows())
+    )
+
+    response = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/table-proposals"
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+
+    assert data["run_id"] == run["id"]
+    assert len(data["candidates"]) == 1
+    candidate = data["candidates"][0]
+    assert candidate["block_ids"] == [block["id"] for block in run["blocks"]]
+    assert candidate["rows"] == 3
+    assert candidate["columns"] == 2
+    cells = {(cell["row"], cell["column"]): cell for cell in candidate["cells"]}
+    assert cells[(0, 0)]["text"] == "Element"
+    assert cells[(0, 1)]["text"] == "Symbol"
+    assert cells[(2, 0)]["text"] == "Helium"
+    assert cells[(2, 1)]["text"] == "He"
+    assert candidate["warnings"] == []
+
+
+def test_page_candidates_do_not_merge_unrelated_paragraphs(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    result = _rows_result(
+        [
+            [("Introduction", 0, 120)],
+            [("This", 0, 40), ("is", 45, 20), ("body", 70, 45), ("text", 120, 40)],
+        ]
+    )
+    page, _run = _run_table_ocr(client, project, monkeypatch, result)
+
+    response = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/table-proposals"
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["candidates"] == []
+
+
+def test_page_candidates_include_a_single_table_block(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    page, run = _run_table_ocr(client, project, monkeypatch, _table_result(_grid_words()))
+
+    response = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/table-proposals"
+    )
+    assert response.status_code == 200, response.text
+    candidates = response.json()["candidates"]
+    assert len(candidates) == 1
+    assert candidates[0]["block_ids"] == [run["blocks"][0]["id"]]
+    assert candidates[0]["rows"] == 3
+    assert candidates[0]["columns"] == 2
+
+
+def test_page_candidates_skip_a_corrected_block(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    page, run = _run_table_ocr(
+        client, project, monkeypatch, _rows_result(_row_table_rows())
+    )
+    corrected = client.patch(
+        f"/api/projects/{project['id']}/pages/{page['id']}"
+        f"/ocr/blocks/{run['blocks'][1]['id']}",
+        json={"text": "Hydrogen H corrected"},
+    )
+    assert corrected.status_code == 200, corrected.text
+
+    response = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/table-proposals"
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["candidates"] == []
+
+
+def test_page_candidates_require_a_finished_run(
+    client: TestClient, project: dict
+) -> None:
+    page = upload_pages(client, project["id"], ["no-ocr.png"])[0]
+
+    response = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/table-proposals"
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ocr_not_ready"
+
+
+def test_page_candidates_are_refused_when_the_result_is_stale(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    page, _run = _run_table_ocr(
+        client, project, monkeypatch, _rows_result(_row_table_rows())
+    )
+    rotated = client.post(
+        f"/api/projects/{project['id']}/pages/{page['id']}/rotate",
+        json={"degrees": 90},
+    )
+    assert rotated.status_code == 200
+
+    response = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/table-proposals"
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ocr_stale"
+
+
 def test_parse_words_skips_malformed_entries() -> None:
     words = table_structure._parse_words(
         """

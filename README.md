@@ -22,8 +22,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 > providers, free-tier adapters, paid usage, image generation and automatic
 > equation/figure reconstruction are **not implemented yet** and are clearly marked
 > as unavailable in the UI. Table cells can be proposed from stored OCR word boxes,
-> but only as a reviewed, user-confirmed grid. Nothing in this
-> repository fakes those features.
+> including table rows that a PDF stored as separate text blocks, but only as a
+> reviewed, user-confirmed grid. Nothing in this repository fakes those features.
 
 ---
 
@@ -142,11 +142,12 @@ data on your device, and treats every AI result as a reviewable proposal.
   anywhere.
 - **Tables** — insert an empty table from the editor toolbar with 1–10 rows and
   columns and an optional header row, then add or delete rows and columns, toggle
-  the header, or delete the table. Cells are normally typed by hand. For an OCR
-  block labelled as a table, the OCR dialog can build a cell-grid proposal from the
-  stored word boxes; the grid is shown for review with per-cell confidence and is
-  only inserted after you confirm it. Tables are part of the saved document,
-  version history, backups and Markdown/TXT/Word/PDF export.
+  the header, or delete the table. Cells are normally typed by hand. The OCR
+  dialog can build a cell-grid proposal from the stored word boxes, either for one
+  block labelled as a table or for the tables it detects across a whole page; the
+  grid is shown for review with per-cell confidence and is only inserted after you
+  confirm it. Tables are part of the saved document, version history, backups and
+  Markdown/TXT/Word/PDF export.
 - **Equations** — insert a display equation or an inline formula from the toolbar
   dialog and check the local KaTeX preview before inserting it. Empty or invalid
   LaTeX is refused rather than saved. Display equations can be given an optional
@@ -182,8 +183,10 @@ Automatic equation transcription, generative figure detection, cloud/free-tier A
 providers, image-generation profiles, desktop packaging and PWA install support are
 planned but not implemented. OCR extracts text blocks, reading order and
 conservative layout hints. It can turn a block the layout labels as a table into a
-reviewable cell grid derived from its word boxes, but it never inserts that grid on
-its own, never merges blocks into one table, and does not transcribe equations.
+reviewable cell grid derived from its word boxes, and it can group vertically
+contiguous paragraph blocks into one page-level candidate when the deterministic
+layout classifier calls the merged rows a table. It never inserts a grid on its own,
+never invents a cell, and does not transcribe equations.
 Region extraction produces exact pixel crops and can read their plain text locally;
 it does not build structured table cells or equation markup. Deterministic region
 suggestions are heuristics over the OCR text layout,
@@ -474,15 +477,27 @@ Tables are reconstructed manually, cell by cell:
 
 ### OCR table proposals
 
-An OCR block that the layout heuristic labels as a table can be turned into an
-editable grid without leaving the OCR dialog:
+Tables are proposed from stored word boxes and inserted only after review. There
+are two entry points in the OCR dialog:
 
-- **Propose table** sends only the block id to the local API. The backend reads the
-  word boxes stored with the block, clusters them into rows, finds whitespace bands
-  between columns, and returns the cells with their text and confidence.
-- Only a block labelled `table` is accepted; a paragraph is never silently converted
-  into a table. Hand-corrected blocks are refused because their stored words no
-  longer match the corrected text — build the table manually or re-run OCR.
+- **Propose table** (on a block labelled as a table) sends only the block id to the
+  local API. The backend reads the word boxes stored with the block, clusters them
+  into rows, finds whitespace bands between columns, and returns the cells with
+  their text and confidence.
+- **Detect tables** asks the page endpoint for every candidate on the page. It
+  includes single blocks already labelled `table` and groups vertically contiguous
+  paragraph blocks whose merged visual rows still pass the same deterministic layout
+  classifier. This is what makes an embedded PDF table reviewable when the PDF text
+  layer stores one paragraph block per row. One dialog lists every candidate, so a
+  page with several tables is reviewed in one place.
+
+Rules that keep a proposal honest:
+
+- Only a block labelled `table`, or a paragraph group the layout classifier calls a
+  table, is accepted. Ordinary prose is never silently converted into a table.
+- Grouping requires vertical contiguity and a shared column structure. A
+  hand-corrected block acts as a barrier, so a table never bridges across a row whose
+  stored words no longer match its text; build that table manually or re-run OCR.
 - Empty cells stay empty. A cell built from low-confidence words, or from words with
   mixed confidence, is flagged. Embedded PDF text has no confidence score, so its
   cells are reported as `no_confidence` rather than given a fake score.
@@ -490,11 +505,11 @@ editable grid without leaving the OCR dialog:
   confirmation, and an acknowledgement checkbox is required when any cell is
   uncertain or has no confidence. The first row can be marked as a header; it is
   off by default.
-- Limits are 60 rows, 20 columns and 600 cells. A larger or unusable grid is refused
-  with a typed error instead of being truncated.
-- The grid comes from one OCR block. A PDF whose embedded text is split into one
-  paragraph block per row is not proposed yet, because merging neighbouring blocks
-  into a single table is not implemented.
+- Limits are 60 rows, 20 columns and 600 cells per candidate, and at most 20
+  candidates per page. A larger or unusable grid is refused with a typed error
+  instead of being truncated.
+- Merged cells, nested tables and vision-based table reading are still not
+  implemented. A candidate is a plain grid the user can edit after insertion.
 
 ### Document export
 

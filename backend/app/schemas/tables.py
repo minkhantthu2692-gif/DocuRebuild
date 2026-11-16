@@ -28,3 +28,21 @@ class TableProposalOut(BaseModel):
     empty_cells: int
     warnings: list[TableWarning]
     cells: list[TableCellOut]
+
+
+class TableCandidateOut(BaseModel):
+    block_ids: list[str]
+    rows: int
+    columns: int
+    has_confidence: bool
+    uncertain_cells: int
+    empty_cells: int
+    warnings: list[TableWarning]
+    cells: list[TableCellOut]
+
+
+class PageTableProposalsOut(BaseModel):
+    page_id: str
+    run_id: str
+    engine: str
+    candidates: list[TableCandidateOut]

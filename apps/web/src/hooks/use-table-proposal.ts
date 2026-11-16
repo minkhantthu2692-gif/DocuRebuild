@@ -26,3 +26,21 @@ export function useTableProposal(
     retry: false,
   });
 }
+
+export function pageTableProposalsKey(projectId: string, pageId: string | null) {
+  return ["tables", "page", projectId, pageId] as const;
+}
+
+export function usePageTableProposals(
+  projectId: string,
+  pageId: string | null,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: pageTableProposalsKey(projectId, pageId),
+    queryFn: () => api.getPageTableProposals(projectId, pageId as string),
+    enabled: enabled && Boolean(pageId),
+    staleTime: 30_000,
+    retry: false,
+  });
+}

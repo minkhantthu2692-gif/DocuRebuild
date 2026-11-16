@@ -47,6 +47,7 @@ import {
   languageLabel,
 } from "@/lib/ocr-display";
 import { cn } from "@/lib/utils";
+import { PageTablesDialog } from "./page-tables-dialog";
 import { TableProposalDialog } from "./table-proposal-dialog";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
@@ -144,6 +145,7 @@ export function OcrDialog({
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [includeNote, setIncludeNote] = useState(true);
   const [tableBlock, setTableBlock] = useState<OcrBlock | null>(null);
+  const [tablesOpen, setTablesOpen] = useState(false);
   const initializedRun = useRef<string | null>(null);
 
   const run = latestQuery.data ?? null;
@@ -162,6 +164,7 @@ export function OcrDialog({
     if (!open) {
       initializedRun.current = null;
       setTableBlock(null);
+      setTablesOpen(false);
       return;
     }
     if (!capabilities) return;
@@ -572,22 +575,34 @@ export function OcrDialog({
                             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                               {t("ocr.blocks")}
                             </h3>
-                            <label className="flex items-center gap-1.5 text-2xs text-muted-foreground">
-                              <input
-                                type="checkbox"
-                                className="size-3.5 accent-primary"
-                                checked={allSelected}
-                                onChange={(event) => {
-                                  const checked = event.target.checked;
-                                  setSelected(
-                                    Object.fromEntries(
-                                      blocks.map((block) => [block.id, checked]),
-                                    ),
-                                  );
-                                }}
-                              />
-                              {t("ocr.selectAll")}
-                            </label>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={() => setTablesOpen(true)}
+                                disabled={run.stale}
+                              >
+                                <Table2 />
+                                {t("ocr.table.detect")}
+                              </Button>
+                              <label className="flex items-center gap-1.5 text-2xs text-muted-foreground">
+                                <input
+                                  type="checkbox"
+                                  className="size-3.5 accent-primary"
+                                  checked={allSelected}
+                                  onChange={(event) => {
+                                    const checked = event.target.checked;
+                                    setSelected(
+                                      Object.fromEntries(
+                                        blocks.map((block) => [block.id, checked]),
+                                      ),
+                                    );
+                                  }}
+                                />
+                                {t("ocr.selectAll")}
+                              </label>
+                            </div>
                           </div>
 
                           {blocks.map((block) => {
@@ -922,6 +937,13 @@ export function OcrDialog({
         onOpenChange={(next) => {
           if (!next) setTableBlock(null);
         }}
+        onInserted={onInserted}
+      />
+      <PageTablesDialog
+        projectId={projectId}
+        page={page}
+        open={tablesOpen}
+        onOpenChange={setTablesOpen}
         onInserted={onInserted}
       />
     </Dialog>

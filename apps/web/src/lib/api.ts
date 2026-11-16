@@ -35,6 +35,7 @@ import type {
   OcrRun,
   PageRestoreResult,
   PageSummary,
+  PageTableProposals,
   ProjectBackupSummary,
   ProjectDetail,
   ProjectSummary,
@@ -390,6 +391,8 @@ export const api = {
     request<TableProposal>(
       `/projects/${projectId}/pages/${pageId}/ocr/blocks/${blockId}/table-proposal`,
     ),
+  getPageTableProposals: (projectId: string, pageId: string) =>
+    request<PageTableProposals>(`/projects/${projectId}/pages/${pageId}/table-proposals`),
   createAiRegionProposals: (
     projectId: string,
     pageId: string,
