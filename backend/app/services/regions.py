@@ -10,10 +10,11 @@ from app.db.project_schema import project_db
 from app.services import image_edits as edits_service
 from app.services import pdf as pdf_service
 
-# A figure suggestion is anchored to a figure-like caption, or to a raster
-# image embedded in a PDF. Without either signal there is no reliable local
-# evidence that separates a drawing from empty space, so uncaptioned artwork in
-# a photographed page is left to manual selection.
+# A figure suggestion is anchored to a figure-like caption, to a raster image
+# embedded in a PDF, or to vector artwork drawn on a PDF page. Without one of
+# those signals there is no reliable local evidence that separates a drawing from
+# empty space, so uncaptioned artwork in a photographed page is left to manual
+# selection.
 FIGURE_CAPTION_RE = re.compile(
     r"^(?:figure|fig\.?|diagram|chart|plate|photo|image|illustration)\b",
     re.IGNORECASE,
@@ -24,11 +25,16 @@ MAX_PROPOSALS = 20
 PADDING_RATIO = 0.008
 FIGURE_GAP_RATIO = 0.06
 DEDUPE_IOU = 0.85
-# A raster image covering almost the whole page is usually a scanned
-# background. Very small images are usually logos, rules or bullets.
-IMAGE_BACKGROUND_SHARE = 0.8
+# A raster image or a drawing covering almost the whole page is usually a
+# scanned background or a page frame. Very small ones are usually logos, rules
+# or bullets.
+BACKGROUND_SHARE = 0.8
 IMAGE_MIN_WIDTH_RATIO = 0.05
 IMAGE_MIN_HEIGHT_RATIO = 0.03
+# A drawing has no caption of its own to prove it is artwork, so it has to be
+# large enough to be worth reading before it becomes a suggestion.
+DRAWING_MIN_WIDTH_RATIO = 0.08
+DRAWING_MIN_HEIGHT_RATIO = 0.04
 
 Rect = dict[str, float]
 
@@ -238,13 +244,37 @@ def _image_rects(
     """
     minimum_width = max(8.0, page_width * IMAGE_MIN_WIDTH_RATIO)
     minimum_height = max(8.0, page_height * IMAGE_MIN_HEIGHT_RATIO)
+    return _plausible(rects, minimum_width, minimum_height, page_width, page_height)
+
+
+def _drawing_rects(
+    rects: list[Rect], page_width: int, page_height: int
+) -> list[Rect]:
+    """Keep vector drawings large enough to be a figure.
+
+    The drawing has already been separated from table rules by the PDF layer.
+    Size is the remaining filter: a small drawing is decoration, while a
+    page-sized one is usually a frame or a background.
+    """
+    minimum_width = max(8.0, page_width * DRAWING_MIN_WIDTH_RATIO)
+    minimum_height = max(8.0, page_height * DRAWING_MIN_HEIGHT_RATIO)
+    return _plausible(rects, minimum_width, minimum_height, page_width, page_height)
+
+
+def _plausible(
+    rects: list[Rect],
+    minimum_width: float,
+    minimum_height: float,
+    page_width: int,
+    page_height: int,
+) -> list[Rect]:
     kept: list[Rect] = []
     for rect in rects:
         if rect["width"] < minimum_width or rect["height"] < minimum_height:
             continue
         if (
-            rect["width"] >= page_width * IMAGE_BACKGROUND_SHARE
-            and rect["height"] >= page_height * IMAGE_BACKGROUND_SHARE
+            rect["width"] >= page_width * BACKGROUND_SHARE
+            and rect["height"] >= page_height * BACKGROUND_SHARE
         ):
             continue
         kept.append(rect)
@@ -267,6 +297,38 @@ def _same_area(first: Rect, second: Rect) -> bool:
         second["width"] * second["height"],
     )
     return smaller > 0 and intersection / smaller >= 0.6
+
+
+def _inside(rect: Rect, container: Rect) -> bool:
+    """True when most of ``rect`` lies inside ``container``."""
+    area = rect["width"] * rect["height"]
+    if area <= 0:
+        return False
+    return _intersection(rect, container) / area >= 0.6
+
+
+def _drawing_figures(
+    drawings: list[Rect], images: list[Rect], excluded: list[Rect]
+) -> list[Rect]:
+    """Keep drawings that describe artwork no other signal already covers.
+
+    A filled frame or a shaded band can sit behind an embedded image or inside a
+    detected table. Those regions already have a proposal, so the drawing is
+    dropped instead of offering the user the same area twice.
+    """
+    kept: list[Rect] = []
+    for rect in drawings:
+        if any(
+            _same_area(rect, other) or iou(rect, other) >= DEDUPE_IOU
+            for other in images
+        ):
+            continue
+        if any(_inside(rect, other) for other in excluded):
+            continue
+        if any(iou(rect, other) >= DEDUPE_IOU for other in kept):
+            continue
+        kept.append(rect)
+    return kept
 
 
 def already_extracted(proposal: Rect, element: Rect) -> bool:
@@ -329,11 +391,11 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
     """Derive reviewable region proposals from local layout evidence.
 
     Text comes from the latest OCR run. PDF pages also expose the placement of
-    embedded raster images, which is a deterministic signal that the region
-    contains artwork even without a caption. Proposals are not persisted and
-    never become elements on their own: the user reviews the rectangle and
-    caption, then saves it through the normal crop path, so a bad suggestion
-    costs nothing and is never treated as verified content.
+    embedded raster images and the shapes of vector drawings, which are
+    deterministic signals that a region contains artwork even without a caption.
+    Proposals are not persisted and never become elements on their own: the user
+    reviews the rectangle and caption, then saves it through the normal crop path,
+    so a bad suggestion costs nothing and is never treated as verified content.
     """
     with project_db(project_dir) as conn:
         page = _get_page(conn, page_id)
@@ -362,10 +424,11 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
                 (page_id,),
             ).fetchall()
         ]
-        # Embedded raster images are a deterministic local signal that a
-        # region contains artwork. They are only read from the immutable PDF,
-        # so page rotation or a geometry edit makes the boxes unusable.
-        image_source: tuple[Path, int] | None = None
+        # Embedded raster images and vector drawings are deterministic local
+        # evidence that a region contains artwork. Both are only read from the
+        # immutable PDF, so page rotation or a geometry edit makes the boxes
+        # unusable.
+        pdf_source: tuple[Path, int] | None = None
         if page["source_kind"] == "pdf" and int(page["rotation"]) == 0:
             if not edits_service.has_edits(edits_service.decode_edits(page["edits"])):
                 asset = conn.execute(
@@ -378,7 +441,7 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
                     except ValueError:
                         pdf_path = None
                     if pdf_path is not None and pdf_path.exists():
-                        image_source = (
+                        pdf_source = (
                             pdf_path,
                             max(0, int(page["pdf_page_number"] or 1) - 1),
                         )
@@ -426,8 +489,9 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
             )
 
     image_rects: list[Rect] = []
-    if image_source is not None:
-        pdf_path, pdf_index = image_source
+    drawing_rects: list[Rect] = []
+    if pdf_source is not None:
+        pdf_path, pdf_index = pdf_source
         document = None
         try:
             document = pdf_service.open_document(pdf_path)
@@ -437,6 +501,11 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
             try:
                 image_rects = _image_rects(
                     pdf_service.image_regions(document, pdf_index, int(page_width)),
+                    int(page_width),
+                    int(page_height),
+                )
+                drawing_rects = _drawing_rects(
+                    pdf_service.drawing_regions(document, pdf_index, int(page_width)),
                     int(page_width),
                     int(page_height),
                 )
@@ -456,6 +525,24 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
         }
         for rect in image_rects
     ]
+    # A drawing is a weaker signal than an image: it may be shading or a border
+    # around content that is already proposed. It is only kept when it is not
+    # the same area as an image and does not sit inside a detected table, which
+    # is where cell shading and rules usually appear.
+    text_regions = [
+        proposal
+        for proposal in proposals
+        if proposal["kind"] in {"table", "equation"}
+    ]
+    for rect in _drawing_figures(drawing_rects, image_rects, text_regions):
+        figures.append(
+            {
+                "rect": rect,
+                "caption": "",
+                "reason": "pdf_drawing_region",
+                "block_ids": [],
+            }
+        )
     for rect, caption in _figure_rects(blocks, int(page_width), int(page_height)):
         caption_text = caption["text"].strip()[:500]
         matched = next(

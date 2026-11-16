@@ -39,7 +39,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.pages` | Import validation, per-file/per-page import execution with progress and cancellation, image processing, display copies, thumbnails, PDF page records, rotation, ordering, stored-edit rendering, reference-counted deletion |
 | `services.imports` | Import job lifecycle: bounded worker, persisted progress, cooperative cancellation, interrupted-job recovery, localized failure codes |
 | `services.image_edits` | Canonical edit validation, geometry pipeline (crop/perspective/deskew), filter pipeline (grayscale, contrast, brightness, sharpness, denoise, threshold, shadow/background cleanup) and skew estimation |
-| `services.pdf` | PDF open/validation, page rendering, embedded text extraction, embedded raster-image boxes, axis-aligned table rule extraction, capability detection |
+| `services.pdf` | PDF open/validation, page rendering, embedded text extraction, embedded raster-image boxes, vector-artwork boxes, axis-aligned table rule extraction, capability detection |
 | `services.layout` | Shared deterministic block classification (heading, list, caption, equation, table-like grid, running header/footer, page number) for OCR and embedded PDF text |
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps, coalesced revision snapshots, manual checkpoints and restore |
 | `services.document_export` | Deterministic Tiptap-to-Markdown/TXT/DOCX/PDF rendering, escaping, OMML equations, figure embedding, native footnotes, PDF layout and download names |
@@ -48,7 +48,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.local_backups` | Local backup vault: verified copy creation, retention pruning, safe name resolution and opt-in automatic copies |
 | `services.page_restore` | Selective restore: staged archive inspection, short-lived selection tokens, additive page/asset/OCR/element copying, page-image and region-crop repair and reversible document-version restore |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
-| `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout and, on PDF pages, embedded raster-image placement |
+| `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout and, on PDF pages, embedded raster-image placement and vector-drawing geometry |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness |
 | `services.table_structure` | Reviewable table proposals: word-box row clustering and whitespace column bands, plus exact merged-cell grids from a PDF's drawn rules; cell text/confidence/flags/alignment, page-level grouping of vertically contiguous row blocks, vector/OCR de-duplication, source pixel box, size caps and typed refusal errors |
@@ -507,24 +507,39 @@ src/
 ### Region suggestions
 
 - Suggestions reuse the OCR text layout and, on PDF pages, the placement of
-  embedded raster images instead of a vision model, so they stay free, local and
-  explainable. Four signals are recognised: `table_text_grid` (merged OCR `table`
-  blocks), `equation_text` (OCR `equation` blocks), `figure_caption_gap` (the empty
-  band above a `caption` block whose text starts with
-  figure/diagram/chart/plate/photo/image/illustration) and `pdf_image_region` (a
-  raster image drawn on the PDF page).
+  embedded raster images and the geometry of vector drawings instead of a vision
+  model, so they stay free, local and explainable. Five signals are recognised:
+  `table_text_grid` (merged OCR `table` blocks), `equation_text` (OCR `equation`
+  blocks), `figure_caption_gap` (the empty band above a `caption` block whose text
+  starts with figure/diagram/chart/plate/photo/image/illustration),
+  `pdf_image_region` (a raster image drawn on the PDF page) and
+  `pdf_drawing_region` (vector artwork drawn on the page).
 - `services.pdf.image_regions` reads `Page.get_image_info()`, applies the page's
   own `/Rotate` matrix and converts PDF points to the stored page's pixel width.
   Boundaries are converted to the rendered page width, so a figure box stays in the
   same coordinate system as the displayed image and the OCR blocks. Only geometry
   is read; the pixels are not classified.
+- `services.pdf.drawing_regions` reads `Page.get_drawings()` instead. A path is
+  artwork when it is filled and thicker than a rule, or when it contains a curve or
+  a diagonal; axis-aligned thin or unfilled paths are the same rules
+  `table_lines` reads, so a drawn table grid, an underline or a page frame never
+  becomes a figure. Paths are grouped when their boxes are within 12 px of each
+  other, in rendered-page pixels. A group must contain at least two parts, or a
+  single curved or diagonal one, because one filled rectangle is far more often
+  shading than an illustration.
 - An image box is proposed as a figure only when it is at least 5 % of the page
-  wide and 3 % tall. A raster covering at least 80 % of both dimensions is treated
-  as a scanned page background rather than artwork, and a caption band that covers
-  most of the same area is merged into the image proposal so the user sees one
-  precise rectangle with the caption text. Image boxes are read from the immutable
-  PDF only when the page has no rotation or geometry edit; a stale OCR run withholds
-  every suggestion, so a box is never drawn against a different render.
+  wide and 3 % tall. A drawing needs 8 % width and 4 % height, since it has no
+  caption to prove it is artwork. A region covering at least 80 % of both
+  dimensions is treated as a scanned page background rather than artwork, and a
+  caption band that covers most of the same area is merged into the proposal so the
+  user sees one precise rectangle with the caption text. Image and drawing boxes are
+  read from the immutable PDF only when the page has no rotation or geometry edit;
+  a stale OCR run withholds every suggestion, so a box is never drawn against a
+  different render.
+- A drawing that describes the same area as an embedded image, or that lies mostly
+  inside a detected table or equation, is dropped: those regions already have a
+  better proposal, and a shaded cell or a frame around an image is not a second
+  figure.
 - Clustering merges vertically adjacent blocks of the same kind only when their
   columns overlap and the gap is small relative to their height, so a table split
   into several blocks becomes one suggestion. Rectangles are padded by 0.8 % of

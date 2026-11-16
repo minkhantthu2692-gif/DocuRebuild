@@ -225,6 +225,80 @@ def test_table_lines_returns_nothing_for_an_unreadable_page() -> None:
     assert pdf.table_lines(FakeDocument(), 0, 1200) == ([], [])
 
 
+def test_drawing_regions_find_vector_artwork_but_not_rules() -> None:
+    from app.services import pdf
+
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=400, height=400)
+        # A chart without a frame: axis rules, two filled bars and a trend line.
+        page.draw_line((50, 50), (50, 250), color=(0, 0, 0), width=0.8)
+        page.draw_line((50, 250), (350, 250), color=(0, 0, 0), width=0.8)
+        page.draw_rect(
+            pymupdf.Rect(80, 200, 120, 250), color=None, fill=(0.2, 0.4, 0.8)
+        )
+        page.draw_rect(
+            pymupdf.Rect(140, 150, 180, 250), color=None, fill=(0.2, 0.4, 0.8)
+        )
+        page.draw_line((80, 210), (180, 160), color=(0.8, 0.1, 0.1), width=1.2)
+        # A drawn table is rules only, so it is not artwork.
+        for y in (300, 330, 360):
+            page.draw_line((50, y), (250, y), color=(0, 0, 0), width=0.8)
+        for x in (50, 150, 250):
+            page.draw_line((x, 300), (x, 360), color=(0, 0, 0), width=0.8)
+        # A lone filled rectangle is shading, not a drawing.
+        page.draw_rect(
+            pymupdf.Rect(300, 300, 380, 310), color=None, fill=(0.9, 0.9, 0.9)
+        )
+        # An unfilled page frame is a border, not a drawing.
+        page.draw_rect(pymupdf.Rect(10, 10, 390, 390), color=(0, 0, 0), width=1.0)
+
+        # A 400 pt wide page rendered 800 px wide doubles every coordinate.
+        regions = pdf.drawing_regions(document, 0, 800)
+    finally:
+        document.close()
+
+    assert regions == [
+        {"x": 160.0, "y": 300.0, "width": 200.0, "height": 200.0}
+    ]
+
+
+def test_drawing_regions_join_parts_that_belong_to_one_drawing() -> None:
+    from app.services import pdf
+
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=400, height=400)
+        # Two shapes with a small gap are one drawing, not two suggestions.
+        page.draw_rect(
+            pymupdf.Rect(100, 100, 140, 140), color=None, fill=(0.2, 0.4, 0.8)
+        )
+        page.draw_rect(
+            pymupdf.Rect(146, 100, 186, 140), color=None, fill=(0.2, 0.4, 0.8)
+        )
+        # A third shape far away stays its own region, but a lone filled
+        # rectangle is rejected, so only the joined pair is returned.
+        page.draw_rect(
+            pymupdf.Rect(300, 300, 340, 340), color=None, fill=(0.2, 0.4, 0.8)
+        )
+
+        regions = pdf.drawing_regions(document, 0, 400)
+    finally:
+        document.close()
+
+    assert regions == [{"x": 100.0, "y": 100.0, "width": 86.0, "height": 40.0}]
+
+
+def test_drawing_regions_returns_nothing_for_an_unreadable_page() -> None:
+    from app.services import pdf
+
+    class FakeDocument:
+        def load_page(self, index: int):
+            raise RuntimeError("cannot read")
+
+    assert pdf.drawing_regions(FakeDocument(), 0, 1200) == []
+
+
 def test_image_only_pdf_page_has_no_embedded_text_run(
     client: TestClient, project: dict
 ) -> None:

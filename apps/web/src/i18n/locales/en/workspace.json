@@ -542,7 +542,7 @@
       "use": "Use {{kind}} suggestion",
       "title_one": "Suggested regions ({{count}})",
       "title_other": "Suggested regions ({{count}})",
-      "note": "Suggestions come from the latest local OCR text layout and from images embedded in the PDF. Review each region before saving.",
+      "note": "Suggestions come from the latest local OCR text layout, from images embedded in the PDF and from vector drawings on the page. Review each region before saving.",
       "loading": "Reading the latest local layout…",
       "error": "Region suggestions could not be loaded.",
       "empty": "No regions were suggested for this page.",

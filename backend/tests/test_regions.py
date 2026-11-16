@@ -73,6 +73,48 @@ def _figure_pdf(
         document.close()
 
 
+def _vector_figure_pdf(*, caption: str | None = None, image: bool = False) -> bytes:
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=600, height=800)
+        black = (0, 0, 0)
+        page.insert_text((72, 80), "Body text above the chart.", fontsize=12)
+        if image:
+            page.insert_image(
+                pymupdf.Rect(100, 360, 300, 500), stream=make_png(200, 140)
+            )
+            # A shaded backing behind the image must not become a second figure.
+            page.draw_rect(
+                pymupdf.Rect(100, 360, 300, 500), color=None, fill=(0.9, 0.95, 1.0)
+            )
+            page.draw_rect(
+                pymupdf.Rect(104, 364, 296, 496), color=None, fill=(0.85, 0.9, 1.0)
+            )
+        else:
+            # A chart without a frame: axis rules, filled bars and a trend line.
+            page.draw_line((80, 500), (520, 500), color=black, width=0.8)
+            page.draw_line((80, 300), (80, 500), color=black, width=0.8)
+            page.draw_rect(
+                pymupdf.Rect(120, 420, 180, 500), color=None, fill=(0.2, 0.4, 0.8)
+            )
+            page.draw_rect(
+                pymupdf.Rect(240, 360, 300, 500), color=None, fill=(0.2, 0.4, 0.8)
+            )
+            page.draw_line(
+                (120, 440), (300, 380), color=(0.8, 0.1, 0.1), width=1.2
+            )
+        # A drawn table further down is rules only, so it is never a figure.
+        for y in (620, 660, 700):
+            page.draw_line((80, y), (400, y), color=black, width=0.8)
+        for x in (80, 240, 400):
+            page.draw_line((x, 620), (x, 700), color=black, width=0.8)
+        if caption:
+            page.insert_text((120, 540), caption, fontsize=12)
+        return document.tobytes()
+    finally:
+        document.close()
+
+
 def _upload_pdf(
     client: TestClient, project_id: str, name: str, data: bytes
 ) -> dict:
@@ -365,3 +407,75 @@ def test_pdf_image_regions_are_not_proposed_after_a_page_change(
     # the page is processed again rather than displayed in the wrong place.
     assert body["status"] == "ocr_stale"
     assert figures == []
+
+
+def test_pdf_drawing_region_proposes_vector_artwork(
+    client: TestClient, project: dict
+) -> None:
+    page = _upload_pdf(client, project["id"], "chart.pdf", _vector_figure_pdf())
+    body, figures = _figure_proposals(client, project["id"], page["id"])
+
+    assert body["status"] == "ready"
+    # The chart is the only proposal: the drawn table below is rules only.
+    assert len(body["proposals"]) == 1
+    figure = figures[0]
+    assert figure["reason"] == "pdf_drawing_region"
+    assert figure["confidence"] == "medium"
+    assert figure["caption"] == ""
+    scale = body["page_width"] / 600
+    assert abs(figure["x"] - round(120 * scale)) <= 20
+    assert abs(figure["y"] - round(360 * scale)) <= 20
+    assert abs(figure["width"] - round(180 * scale)) <= 40
+    assert abs(figure["height"] - round(140 * scale)) <= 40
+
+
+def test_pdf_drawing_region_attaches_a_matching_caption(
+    client: TestClient, project: dict
+) -> None:
+    caption = "Figure 3. Measured response over time"
+    page = _upload_pdf(
+        client,
+        project["id"],
+        "captioned-chart.pdf",
+        _vector_figure_pdf(caption=caption),
+    )
+    body, figures = _figure_proposals(client, project["id"], page["id"])
+
+    assert len(figures) == 1
+    # The drawing box wins over the estimated caption band, and the caption is
+    # moved onto it instead of being offered as a second region.
+    assert figures[0]["reason"] == "pdf_drawing_region"
+    assert figures[0]["caption"] == caption
+    assert len(figures[0]["block_ids"]) == 1
+    assert all(
+        proposal["reason"] != "figure_caption_gap" for proposal in body["proposals"]
+    )
+
+
+def test_pdf_shaded_backing_behind_an_image_is_not_a_second_figure(
+    client: TestClient, project: dict
+) -> None:
+    page = _upload_pdf(
+        client, project["id"], "shaded-image.pdf", _vector_figure_pdf(image=True)
+    )
+    _, figures = _figure_proposals(client, project["id"], page["id"])
+
+    assert len(figures) == 1
+    assert figures[0]["reason"] == "pdf_image_region"
+
+
+def test_drawing_figures_skip_areas_other_signals_already_cover() -> None:
+    from app.services import regions
+
+    drawing = {"x": 100.0, "y": 100.0, "width": 200.0, "height": 100.0}
+    image = {"x": 100.0, "y": 100.0, "width": 200.0, "height": 100.0}
+    table = {"x": 50.0, "y": 50.0, "width": 400.0, "height": 300.0}
+    aside = {"x": 500.0, "y": 500.0, "width": 100.0, "height": 60.0}
+    beside = {"x": 320.0, "y": 100.0, "width": 100.0, "height": 100.0}
+
+    # A drawing on top of an image or inside a table is already covered.
+    assert regions._drawing_figures([drawing], [image], []) == []
+    assert regions._drawing_figures([drawing], [], [table]) == []
+    # A drawing next to another region is its own suggestion.
+    assert regions._drawing_figures([aside], [image], [table]) == [aside]
+    assert regions._drawing_figures([beside], [image], []) == [beside]

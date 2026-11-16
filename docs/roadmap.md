@@ -213,18 +213,19 @@ described as universally free or universally accurate.
   suggested above figure-like captions. On imported PDF pages, raster images
   embedded in the page are proposed as uncaptioned figures from their actual
   placement; full-page backgrounds and tiny images are skipped, and a caption
-  covering the same artwork is merged into the image proposal. Suggestions are
-  read-only, never saved automatically, and prefill the normal extraction dialog.
-  Expected states such as no OCR run, stale, failed or missing geometry are
-  reported in the response.
+  covering the same artwork is merged into the image proposal. Vector artwork the
+  PDF draws itself (charts, diagrams) is proposed the same way: a filled shape or a
+  curve is artwork, while the axis-aligned rules of a table, an underline or a page
+  frame are not. Suggestions are read-only, never saved automatically, and prefill
+  the normal extraction dialog. Expected states such as no OCR run, stale, failed or
+  missing geometry are reported in the response.
 - `element_extraction` and `region_proposals` capability flags, plus English and
   Burmese interface strings.
 
 **Remaining**
 
-- Figures that exist only as vector drawings, and artwork in photographed pages
-  without a caption or an embedded raster image; these currently require manual
-  selection.
+- Artwork in photographed pages, and drawings the PDF stores as an opaque page or
+  form rather than readable paths; these currently require manual selection.
 - Structured table cells and equation transcription, which belong to Phase 7.
 
 ## Phase 6 — AI integration and free usage first (in progress)

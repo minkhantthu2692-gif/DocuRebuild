@@ -202,6 +202,142 @@ def _module_rect(rect, matrix):
     return pymupdf.Rect(rect) * matrix
 
 
+# A vector drawing is made of one or more paths. An axis-aligned thin or
+# unfilled path is a rule, not artwork, so table grids, underlines and page
+# frames are left to ``table_lines``. Parts closer than the join gap belong to
+# the same drawing.
+DRAWING_MIN_SIDE = 1.0
+DRAWING_RULE_THICKNESS = 2.0
+DRAWING_JOIN_GAP = 12.0
+# A page with more artwork paths than this is either a whole-page vector
+# illustration or a pathological export. Bounding the work keeps the suggestion
+# request predictable; such a page can still be cropped by hand.
+MAX_DRAWING_PATHS = 1500
+
+
+def _artwork_path(path, width: float, height: float) -> bool:
+    """Return whether one drawing path carries artwork rather than a rule."""
+    if path.get("fill") is not None and min(width, height) > DRAWING_RULE_THICKNESS:
+        return True
+    for item in path.get("items", ()):
+        if not item:
+            continue
+        kind = item[0]
+        if kind in {"c", "qu"}:
+            return True
+        if kind == "l" and len(item) >= 3:
+            start, end = item[1], item[2]
+            if abs(start.x - end.x) > 1.0 and abs(start.y - end.y) > 1.0:
+                return True
+    return False
+
+
+def drawing_regions(document, index: int, target_width: int) -> list[dict[str, float]]:
+    """Return boxes of vector artwork drawn on a PDF page.
+
+    A figure that exists only as vector paths has no raster image and no caption
+    to anchor on. Curves, diagonals and filled shapes are the local evidence
+    that a path is artwork; axis-aligned thin or unfilled paths are rules and are
+    ignored, so a drawn table grid or a page frame never becomes a figure box.
+    Nearby parts are grouped, and a group is only kept when it has several parts
+    or a curved or diagonal one, because a single filled rectangle is far more
+    often shading than an illustration.
+
+    Coordinates are rendered-page pixels at the stored page width. Only geometry
+    is returned: the caller decides which boxes are worth proposing. A page that
+    cannot be read yields no regions instead of failing the request.
+    """
+    try:
+        page = document.load_page(index)
+        if page.rect.width <= 0:
+            return []
+        scale = target_width / float(page.rect.width)
+        matrix = page.rotation_matrix
+        drawings = page.get_drawings()
+    except Exception:
+        return []
+
+    pieces: list[tuple[float, float, float, float, bool]] = []
+    for path in drawings:
+        rect = path.get("rect")
+        if rect is None:
+            continue
+        rect = _module_rect(rect, matrix)
+        width = rect.width * scale
+        height = rect.height * scale
+        if width < DRAWING_MIN_SIDE or height < DRAWING_MIN_SIDE:
+            continue
+        if not _artwork_path(path, width, height):
+            continue
+        complex_path = any(
+            item and item[0] in {"c", "qu"} for item in path.get("items", ())
+        )
+        pieces.append(
+            (rect.x0 * scale, rect.y0 * scale, rect.x1 * scale, rect.y1 * scale, complex_path)
+        )
+        if len(pieces) > MAX_DRAWING_PATHS:
+            return []
+
+    return _cluster_pieces(pieces)
+
+
+def _cluster_pieces(
+    pieces: list[tuple[float, float, float, float, bool]],
+) -> list[dict[str, float]]:
+    """Group artwork paths that touch, then keep groups that look like a drawing."""
+    parents = list(range(len(pieces)))
+
+    def find(index: int) -> int:
+        while parents[index] != index:
+            parents[index] = parents[parents[index]]
+            index = parents[index]
+        return index
+
+    def union(first: int, second: int) -> None:
+        first_root = find(first)
+        second_root = find(second)
+        if first_root != second_root:
+            parents[second_root] = first_root
+
+    def gap(start: float, end: float, other_start: float, other_end: float) -> float:
+        return max(0.0, max(start, other_start) - min(end, other_end))
+
+    # Sorting by the left edge lets the sweep stop as soon as a later piece is
+    # too far away, instead of comparing every pair on a drawing-heavy page.
+    order = sorted(range(len(pieces)), key=lambda index: pieces[index][0])
+    for position, first in enumerate(order):
+        left, top, right, bottom, _complex = pieces[first]
+        for second in order[position + 1 :]:
+            other_left, other_top, other_right, other_bottom, _other = pieces[second]
+            if other_left - right > DRAWING_JOIN_GAP:
+                break
+            if gap(top, bottom, other_top, other_bottom) > DRAWING_JOIN_GAP:
+                continue
+            union(first, second)
+
+    groups: dict[int, list[int]] = {}
+    for index in range(len(pieces)):
+        groups.setdefault(find(index), []).append(index)
+
+    regions: list[dict[str, float]] = []
+    for members in groups.values():
+        if len(members) < 2 and not pieces[members[0]][4]:
+            continue
+        left = min(pieces[index][0] for index in members)
+        top = min(pieces[index][1] for index in members)
+        right = max(pieces[index][2] for index in members)
+        bottom = max(pieces[index][3] for index in members)
+        regions.append(
+            {
+                "x": round(left, 2),
+                "y": round(top, 2),
+                "width": round(right - left, 2),
+                "height": round(bottom - top, 2),
+            }
+        )
+    return regions
+
+
 def extract_text(
     document, index: int, scale: float
 ) -> tuple[str, list[dict[str, Any]]]:
