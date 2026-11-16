@@ -18,11 +18,11 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { Spinner } from "@/components/ui/spinner";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
+import { useTableDraft } from "@/hooks/use-table-draft";
 import { usePageTableProposals } from "@/hooks/use-table-proposal";
 import { api } from "@/lib/api";
 import {
   needsTableAcknowledgement,
-  proposalRows,
   tableCandidatePreview,
 } from "@/lib/table-candidates";
 import { TableReview } from "./table-review";
@@ -61,6 +61,10 @@ export function PageTablesDialog({
   const [includeNote, setIncludeNote] = useState(true);
   const [acknowledged, setAcknowledged] = useState(false);
 
+  const candidate = selected !== null ? (candidates[selected] ?? null) : null;
+  const draft = useTableDraft(candidate, candidate?.block_ids.join("|") ?? "");
+  const resetDraft = draft.reset;
+
   useEffect(() => {
     if (!open) {
       setSelected(null);
@@ -69,14 +73,14 @@ export function PageTablesDialog({
     setHeaderRow(false);
     setIncludeNote(true);
     setAcknowledged(false);
-  }, [open]);
+    resetDraft();
+  }, [open, resetDraft]);
 
   useEffect(() => {
     setHeaderRow(false);
     setAcknowledged(false);
   }, [selected]);
 
-  const candidate = selected !== null ? (candidates[selected] ?? null) : null;
   const needsReview = candidate ? needsTableAcknowledgement(candidate) : false;
   const canInsert = Boolean(candidate) && (!needsReview || acknowledged);
   const sourceImageUrl = page
@@ -90,7 +94,7 @@ export function PageTablesDialog({
   const handleInsert = () => {
     if (!candidate || !canInsert) return;
     insertTable({
-      rows: proposalRows(candidate),
+      rows: draft.rows,
       headerRow,
       note: includeNote
         ? t("ocr.table.sourceNotePage", { page: page?.page_number ?? "—" })
@@ -136,6 +140,7 @@ export function PageTablesDialog({
         ) : candidate ? (
           <TableReview
             proposal={candidate}
+            draft={draft}
             sourceImageUrl={sourceImageUrl}
             pageWidth={proposalsQuery.data?.page_width}
             pageHeight={proposalsQuery.data?.page_height}

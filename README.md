@@ -507,6 +507,10 @@ Rules that keep a proposal honest:
   words came from; it can be hidden. Insertion is a separate confirmation, and an
   acknowledgement checkbox is required when any cell is uncertain or has no
   confidence. The first row can be marked as a header; it is off by default.
+- Cells can be corrected before insertion. "Edit cells" turns the review grid
+  into fields, edits are counted and highlighted, and "Reset edits" restores the
+  extracted text. Changes are inserted only when the table is confirmed, and
+  opening another proposal starts a clean draft.
 - Limits are 60 rows, 20 columns and 600 cells per candidate, and at most 20
   candidates per page. A larger or unusable grid is refused with a typed error
   instead of being truncated.

@@ -347,6 +347,12 @@ the user must review every region before extracting it.
   the proposal's pixel box and the page dimensions, and the dialog crops the page
   image to that box next to the grid. The crop can be hidden, and it is read-only:
   comparing or hiding it never changes the proposal or the document.
+- Manual cell correction before insertion. The review grid can switch into editing
+  mode, where every cell becomes a field with its own accessible label. Edited
+  cells are highlighted and counted, and the edits can be reset. The inserted table
+  uses the corrected text; the proposal and its confidence flags stay unchanged,
+  so a manual fix is never presented as extracted text. Edits are discarded when
+  the dialog is reopened or another proposal is opened.
 - Tables are ordinary Tiptap nodes, so saving, version history and project backups
   need no special handling. Column resizing is disabled deliberately because pixel
   widths are screen-dependent and cannot survive Markdown.

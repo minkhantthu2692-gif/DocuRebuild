@@ -369,6 +369,14 @@ src/
   builds a normal Tiptap table. The first row becomes a header only when the user
   selects it, and an acknowledgement checkbox is required when any cell is
   uncertain or has no confidence. The proposal is never saved on its own.
+- `useTableDraft` holds manual cell corrections beside the proposal: it keeps a
+  per-cell edit map for one proposal key, derives the insertable matrix from the
+  proposal plus those edits, and recomputes the changed count against the
+  proposal so a reverted cell stops counting. Insert reads the draft's rows, the
+  proposal cells are untouched (the badges still describe what the engine read),
+  and a different block or candidate key starts with no edits. The dialog resets
+  the draft when it opens or switches proposal, so a discarded draft cannot leak
+  into the next table.
 - Selected blocks are appended to the Tiptap document through the workspace
   actions context. The insertion is a normal document edit and is autosaved; an
   optional localized source note records the page and verification status.

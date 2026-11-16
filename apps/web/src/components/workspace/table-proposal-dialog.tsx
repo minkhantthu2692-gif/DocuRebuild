@@ -17,9 +17,10 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { Spinner } from "@/components/ui/spinner";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
+import { useTableDraft } from "@/hooks/use-table-draft";
 import { useTableProposal } from "@/hooks/use-table-proposal";
 import { api } from "@/lib/api";
-import { needsTableAcknowledgement, proposalRows } from "@/lib/table-candidates";
+import { needsTableAcknowledgement } from "@/lib/table-candidates";
 import { TableReview } from "./table-review";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
@@ -56,6 +57,8 @@ export function TableProposalDialog({
     open,
   );
   const proposal = proposalQuery.data ?? null;
+  const draft = useTableDraft(proposal, block ? `block:${block.id}` : "");
+  const resetDraft = draft.reset;
 
   const [headerRow, setHeaderRow] = useState(false);
   const [includeNote, setIncludeNote] = useState(true);
@@ -66,7 +69,8 @@ export function TableProposalDialog({
     setHeaderRow(false);
     setIncludeNote(true);
     setAcknowledged(false);
-  }, [open, block?.id]);
+    resetDraft();
+  }, [open, block?.id, resetDraft]);
 
   const needsReview = proposal ? needsTableAcknowledgement(proposal) : false;
   const canInsert = Boolean(proposal) && (!needsReview || acknowledged);
@@ -81,7 +85,7 @@ export function TableProposalDialog({
   const handleInsert = () => {
     if (!proposal || !canInsert) return;
     insertTable({
-      rows: proposalRows(proposal),
+      rows: draft.rows,
       headerRow,
       note: includeNote
         ? t("ocr.table.sourceNote", { page: page?.page_number ?? "—" })
@@ -127,6 +131,7 @@ export function TableProposalDialog({
         ) : proposal ? (
           <TableReview
             proposal={proposal}
+            draft={draft}
             sourceImageUrl={sourceImageUrl}
             pageWidth={proposal.page_width}
             pageHeight={proposal.page_height}

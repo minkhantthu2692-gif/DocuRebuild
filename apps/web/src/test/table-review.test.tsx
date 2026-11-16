@@ -1,9 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import type { TableProposalCandidate } from "@docurebuild/shared-types";
 
 import { TableReview } from "@/components/workspace/table-review";
+import { useTableDraft } from "@/hooks/use-table-draft";
 import { i18n, initI18n } from "@/i18n";
 
 beforeAll(async () => {
@@ -30,19 +32,40 @@ function proposal(): TableProposalCandidate {
   };
 }
 
-function renderReview(sourceImageUrl: string | null) {
-  return render(
-    <TableReview
-      proposal={proposal()}
-      sourceImageUrl={sourceImageUrl}
-      pageWidth={1200}
-      pageHeight={800}
-      headerRow={false}
-      onHeaderRowChange={vi.fn()}
-      acknowledged
-      onAcknowledgedChange={vi.fn()}
-    />,
+/**
+ * TableReview expects the draft its dialog created, so the test renders the
+ * same composition and exposes the rows that would be inserted.
+ */
+function ReviewHarness({
+  sourceImageUrl,
+  data = proposal(),
+}: {
+  sourceImageUrl: string | null;
+  data?: TableProposalCandidate;
+}) {
+  const [headerRow, setHeaderRow] = useState(false);
+  const [acknowledged, setAcknowledged] = useState(true);
+  const draft = useTableDraft(data, "test");
+  return (
+    <>
+      <TableReview
+        proposal={data}
+        draft={draft}
+        sourceImageUrl={sourceImageUrl}
+        pageWidth={1200}
+        pageHeight={800}
+        headerRow={headerRow}
+        onHeaderRowChange={setHeaderRow}
+        acknowledged={acknowledged}
+        onAcknowledgedChange={setAcknowledged}
+      />
+      <output data-testid="rows">{JSON.stringify(draft.rows)}</output>
+    </>
   );
+}
+
+function renderReview(sourceImageUrl: string | null = null, data?: TableProposalCandidate) {
+  return render(<ReviewHarness sourceImageUrl={sourceImageUrl} data={data} />);
 }
 
 describe("TableReview source comparison", () => {
@@ -76,7 +99,7 @@ describe("TableReview source comparison", () => {
   });
 
   it("hides the toggle when no page image is available", () => {
-    renderReview(null);
+    renderReview();
 
     expect(
       screen.queryByRole("button", { name: "Compare with source" }),
@@ -84,5 +107,107 @@ describe("TableReview source comparison", () => {
     expect(
       screen.queryByRole("button", { name: "Hide source" }),
     ).toBeNull();
+  });
+});
+
+describe("TableReview cell editing", () => {
+  it("turns cells into labelled fields and applies edits to the inserted rows", () => {
+    renderReview();
+
+    expect(screen.queryByRole("textbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit cells" }));
+
+    const first = screen.getByRole("textbox", { name: "Cell row 1, column 1" });
+    expect(first).toHaveValue("Name");
+
+    fireEvent.change(first, { target: { value: "Element" } });
+
+    expect(screen.getByTestId("rows").textContent).toContain('"Element"');
+    expect(screen.getByTestId("rows").textContent).not.toContain('"Name"');
+    expect(screen.getByText("1 cell(s) edited")).toBeInTheDocument();
+  });
+
+  it("shows an empty field for a coordinate the proposal does not include", () => {
+    const sparse = proposal();
+    sparse.cells = sparse.cells.filter(
+      (cell) => !(cell.row === 1 && cell.column === 1),
+    );
+    renderReview(null, sparse);
+    fireEvent.click(screen.getByRole("button", { name: "Edit cells" }));
+
+    // A missing coordinate stays empty; it is never folded into a neighbour.
+    expect(
+      screen.getByRole("textbox", { name: "Cell row 1, column 1" }),
+    ).toHaveValue("Name");
+    expect(
+      screen.getByRole("textbox", { name: "Cell row 2, column 2" }),
+    ).toHaveValue("");
+  });
+
+  it("clears an edit when the text matches the proposal again", () => {
+    renderReview();
+    fireEvent.click(screen.getByRole("button", { name: "Edit cells" }));
+    const first = screen.getByRole("textbox", { name: "Cell row 1, column 1" });
+
+    fireEvent.change(first, { target: { value: "Element" } });
+    fireEvent.change(first, { target: { value: "Name" } });
+
+    expect(screen.queryByText("1 cell(s) edited")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Reset edits" }),
+    ).toBeNull();
+  });
+
+  it("resets every edit from the toolbar", () => {
+    renderReview();
+    fireEvent.click(screen.getByRole("button", { name: "Edit cells" }));
+
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Cell row 1, column 1" }),
+      { target: { value: "Element" } },
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Cell row 2, column 2" }),
+      { target: { value: "4" } },
+    );
+    expect(screen.getByText("2 cell(s) edited")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset edits" }));
+
+    expect(screen.queryByText("2 cell(s) edited")).toBeNull();
+    expect(
+      screen.getByRole("textbox", { name: "Cell row 1, column 1" }),
+    ).toHaveValue("Name");
+    expect(
+      screen.getByRole("textbox", { name: "Cell row 2, column 2" }),
+    ).toHaveValue("2");
+  });
+
+  it("hides the fields but keeps edits when editing finishes", () => {
+    renderReview();
+    fireEvent.click(screen.getByRole("button", { name: "Edit cells" }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Cell row 1, column 1" }),
+      { target: { value: "Element" } },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Finish editing" }));
+
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.getByText("Element")).toBeInTheDocument();
+    expect(screen.getByText("1 cell(s) edited")).toBeInTheDocument();
+  });
+
+  it("keeps the proposal badges while a cell is edited", () => {
+    renderReview();
+    fireEvent.click(screen.getByRole("button", { name: "Edit cells" }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Cell row 1, column 1" }),
+      { target: { value: "Element" } },
+    );
+
+    // The badges still describe the extracted proposal, not the draft, so an
+    // edit cannot quietly look like text the engine produced.
+    expect(screen.getByText("2 rows × 2 columns")).toBeInTheDocument();
   });
 });

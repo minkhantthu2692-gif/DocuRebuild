@@ -1,4 +1,4 @@
-import { CircleAlert, ScanEye } from "lucide-react";
+import { CircleAlert, PencilLine, ScanEye, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -6,6 +6,7 @@ import type { TableProposalCell } from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import type { TableDraft } from "@/hooks/use-table-draft";
 import {
   needsTableAcknowledgement,
   sourceCropGeometry,
@@ -21,6 +22,8 @@ import { TableSourcePreview } from "./table-source-preview";
  */
 interface TableReviewProps {
   proposal: TableGridProposal;
+  /** Manual corrections that will be inserted instead of the raw proposal. */
+  draft: TableDraft;
   /** Page image the proposal was read from, when one is available. */
   sourceImageUrl?: string | null;
   pageWidth?: number | null;
@@ -33,6 +36,7 @@ interface TableReviewProps {
 
 export function TableReview({
   proposal,
+  draft,
   sourceImageUrl,
   pageWidth = null,
   pageHeight = null,
@@ -44,6 +48,7 @@ export function TableReview({
   const { t } = useTranslation("workspace");
   const needsReview = needsTableAcknowledgement(proposal);
   const [showSource, setShowSource] = useState(true);
+  const [editing, setEditing] = useState(false);
   const canShowSource =
     Boolean(sourceImageUrl) &&
     sourceCropGeometry(proposal.source, pageWidth, pageHeight) !== null;
@@ -79,17 +84,45 @@ export function TableReview({
             {t("ocr.table.empty", { count: proposal.empty_cells })}
           </Badge>
         ) : null}
-        {canShowSource ? (
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          {draft.changedCount > 0 ? (
+            <Badge variant="secondary">
+              {t("ocr.table.editedCells", { count: draft.changedCount })}
+            </Badge>
+          ) : null}
+          {draft.changedCount > 0 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              onClick={draft.reset}
+            >
+              <Undo2 />
+              {t("ocr.table.resetCells")}
+            </Button>
+          ) : null}
           <Button
-            variant="ghost"
+            variant={editing ? "secondary" : "ghost"}
             size="sm"
-            className="ml-auto gap-1.5"
-            onClick={() => setShowSource((current) => !current)}
+            className="gap-1.5"
+            aria-pressed={editing}
+            onClick={() => setEditing((current) => !current)}
           >
-            <ScanEye />
-            {showSource ? t("ocr.table.hideSource") : t("ocr.table.compareSource")}
+            <PencilLine />
+            {editing ? t("ocr.table.finishEditing") : t("ocr.table.editCells")}
           </Button>
-        ) : null}
+          {canShowSource ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setShowSource((current) => !current)}
+            >
+              <ScanEye />
+              {showSource ? t("ocr.table.hideSource") : t("ocr.table.compareSource")}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {proposal.warnings.includes("no_confidence") ? (
@@ -107,6 +140,12 @@ export function TableReview({
             aria-hidden="true"
           />
           <span>{t("ocr.table.lowConfidence")}</span>
+        </p>
+      ) : null}
+
+      {editing ? (
+        <p className="text-2xs leading-relaxed text-muted-foreground">
+          {t("ocr.table.editHint")}
         </p>
       ) : null}
 
@@ -133,23 +172,45 @@ export function TableReview({
               {matrix.map((row, rowIndex) => (
                 <tr key={rowIndex}>
                   {row.map((cell, columnIndex) => {
+                    const coordinate = `${rowIndex}:${columnIndex}`;
                     const isHeader = headerRow && rowIndex === 0;
+                    const isEdited = draft.edited.has(coordinate);
+                    const value = draft.rows[rowIndex]?.[columnIndex] ?? "";
                     const confidence =
                       cell?.confidence === null || cell?.confidence === undefined
                         ? null
                         : Math.round(cell.confidence);
-                    const title = cell?.uncertain
-                      ? t("ocr.table.uncertainCell")
-                      : confidence !== null
-                        ? t("ocr.table.confidence", { value: confidence })
-                        : undefined;
+                    const title = isEdited
+                      ? t("ocr.table.editedCell")
+                      : cell?.uncertain
+                        ? t("ocr.table.uncertainCell")
+                        : confidence !== null
+                          ? t("ocr.table.confidence", { value: confidence })
+                          : undefined;
                     const className = cn(
                       "min-w-20 border border-border/60 px-2 py-1.5 align-top font-document leading-relaxed",
                       isHeader && "bg-muted/40 font-semibold",
-                      cell?.uncertain && "bg-warning/10",
-                      cell?.empty && "bg-muted/20",
+                      cell?.uncertain && !isEdited && "bg-warning/10",
+                      cell?.empty && !value && "bg-muted/20",
+                      isEdited && "bg-primary/5 ring-1 ring-inset ring-primary/30",
                     );
-                    const content = (
+                    const content = editing ? (
+                      <textarea
+                        value={value}
+                        rows={Math.min(Math.max(value.split("\n").length, 1), 6)}
+                        aria-label={t("ocr.table.cellLabel", {
+                          row: rowIndex + 1,
+                          column: columnIndex + 1,
+                        })}
+                        onChange={(event) =>
+                          draft.setCell(rowIndex, columnIndex, event.target.value)
+                        }
+                        className={cn(
+                          "block w-full resize-y bg-transparent p-0 text-xs leading-relaxed outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                          isHeader && "font-semibold",
+                        )}
+                      />
+                    ) : (
                       <span className="flex items-start gap-1">
                         {cell?.uncertain ? (
                           <CircleAlert
@@ -157,9 +218,9 @@ export function TableReview({
                             aria-hidden="true"
                           />
                         ) : null}
-                        {cell?.text ? (
+                        {value ? (
                           <span className="whitespace-pre-wrap break-words">
-                            {cell.text}
+                            {value}
                           </span>
                         ) : (
                           <span className="sr-only">{t("ocr.table.emptyCell")}</span>
