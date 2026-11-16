@@ -12,10 +12,10 @@ presented in the UI until it actually works.
 | 1. Local storage and project management | **Complete** | App/project DBs, folders, manifest, CRUD, trash |
 | 2. Main UI and workspace | **Complete** | Header navigation, dashboard, two-panel workspace, settings, i18n |
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
-| 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
+| 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word/PDF export; automatic table/equation extraction pending |
+| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word/PDF export; vision tables, merged-cell detection and automatic equation extraction pending |
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, footnotes, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
@@ -148,6 +148,11 @@ image processing uses Pillow with no OpenCV dependency.
   successful, non-stale run, a per-kind legend with counts, and explicit
   loading, empty, running, stale and failure states. No box is drawn from a stale
   or incomplete result.
+- Reviewable table proposals from stored OCR word boxes: a block labelled as a
+  table is clustered into rows and whitespace column bands, and the resulting cells
+  carry their OCR text, confidence and uncertainty flags. The proposal is refused
+  for stale or hand-corrected blocks, capped at 60 rows / 20 columns / 600 cells,
+  and never inserted without explicit review.
 - Local accuracy benchmark (`python -m app.ocr_benchmark`): CER and WER against
   checked reference transcripts, either by running the local Tesseract adapter on
   a page image or by scoring a stored transcript. Results are grouped by category
@@ -163,8 +168,9 @@ image processing uses Pillow with no OpenCV dependency.
 - Figure (image region) detection inside the OCR layout. The classifier never
   guesses a figure; Phase 5 approximates the band above a figure-like caption, but
   this phase does not mark figures itself.
-- Real table structure (rows, cells, merged spans) and equation transcription.
-  A table label only marks a text grid; it does not build a table.
+- Merged spans, nested tables and cross-block table merging. A proposal covers one
+  labelled block only, so a PDF whose embedded text is split into one block per row
+  is not merged into a table yet. Equation transcription is still pending.
 - OCR accuracy benchmarks (CER/WER) for English, Burmese and mixed pages using
   fixtures from real documents. The local harness exists and is tested, but no
   fixtures are shipped and no accuracy figures are claimed yet.
@@ -324,6 +330,12 @@ the user must review every region before extracting it.
   merge produces a single cell with stored `colspan`/`rowspan` without dropping the
   absorbed text; split restores the cells when the cursor is inside a merged cell.
   Both actions stay disabled outside a suitable table selection.
+- Reviewable automatic table proposals from OCR word boxes. The OCR dialog can turn
+  a block labelled as a table into a cell grid with per-cell text, confidence and
+  uncertainty flags, then insert it as a normal editable table only after the user
+  confirms it (and acknowledges any uncertain or unscored cell). Nothing is
+  generated for paragraphs, corrected blocks or stale runs, and the grid is capped
+  at 60 rows / 20 columns / 600 cells.
 - Tables are ordinary Tiptap nodes, so saving, version history and project backups
   need no special handling. Column resizing is disabled deliberately because pixel
   widths are screen-dependent and cannot survive Markdown.
@@ -371,13 +383,16 @@ the user must review every region before extracting it.
 
 - Per-cell alignment (beyond paragraph alignment) and a source-to-result comparison
   view.
-- Automatic table-structure extraction from OCR/vision (always as a reviewable
-  proposal, never inserted without approval).
+- Automatic table extraction beyond one labelled OCR block: vision-based tables,
+  cross-block merging and merged-cell detection, always as a reviewable proposal
+  that is never inserted without approval.
 - Inline images in running text and optional structured figure reconstruction with
   approval. Figure numbering and prose cross-references are delivered.
 - Automatic equation recognition from OCR/vision as a reviewable proposal. Word
   export now converts typed equations to native OMML.
-- Uncertain cells/symbols are marked for review, never invented.
+- Uncertain table cells are flagged in the proposal and must be acknowledged before
+  insertion, and an empty source cell is never filled in. Equation symbols still
+  have no automatic recognition, so they are never invented.
 
 ## Phase 8 — Document editor and export (complete)
 

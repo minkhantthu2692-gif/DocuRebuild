@@ -50,7 +50,8 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout |
 | `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
-| `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence, corrections, staleness |
+| `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness |
+| `services.table_structure` | Reviewable table proposals from stored OCR word boxes: row clustering, whitespace column bands, cell text/confidence/flags, size caps and typed refusal errors |
 | `app.ocr_benchmark` | Local CER/WER measurement against checked reference transcripts, by running the OCR adapter or scoring a stored transcript; validates fixtures and never uploads |
 | `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, vision region requests, listing and review decisions |
 | `services.ai_vision` | Page-image encoding, normalized-to-source rectangle mapping and filtering for optional vision region proposals |
@@ -78,7 +79,7 @@ Each project owns a portable folder and its own `project.db`:
 - `history_events` — append-only local activity log: event type, human summary, small JSON metadata payload (counts, formats, sizes, ids) and timestamp; read by the project activity dialog
 - `jobs` — background import jobs: status, progress, total/imported pages, current file, payload (file counts/names), error code/message and timestamps
 - `ocr_runs` — page extraction attempts: status, engine/version, languages, source asset, rotation, mean confidence, error, timestamps; embedded PDF text uses `engine = pdf-text` and a null confidence
-- `ocr_blocks` — reviewable text blocks with bbox, confidence, kind, line/word counts, correction and verification flags
+- `ocr_blocks` — reviewable text blocks with bbox, confidence, kind, line/word counts, correction and verification flags, plus a `words` JSON array holding each word's text, confidence, box and line index
 - `elements` — extracted regions: page, kind, immutable crop asset, source asset id, source-pixel rectangle, caption, manual/acquisition source, verification, extracted text with confidence/engine/language provenance, correction flag and timestamps
 - `ai_suggestions` — unverified AI proposals: page, OCR block, task (`ocr_cleanup`), original and proposed text, provider, model, base URL, status (`pending`/`accepted`/`rejected`) and timestamps
 - `schema_migrations` — per-project migration versions
@@ -209,6 +210,7 @@ GET    /api/projects/{id}/pages/{page_id}/ocr
 POST   /api/projects/{id}/pages/{page_id}/ocr
 GET    /api/projects/{id}/ocr/runs/{run_id}
 PATCH  /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}
+GET    /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}/table-proposal
 GET    /api/projects/{id}/pages/{page_id}/ai-suggestions
 POST   /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}/ai-suggestions
 PATCH  /api/projects/{id}/ai-suggestions/{suggestion_id}
@@ -335,6 +337,23 @@ src/
 - A run becomes stale when the page image or its rotation changes after
   completion; the UI surfaces this instead of silently reusing stale text. This
   also applies to embedded PDF text after a rotation.
+- A `table` block can produce a reviewable cell-grid proposal through
+  `GET .../ocr/blocks/{block_id}/table-proposal`. `services.table_structure` reads
+  the stored `words` JSON, clusters words into rows by vertical overlap, derives
+  column bands from gaps no row occupies, filters unsupported bands and builds
+  cells with text, confidence and flags. Only a non-stale block whose kind is
+  `table` is accepted; a corrected block is refused because its words no longer
+  match the edited text. Caps are 60 rows, 20 columns and 600 cells, with typed
+  errors for unusable or oversized grids.
+- The proposal dialog shows the grid and its per-cell flags before anything is
+  inserted. Insertion uses the same workspace actions context as other document
+  edits and builds a normal Tiptap table. The first row becomes a header only when
+  the user selects it, and an acknowledgement checkbox is required when any cell
+  is uncertain or has no confidence. The proposal is never saved on its own.
+- PDF word boxes come from PyMuPDF `get_text("words")` and are attached to a block
+  by centre containment, so embedded-text blocks also carry geometry. PyMuPDF
+  often emits one block per row, however; those blocks stay separate paragraphs
+  and are not merged into a single table yet.
 - Selected blocks are appended to the Tiptap document through the workspace
   actions context. The insertion is a normal document edit and is autosaved; an
   optional localized source note records the page and verification status.
@@ -462,10 +481,11 @@ src/
   `tableHeader` and `tableCell`. Column resizing is disabled on purpose: stored
   pixel widths are bound to one screen size, and Markdown cannot represent them. A
   shared `doc-table` class provides styling through existing design tokens.
-- The insert dialog is the only way cell content enters a new table. It clamps the
+- The insert dialog is the only way an empty table enters the editor. It clamps the
   requested size with `lib/editor-table.ts` (`TABLE_MIN_SIZE = 1`,
-  `TABLE_MAX_SIZE = 10`) and inserts empty cells plus an optional header row. No
-  OCR, AI or vision text is written into a cell.
+  `TABLE_MAX_SIZE = 10`) and inserts empty cells plus an optional header row. The
+  separate OCR table proposal is the only path that fills cells from extraction,
+  and only after an explicit review and confirmation.
 - When the selection is inside a table, the menu enables `addRowBefore/After`,
   `addColumnBefore/After`, `deleteRow`, `deleteColumn`, `toggleHeaderRow` and
   `deleteTable`. Buttons use `editor.can()` so a command that the current schema
@@ -1166,9 +1186,10 @@ src/
   listed.
 - **Layout detection stays heuristic and deterministic** — no learned layout
   model is bundled, so labels can be wrong but never fabricated, require no model
-  download, and are cheap to explain and test. The trade-off is that figure
-  regions and table structures are not detected yet; those need a later
-  engine adapter rather than more regexes.
+  download, and are cheap to explain and test. Simple table structure can be
+  derived from stored word boxes, but only inside one labelled block and without
+  merged cells; figure regions still need a later engine adapter rather than more
+  regexes.
 - **AI starts local and proposal-only** — the AI workflows correct one OCR block
   or propose reviewable page regions through a user-configured server. Loopback is
   allowed by default and any other host needs stored remote consent, with
@@ -1177,5 +1198,5 @@ src/
   free tiers, batch review or automatic routing yet.
 - **Element extraction is manual first** — a crop is an exact pixel copy of the
   page, not inferred structure. This preserves accuracy and needs no model, at the
-  cost of no automatic figure/table/equation detection. A table crop stays an
-  image until Phase 7 adds editable cells.
+  cost of no automatic figure/equation detection. A table crop stays an image;
+  editable cells come from the separate OCR table proposal, not from the crop.

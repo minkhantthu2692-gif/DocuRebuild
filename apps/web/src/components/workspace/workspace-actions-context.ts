@@ -20,14 +20,28 @@ export interface WorkspaceFigureInsertion {
   height: number | null;
 }
 
-export type WorkspaceInsertion = WorkspaceTextInsertion | WorkspaceFigureInsertion;
+export interface WorkspaceTableInsertion {
+  id: number;
+  type: "table";
+  /** Final reviewed cell text. Empty strings stay empty. */
+  rows: string[][];
+  headerRow: boolean;
+  note: string | null;
+}
+
+export type WorkspaceInsertion =
+  | WorkspaceTextInsertion
+  | WorkspaceFigureInsertion
+  | WorkspaceTableInsertion;
 
 export type FigureInsertionInput = Omit<WorkspaceFigureInsertion, "id" | "type">;
+export type TableInsertionInput = Omit<WorkspaceTableInsertion, "id" | "type">;
 
 export interface WorkspaceActions {
   insertion: WorkspaceInsertion | null;
   insertText: (text: string, note?: string | null) => void;
   insertFigure: (figure: FigureInsertionInput) => void;
+  insertTable: (table: TableInsertionInput) => void;
   consumeInsertion: (id: number) => void;
   /**
    * A document restored from a backup, waiting for the editor to apply it.

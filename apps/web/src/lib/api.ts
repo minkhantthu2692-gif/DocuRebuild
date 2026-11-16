@@ -39,6 +39,7 @@ import type {
   ProjectDetail,
   ProjectSummary,
   RegionProposals,
+  TableProposal,
 } from "@docurebuild/shared-types";
 
 import { filenameFromDisposition } from "@/lib/download";
@@ -385,6 +386,10 @@ export const api = {
     }),
   getRegionProposals: (projectId: string, pageId: string) =>
     request<RegionProposals>(`/projects/${projectId}/pages/${pageId}/region-proposals`),
+  getTableProposal: (projectId: string, pageId: string, blockId: string) =>
+    request<TableProposal>(
+      `/projects/${projectId}/pages/${pageId}/ocr/blocks/${blockId}/table-proposal`,
+    ),
   createAiRegionProposals: (
     projectId: string,
     pageId: string,

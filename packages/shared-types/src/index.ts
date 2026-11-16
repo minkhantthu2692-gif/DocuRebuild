@@ -345,6 +345,38 @@ export interface OcrCapabilities {
 }
 
 /* -------------------------------------------------------------------------- */
+/*                              Table proposals                               */
+/* -------------------------------------------------------------------------- */
+
+export type TableProposalWarning = "no_confidence" | "low_confidence" | "empty_cells";
+
+/** One proposed cell. Empty cells stay empty; nothing is invented. */
+export interface TableProposalCell {
+  row: number;
+  column: number;
+  text: string;
+  confidence: number | null;
+  /** At least one word is low-confidence or has no score. */
+  uncertain: boolean;
+  empty: boolean;
+}
+
+/** A reviewable table built from stored OCR word boxes. Never saved on its own. */
+export interface TableProposal {
+  page_id: string;
+  block_id: string;
+  run_id: string;
+  engine: string;
+  rows: number;
+  columns: number;
+  has_confidence: boolean;
+  uncertain_cells: number;
+  empty_cells: number;
+  warnings: TableProposalWarning[];
+  cells: TableProposalCell[];
+}
+
+/* -------------------------------------------------------------------------- */
 /*                                    AI                                      */
 /* -------------------------------------------------------------------------- */
 

@@ -219,6 +219,12 @@ PROJECT_MIGRATIONS: list[tuple[int, str]] = [
             ON document_revisions(created_at DESC);
         """,
     ),
+    (
+        10,
+        """
+        ALTER TABLE ocr_blocks ADD COLUMN words TEXT NOT NULL DEFAULT '[]';
+        """,
+    ),
 ]
 
 

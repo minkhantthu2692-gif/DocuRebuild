@@ -277,6 +277,40 @@ def test_parse_tsv_uses_page_geometry_for_layout_candidates() -> None:
     ]
 
 
+def test_parse_tsv_keeps_scaled_word_boxes_per_block() -> None:
+    from app.services import ocr
+
+    header = (
+        "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\t"
+        "left\ttop\twidth\theight\tconf\ttext"
+    )
+
+    def word(block: int, line: int, number: int, left: int, top: int, text: str) -> str:
+        return (
+            f"5\t1\t{block}\t1\t{line}\t{number}\t{left}\t{top}\t40\t20\t90\t{text}"
+        )
+
+    tsv = "\n".join(
+        [
+            header,
+            word(1, 1, 1, 0, 100, "Name"),
+            word(1, 1, 2, 200, 100, "Value"),
+            word(1, 2, 1, 0, 125, "Mass"),
+            word(1, 2, 2, 205, 125, "2"),
+        ]
+    )
+    _text, blocks, _confidence = ocr._parse_tsv(tsv, 2.0, (1000, 1000))
+
+    table = blocks[0]
+    assert [word["text"] for word in table["words"]] == ["Name", "Value", "Mass", "2"]
+    # Line numbers are normalised to the block, so a consumer never has to know
+    # Tesseract's page-level numbering.
+    assert [word["line"] for word in table["words"]] == [0, 0, 1, 1]
+    # Boxes are converted from the OCR raster back to displayed page pixels.
+    assert [word["x"] for word in table["words"]] == [0, 100, 0, 102]
+    assert table["words"][1]["confidence"] == 90.0
+
+
 def test_parse_version_accepts_common_tesseract_output() -> None:
     from app.services import ocr
 

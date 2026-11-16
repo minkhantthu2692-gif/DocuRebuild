@@ -19,9 +19,10 @@ data on your device, and treats every AI result as a reviewable proposal.
 > talks to an Ollama or OpenAI-compatible server that the user configures and tests;
 > loopback addresses are the default, and any other host needs explicit remote
 > consent. Every result is a proposal that must be accepted or rejected. Cloud
-> providers, free-tier adapters, paid usage, image generation and structured
-> table/figure/equation reconstruction are **not implemented yet** and are clearly
-> marked as unavailable in the UI. Nothing in this
+> providers, free-tier adapters, paid usage, image generation and automatic
+> equation/figure reconstruction are **not implemented yet** and are clearly marked
+> as unavailable in the UI. Table cells can be proposed from stored OCR word boxes,
+> but only as a reviewed, user-confirmed grid. Nothing in this
 > repository fakes those features.
 
 ---
@@ -64,7 +65,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   running header/footer, page number) are attached to blocks as review
   candidates, and a measured bounding-box overlay can be shown on the source
   image. OCR is never advertised as available unless the engine and language
-  data are actually detected.
+  data are actually detected. A block the layout labels as a table can also be
+  turned into a reviewable cell grid: rows and columns are derived from the stored
+  word boxes, every cell keeps its OCR text and confidence, and nothing is inserted
+  until you review and confirm the proposal. Uncertain cells are flagged and must be
+  acknowledged before insertion.
 - **Optional local AI text cleanup** — connect an Ollama server or an
   OpenAI-compatible local server (for example LM Studio) in Settings, test the
   connection, discover installed models and choose a text model. In the OCR dialog,
@@ -135,11 +140,13 @@ data on your device, and treats every AI result as a reviewable proposal.
   deleted explicitly; downloading never removes it. Deleting a project moves its
   vault copies to the local trash. The vault is not encrypted and is not synced
   anywhere.
-- **Manual tables** — insert an empty table from the editor toolbar with 1–10
-  rows and columns and an optional header row, then add or delete rows and columns,
-  toggle the header, or delete the table. Every cell is typed by hand; no cell text
-  is generated from a source image. Tables are part of the saved document, version
-  history, backups and Markdown/TXT/Word/PDF export.
+- **Tables** — insert an empty table from the editor toolbar with 1–10 rows and
+  columns and an optional header row, then add or delete rows and columns, toggle
+  the header, or delete the table. Cells are normally typed by hand. For an OCR
+  block labelled as a table, the OCR dialog can build a cell-grid proposal from the
+  stored word boxes; the grid is shown for review with per-cell confidence and is
+  only inserted after you confirm it. Tables are part of the saved document,
+  version history, backups and Markdown/TXT/Word/PDF export.
 - **Equations** — insert a display equation or an inline formula from the toolbar
   dialog and check the local KaTeX preview before inserting it. Empty or invalid
   LaTeX is refused rather than saved. Display equations can be given an optional
@@ -171,14 +178,15 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 ### Not available yet
 
-Structured element reconstruction (automatic table-cell extraction, automatic
-equation transcription, generative figure detection), cloud/free-tier AI providers,
-image-generation profiles, desktop packaging and PWA install support are planned
-but not implemented. OCR extracts text blocks,
-reading order and conservative layout hints; it does not build table structure or
-transcribe equations. Region extraction produces exact pixel crops and can read
-their plain text locally; it does not build structured table cells or equation
-markup. Deterministic region suggestions are heuristics over the OCR text layout,
+Automatic equation transcription, generative figure detection, cloud/free-tier AI
+providers, image-generation profiles, desktop packaging and PWA install support are
+planned but not implemented. OCR extracts text blocks, reading order and
+conservative layout hints. It can turn a block the layout labels as a table into a
+reviewable cell grid derived from its word boxes, but it never inserts that grid on
+its own, never merges blocks into one table, and does not transcribe equations.
+Region extraction produces exact pixel crops and can read their plain text locally;
+it does not build structured table cells or equation markup. Deterministic region
+suggestions are heuristics over the OCR text layout,
 not a vision model: they cover OCR table/equation blocks and the empty band above a
 figure-like caption, and they are skipped when no suitable layout exists. The
 optional vision path only proposes rectangles for review; it does not read their
@@ -463,6 +471,30 @@ Tables are reconstructed manually, cell by cell:
   layout depend on the screen that typed them, and Markdown cannot preserve them.
   Cells are typed from the source and remain the user's responsibility; the app
   does not mark them verified.
+
+### OCR table proposals
+
+An OCR block that the layout heuristic labels as a table can be turned into an
+editable grid without leaving the OCR dialog:
+
+- **Propose table** sends only the block id to the local API. The backend reads the
+  word boxes stored with the block, clusters them into rows, finds whitespace bands
+  between columns, and returns the cells with their text and confidence.
+- Only a block labelled `table` is accepted; a paragraph is never silently converted
+  into a table. Hand-corrected blocks are refused because their stored words no
+  longer match the corrected text — build the table manually or re-run OCR.
+- Empty cells stay empty. A cell built from low-confidence words, or from words with
+  mixed confidence, is flagged. Embedded PDF text has no confidence score, so its
+  cells are reported as `no_confidence` rather than given a fake score.
+- The dialog shows the whole grid before anything changes. Insertion is a separate
+  confirmation, and an acknowledgement checkbox is required when any cell is
+  uncertain or has no confidence. The first row can be marked as a header; it is
+  off by default.
+- Limits are 60 rows, 20 columns and 600 cells. A larger or unusable grid is refused
+  with a typed error instead of being truncated.
+- The grid comes from one OCR block. A PDF whose embedded text is split into one
+  paragraph block per row is not proposed yet, because merging neighbouring blocks
+  into a single table is not implemented.
 
 ### Document export
 
@@ -877,9 +909,12 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   text a `Notes:` section, Word a native footnote and PDF a numbered notes list.
 - Table limits: inserting offers 1–10 rows and columns, and merged cells can be
   created by selecting multiple cells and choosing merge/split. There is no
-  per-cell alignment beyond paragraph alignment and no column resizing. Automatic
-  table structure from OCR or vision is still not produced. A table is only as
-  accurate as the cell text you type.
+  per-cell alignment beyond paragraph alignment and no column resizing. An OCR
+  table block can produce a reviewable cell grid from its word boxes, but that grid
+  is a proposal: it is capped at 60 rows, 20 columns and 600 cells, it only covers
+  one block, and it cannot recover merged spans, cell alignment or reading order
+  beyond simple row clustering. PDF text split into one block per row is not
+  proposed. A table is only as accurate as the text you confirm.
 - Word export converts equations locally through MathML, so a formula using LaTeX
   constructs that the converter does not support is written as its italic LaTeX
   source instead of a native equation. Figures are embedded from this project's
@@ -916,9 +951,10 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   quality. Burmese text is especially difficult; layout labels are heuristics and
   are never presented as certain structure. Accuracy can be measured with the local
   benchmark harness, but no figures are published until fixtures from real documents
-  have been scored. Table labels only mark a text grid:
-  cells, merged spans and reading order inside the table are not reconstructed,
-  and equations are not transcribed.
+  have been scored. A table label only marks a text grid, and the optional cell-grid
+  proposal derives rows and columns from word-box geometry: merged cells, nested
+  tables and uneven spacing can produce a wrong shape, which is why every cell must
+  be reviewed before insertion. Equations are not transcribed.
 - Region extraction does not use a vision model. Suggestions are deterministic
   heuristics over the latest OCR text layout: OCR table/equation blocks and the
   empty band above a figure-like caption. Uncaptioned figures, artwork separated
@@ -974,10 +1010,10 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 1. Local storage and project management | Complete |
 | 2. Main UI and workspace | Complete |
 | 3. Import and image processing | Complete |
-| 4. Local OCR and layout detection | In progress: OCR, layout hints and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
+| 4. Local OCR and layout detection | In progress: OCR, layout hints, reviewable table proposals and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
 | 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; automatic table/equation extraction pending |
+| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, reviewable automatic table proposals from OCR word boxes, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; vision tables, merged-cell detection and automatic equation extraction pending |
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
 | 9. History, backup and recovery | **Complete**: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned |

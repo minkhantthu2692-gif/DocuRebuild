@@ -86,6 +86,68 @@ def test_text_pdf_import_renders_pages_and_stores_embedded_text(
     assert "Second page body" in second["text"]
 
 
+def test_extract_text_attaches_real_word_boxes_to_blocks() -> None:
+    from app.services import pdf
+
+    class FakePage:
+        rect = type("Rect", (), {"height": 800})()
+
+        def get_text(self, kind: str, sort: bool = False):
+            if kind == "dict":
+                return {
+                    "blocks": [
+                        {
+                            "type": 0,
+                            "bbox": (0, 0, 200, 20),
+                            "lines": [
+                                {
+                                    "spans": [
+                                        {
+                                            "text": "Name Value",
+                                            "size": 10,
+                                            "bbox": (0, 0, 200, 10),
+                                        }
+                                    ]
+                                }
+                            ],
+                        }
+                    ]
+                }
+            return [
+                (0, 0, 40, 10, "Name", 0, 0, 0),
+                (50, 0, 90, 10, "Value", 0, 0, 1),
+            ]
+
+    class FakeDocument:
+        def load_page(self, index: int):
+            return FakePage()
+
+    text, blocks = pdf.extract_text(FakeDocument(), 0, 2.0)
+
+    assert text == "Name Value"
+    # Word boxes come from the PDF itself, not from estimated character widths.
+    assert blocks[0]["words"] == [
+        {
+            "text": "Name",
+            "confidence": None,
+            "x": 0,
+            "y": 0,
+            "width": 80,
+            "height": 20,
+            "line": 0,
+        },
+        {
+            "text": "Value",
+            "confidence": None,
+            "x": 100,
+            "y": 0,
+            "width": 80,
+            "height": 20,
+            "line": 0,
+        },
+    ]
+
+
 def test_image_only_pdf_page_has_no_embedded_text_run(
     client: TestClient, project: dict
 ) -> None:

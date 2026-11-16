@@ -101,6 +101,7 @@ import { findMatches } from "@/lib/editor-search";
 import { resolveLocale } from "@/lib/format";
 import { normalizeLinkUrl } from "@/lib/link";
 import { ocrInsertionContent } from "@/lib/ocr-insertion";
+import { tableInsertionContent } from "@/lib/table-insertion";
 import { countCharacters, countWords } from "@/lib/text";
 import { cn } from "@/lib/utils";
 import { EditorTableMenu } from "./editor-table-menu";
@@ -285,15 +286,13 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
 
   useEffect(() => {
     if (!editor || !initialized || !insertion) return;
-    editor
-      .chain()
-      .focus("end")
-      .insertContent(
-        insertion.type === "text"
-          ? ocrInsertionContent(insertion.text, insertion.note)
-          : figureInsertionContent(insertion),
-      )
-      .run();
+    const content =
+      insertion.type === "text"
+        ? ocrInsertionContent(insertion.text, insertion.note)
+        : insertion.type === "figure"
+          ? figureInsertionContent(insertion)
+          : tableInsertionContent(insertion);
+    editor.chain().focus("end").insertContent(content).run();
     consumeInsertion(insertion.id);
   }, [editor, initialized, insertion, consumeInsertion]);
 

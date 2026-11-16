@@ -7,6 +7,7 @@ import {
   RefreshCw,
   ScanText,
   Sparkles,
+  Table2,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -46,6 +47,7 @@ import {
   languageLabel,
 } from "@/lib/ocr-display";
 import { cn } from "@/lib/utils";
+import { TableProposalDialog } from "./table-proposal-dialog";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
 interface OcrDialogProps {
@@ -141,6 +143,7 @@ export function OcrDialog({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [includeNote, setIncludeNote] = useState(true);
+  const [tableBlock, setTableBlock] = useState<OcrBlock | null>(null);
   const initializedRun = useRef<string | null>(null);
 
   const run = latestQuery.data ?? null;
@@ -158,6 +161,7 @@ export function OcrDialog({
   useEffect(() => {
     if (!open) {
       initializedRun.current = null;
+      setTableBlock(null);
       return;
     }
     if (!capabilities) return;
@@ -675,6 +679,32 @@ export function OcrDialog({
                                   </p>
                                 ) : null}
 
+                                {block.kind === "table" ? (
+                                  block.corrected ? (
+                                    <p className="mt-2 text-2xs leading-relaxed text-muted-foreground">
+                                      {t("ocr.table.correctedHint")}
+                                    </p>
+                                  ) : (
+                                    <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+                                      {dirty ? (
+                                        <span className="text-2xs text-muted-foreground">
+                                          {t("ocr.table.saveFirst")}
+                                        </span>
+                                      ) : null}
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="gap-1.5"
+                                        disabled={run.stale || dirty}
+                                        onClick={() => setTableBlock(block)}
+                                      >
+                                        <Table2 />
+                                        {t("ocr.table.build")}
+                                      </Button>
+                                    </div>
+                                  )
+                                ) : null}
+
                                 {suggestion ? (
                                   <div className="mt-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
                                     <div className="flex flex-wrap items-center gap-1.5 text-2xs">
@@ -884,6 +914,16 @@ export function OcrDialog({
           </>
         ) : null}
       </DialogContent>
+      <TableProposalDialog
+        projectId={projectId}
+        page={page}
+        block={tableBlock}
+        open={Boolean(tableBlock)}
+        onOpenChange={(next) => {
+          if (!next) setTableBlock(null);
+        }}
+        onInserted={onInserted}
+      />
     </Dialog>
   );
 }

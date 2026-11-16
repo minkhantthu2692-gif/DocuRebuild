@@ -91,6 +91,10 @@ def extract_text(
     try:
         page = document.load_page(index)
         data = page.get_text("dict", sort=True)
+        try:
+            raw_words = page.get_text("words")
+        except Exception:
+            raw_words = []
         page_height = float(page.rect.height) * scale
     except Exception:
         return "", []
@@ -101,6 +105,7 @@ def extract_text(
         if block.get("type") != 0:
             continue
         lines: list[str] = []
+        line_spans: list[list[tuple[float, float]]] = []
         max_height = 0.0
         for line in block.get("lines", []):
             spans = [span for span in line.get("spans", []) if span.get("text")]
@@ -108,6 +113,13 @@ def extract_text(
             if not text:
                 continue
             lines.append(text)
+            line_spans.append(
+                sorted(
+                    (float(span["bbox"][0]), float(span["bbox"][2]))
+                    for span in spans
+                    if len(span.get("bbox", ())) >= 4
+                )
+            )
             size = max((float(span.get("size", 0) or 0) for span in spans), default=0.0)
             max_height = max(max_height, size)
         text = "\n".join(lines).strip()
@@ -127,11 +139,49 @@ def extract_text(
                 "line_count": len(lines),
                 "word_count": sum(len(line.split()) for line in lines),
                 "max_line_height": height,
+                "bbox": (x0, y0, x1, y1),
+                "line_spans": line_spans,
+                "words": [],
             }
         )
 
     if not prepared:
         return "", []
+
+    # ``words`` carries exact word boxes, which a table proposal can use. Each
+    # word is attached to the text block that contains its centre. Nothing is
+    # estimated from character widths, so a proposal never invents geometry.
+    for raw_word in raw_words:
+        if len(raw_word) < 8:
+            continue
+        word_text = str(raw_word[4]).strip()
+        if not word_text:
+            continue
+        wx0, wy0, wx1, wy1 = (float(value) for value in raw_word[:4])
+        center_x = (wx0 + wx1) / 2
+        center_y = (wy0 + wy1) / 2
+        owner = None
+        for item in prepared:
+            bx0, by0, bx1, by1 = item["bbox"]
+            if bx0 - 1 <= center_x <= bx1 + 1 and by0 - 1 <= center_y <= by1 + 1:
+                owner = item
+                break
+        if owner is None:
+            continue
+        owner["words"].append(
+            {
+                "text": word_text,
+                "confidence": None,
+                "x": round(wx0 * scale),
+                "y": round(wy0 * scale),
+                "width": max(round((wx1 - wx0) * scale), 1),
+                "height": max(round((wy1 - wy0) * scale), 1),
+                "line": int(raw_word[6]),
+            }
+        )
+
+    for item in prepared:
+        item["words"].sort(key=lambda word: (word["line"], word["x"]))
 
     median_height = statistics.median(line_heights) if line_heights else 1.0
     blocks: list[dict[str, Any]] = []
@@ -147,6 +197,7 @@ def extract_text(
                     y=item["y"],
                     height=item["height"],
                     page_height=page_height,
+                    line_spans=item["line_spans"],
                 ),
                 "text": item["text"],
                 "confidence": None,
@@ -156,6 +207,7 @@ def extract_text(
                 "height": item["height"],
                 "line_count": item["line_count"],
                 "word_count": item["word_count"],
+                "words": item["words"],
             }
         )
     text = "\n\n".join(block["text"] for block in blocks)

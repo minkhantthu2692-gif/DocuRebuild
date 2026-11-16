@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -443,9 +444,9 @@ def _execute_ocr_run(
                     """
                     INSERT INTO ocr_blocks (id, run_id, page_id, block_index, kind, text,
                                             confidence, x, y, width, height, line_count,
-                                            word_count, verified, corrected, created_at,
-                                            updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+                                            word_count, words, verified, corrected,
+                                            created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
                     """,
                     (
                         str(uuid.uuid4()),
@@ -461,6 +462,11 @@ def _execute_ocr_run(
                         block["height"],
                         block["line_count"],
                         block["word_count"],
+                        json.dumps(
+                            block.get("words", []),
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ),
                         now,
                         now,
                     ),
@@ -654,6 +660,11 @@ def _parse_tsv(
         confidence = (
             round(sum(confidences) / len(confidences), 1) if confidences else None
         )
+        # Keep the engine's word boxes so a table proposal can be built later
+        # without running OCR again. Line numbers are normalised to the block so
+        # a consumer never has to know Tesseract's page-level numbering.
+        line_order = {line: index for index, line in enumerate(sorted(lines))}
+        block_words.sort(key=lambda item: (line_order[item["line"]], item["word"]))
         prepared.append(
             {
                 "block_number": block_number,
@@ -668,6 +679,18 @@ def _parse_tsv(
                 "word_count": sum(len(line.split()) for line in line_texts),
                 "max_line_height": max(line_heights_for_block),
                 "line_spans": line_spans,
+                "words": [
+                    {
+                        "text": word["text"],
+                        "confidence": word["confidence"],
+                        "x": _scale(word["left"], scale),
+                        "y": _scale(word["top"], scale),
+                        "width": _scale(word["width"], scale),
+                        "height": _scale(word["height"], scale),
+                        "line": line_order[word["line"]],
+                    }
+                    for word in block_words
+                ],
             }
         )
 
@@ -699,6 +722,7 @@ def _parse_tsv(
                 "height": item["height"],
                 "line_count": item["line_count"],
                 "word_count": item["word_count"],
+                "words": item["words"],
             }
         )
 

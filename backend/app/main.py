@@ -18,6 +18,7 @@ from app.api.routes import (
     projects,
     regions,
     settings as settings_routes,
+    tables,
 )
 from app.services import imports as import_service
 from app.services import ocr as ocr_service
@@ -75,6 +76,7 @@ def create_app() -> FastAPI:
     app.include_router(ocr.router, prefix="/api")
     app.include_router(elements.router, prefix="/api")
     app.include_router(regions.router, prefix="/api")
+    app.include_router(tables.router, prefix="/api")
     app.include_router(ai.router, prefix="/api")
     return app
 

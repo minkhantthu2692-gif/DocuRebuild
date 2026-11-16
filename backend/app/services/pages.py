@@ -311,8 +311,9 @@ def _insert_embedded_text_run(
             """
             INSERT INTO ocr_blocks (id, run_id, page_id, block_index, kind, text,
                                     confidence, x, y, width, height, line_count,
-                                    word_count, verified, corrected, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+                                    word_count, words, verified, corrected,
+                                    created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
             """,
             (
                 str(uuid.uuid4()),
@@ -327,6 +328,11 @@ def _insert_embedded_text_run(
                 block["height"],
                 block["line_count"],
                 block["word_count"],
+                json.dumps(
+                    block.get("words", []),
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
                 now,
                 now,
             ),
