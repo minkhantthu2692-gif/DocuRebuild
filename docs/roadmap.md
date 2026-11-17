@@ -13,9 +13,9 @@ presented in the UI until it actually works.
 | 2. Main UI and workspace | **Complete** | Header navigation, dashboard, two-panel workspace, settings, i18n |
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates), deterministic figure suggestions from embedded PDF images and vector drawings, and a local CER/WER benchmark harness done; measured real-document accuracy pending |
-| 5. Element extraction | **In progress** | Manual region crop, local region text extraction, OCR-layout, embedded-PDF-image, vector-drawing and raster-page ink region suggestions with a named source in the extraction dialog, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
+| 5. Element extraction | **In progress** | Manual region crop, local region text extraction, OCR-layout, embedded-PDF-image, vector-drawing and raster-page ink region suggestions with a named source in the extraction dialog, library, verification and figure/text insertion, and reviewed equation crops inserted as real equations done; structured table reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, merged cells from a PDF's drawn rules, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, and faithful Markdown/TXT/Word/PDF export; vision tables, merged-cell detection for text-only tables and automatic equation extraction pending |
+| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, merged cells from a PDF's drawn rules, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, inserting a reviewed equation crop as a real numbered equation, and faithful Markdown/TXT/Word/PDF export; vision tables, merged-cell detection for text-only tables and automatic equation recognition pending |
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, footnotes, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
@@ -207,7 +207,11 @@ described as universally free or universally accurate.
 - Local text extraction from a saved crop through the same Tesseract engine used
   for page OCR. Text, confidence, engine, language and timestamp are stored on the
   element as an unverified proposal; the user can review, correct or insert it.
-  Manual transcription and correction work without OCR.
+  Manual transcription and correction work without OCR. An equation region's
+  reviewed text can also be inserted as a real display equation: the dialog shows
+  the saved crop beside a local KaTeX render, refuses empty or unrenderable source
+  and writes only the LaTeX the user confirmed, optionally numbered, with the same
+  provenance note.
 - Reviewable region suggestions derived from the latest local OCR layout. Table
   and equation blocks are clustered into suggestions, and a figure band is
   suggested above figure-like captions. On imported PDF pages, raster images
@@ -408,6 +412,11 @@ the user must review every region before extracting it.
   export adds the same label next to the native equation and PDF after the LaTeX
   source. Numbers are never written into the LaTeX source, and inline formulas cannot
   be numbered.
+- Equation regions can be inserted as real equations. An extracted equation region
+  whose text the user reviewed can be opened in a formula dialog that shows the saved
+  crop beside a local KaTeX render, lets the user correct the LaTeX, optionally
+  numbers it and writes only the confirmed source (plus an optional provenance note).
+  Empty or unrenderable source is refused, and the crop and OCR text stay unchanged.
 - Figure cross-references: a numbered figure gets a stable id, and the toolbar can
   insert an inline citation that stores only that id. The editor resolves the current
   `Figure n` label from document order, so moving or renumbering the figure updates
@@ -429,7 +438,8 @@ the user must review every region before extracting it.
 - Inline images in running text and optional structured figure reconstruction with
   approval. Figure numbering and prose cross-references are delivered.
 - Automatic equation recognition from OCR/vision as a reviewable proposal. Word
-  export now converts typed equations to native OMML.
+  export now converts typed equations to native OMML, and a reviewed equation
+  region can already be inserted as a real equation through the local LaTeX editor.
 - Uncertain table cells are flagged in the proposal and must be acknowledged before
   insertion, and an empty source cell is never filled in. Equation symbols still
   have no automatic recognition, so they are never invented.

@@ -628,6 +628,18 @@
       "sourceNoteCorrected": "Source: page {{page}} · {{engine}} text with manual correction · {{status}}",
       "sourceNoteManual": "Source: page {{page}} · manually transcribed · {{status}}"
     },
+    "formula": {
+      "insert": "Insert as equation",
+      "inserted": "Equation inserted into the document.",
+      "title": "Equation from this region · page {{page}}",
+      "description": "The region's reviewed text becomes the equation's LaTeX. Correct it until the local preview matches the saved crop; the crop itself stays stored.",
+      "sourceHint": "Type LaTeX; the preview is rendered on this device. Nothing is sent to a server.",
+      "invalid": "This LaTeX could not be rendered, so the equation is not inserted. Fix the source or insert the crop as a picture instead.",
+      "numbered": "Show an equation number",
+      "cropLabel": "Saved crop",
+      "cropAlt": "Saved equation region",
+      "sourceNote": "Source: page {{page}} · equation reviewed from the region crop · {{status}}"
+    },
     "confirmDelete": "Delete?",
     "listTitle": "Saved regions",
     "sourceNote": "Source: page {{page}} · manual region · {{status}}",

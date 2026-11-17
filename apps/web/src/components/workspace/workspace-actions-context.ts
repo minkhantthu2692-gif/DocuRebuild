@@ -38,19 +38,31 @@ export interface WorkspaceTableInsertion {
   note: string | null;
 }
 
+export interface WorkspaceEquationInsertion {
+  id: number;
+  type: "equation";
+  /** Reviewed LaTeX source, never generated text. */
+  latex: string;
+  numbered: boolean;
+  note: string | null;
+}
+
 export type WorkspaceInsertion =
   | WorkspaceTextInsertion
   | WorkspaceFigureInsertion
-  | WorkspaceTableInsertion;
+  | WorkspaceTableInsertion
+  | WorkspaceEquationInsertion;
 
 export type FigureInsertionInput = Omit<WorkspaceFigureInsertion, "id" | "type">;
 export type TableInsertionInput = Omit<WorkspaceTableInsertion, "id" | "type">;
+export type EquationInsertionInput = Omit<WorkspaceEquationInsertion, "id" | "type">;
 
 export interface WorkspaceActions {
   insertion: WorkspaceInsertion | null;
   insertText: (text: string, note?: string | null) => void;
   insertFigure: (figure: FigureInsertionInput) => void;
   insertTable: (table: TableInsertionInput) => void;
+  insertEquation: (equation: EquationInsertionInput) => void;
   consumeInsertion: (id: number) => void;
   /**
    * A document restored from a backup, waiting for the editor to apply it.

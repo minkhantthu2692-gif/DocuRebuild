@@ -9,6 +9,7 @@ import {
   Pilcrow,
   ScanSearch,
   ScanText,
+  Sigma,
   Sparkles,
   Trash2,
   X,
@@ -19,6 +20,7 @@ import { toast } from "sonner";
 
 import type {
   ElementKind,
+  ElementSummary,
   PageSummary,
   RegionProposal,
   RegionProposalReason,
@@ -52,6 +54,7 @@ import { api } from "@/lib/api";
 import { MIN_REGION_SIDE, type SourceRect } from "@/lib/element-region";
 import { buildLanguageOptions, confidenceVariant, languageLabel } from "@/lib/ocr-display";
 import { cn } from "@/lib/utils";
+import { RegionFormulaDialog } from "./region-formula-dialog";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
 interface ElementsDialogProps {
@@ -180,6 +183,9 @@ export function ElementsDialog({
   const [textDraft, setTextDraft] = useState("");
   const [languageValue, setLanguageValue] = useState("eng");
   const [saving, setSaving] = useState(false);
+  const [formulaElement, setFormulaElement] = useState<ElementSummary | null>(
+    null,
+  );
   const [fromProposal, setFromProposal] = useState<RegionProposalReason | null>(
     null,
   );
@@ -214,6 +220,7 @@ export function ElementsDialog({
       setCaptionDraft("");
       setEditingTextId(null);
       setTextDraft("");
+      setFormulaElement(null);
       setFromProposal(null);
       return;
     }
@@ -880,6 +887,17 @@ export function ElementsDialog({
                           <ImagePlus />
                           {t("elements.insert")}
                         </Button>
+                        {element.kind === "equation" && element.text.trim() ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1"
+                            onClick={() => setFormulaElement(element)}
+                          >
+                            <Sigma />
+                            {t("elements.formula.insert")}
+                          </Button>
+                        ) : null}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -939,6 +957,17 @@ export function ElementsDialog({
             {tCommon("actions.close")}
           </Button>
         </DialogFooter>
+
+        <RegionFormulaDialog
+          projectId={projectId}
+          element={formulaElement}
+          pageNumber={page?.page_number ?? null}
+          open={formulaElement !== null}
+          onOpenChange={(next) => {
+            if (!next) setFormulaElement(null);
+          }}
+          onInserted={onInserted}
+        />
       </DialogContent>
     </Dialog>
   );

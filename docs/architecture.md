@@ -471,6 +471,13 @@ src/
   node, so they survive document saves. The document references the project asset
   by URL; the crop itself is not embedded or re-encoded. Extracted text is inserted
   through the normal text insertion path with a provenance note.
+- An equation region's reviewed text can become a real display equation instead of
+  a picture. The dialog shows the saved crop beside a local KaTeX render of the
+  LaTeX being edited, refuses empty or unrenderable source, and inserts only the
+  source the user confirmed as a `blockMath` node (optionally numbered) plus the
+  usual provenance blockquote. The stored crop and the element's extracted text are
+  unchanged, so the formula is a separate, reviewable reconstruction rather than a
+  claim about the OCR text.
 - A selected figure can be edited through the toolbar caption dialog. Editing
   applies only to a real node selection (`selectedFigure` ignores a collapsed
   cursor), writes only the `caption`, `alt` and optional `numbered` attributes, and

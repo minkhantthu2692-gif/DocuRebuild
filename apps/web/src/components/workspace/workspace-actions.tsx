@@ -4,6 +4,7 @@ import type { DocumentRecord } from "@docurebuild/shared-types";
 
 import {
   WorkspaceActionsContext,
+  type EquationInsertionInput,
   type FigureInsertionInput,
   type TableInsertionInput,
   type WorkspaceInsertion,
@@ -28,6 +29,10 @@ export function WorkspaceActionsProvider({ children }: { children: ReactNode }) 
     setInsertion({ id: nextInsertionId++, type: "table", ...table });
   }, []);
 
+  const insertEquation = useCallback((equation: EquationInsertionInput) => {
+    setInsertion({ id: nextInsertionId++, type: "equation", ...equation });
+  }, []);
+
   const consumeInsertion = useCallback((id: number) => {
     setInsertion((current) => (current?.id === id ? null : current));
   }, []);
@@ -46,6 +51,7 @@ export function WorkspaceActionsProvider({ children }: { children: ReactNode }) 
       insertText,
       insertFigure,
       insertTable,
+      insertEquation,
       consumeInsertion,
       pendingDocumentRestore,
       restoreDocumentIntoEditor,
@@ -56,6 +62,7 @@ export function WorkspaceActionsProvider({ children }: { children: ReactNode }) 
       insertText,
       insertFigure,
       insertTable,
+      insertEquation,
       consumeInsertion,
       pendingDocumentRestore,
       restoreDocumentIntoEditor,

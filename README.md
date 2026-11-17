@@ -88,7 +88,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   the document as figures with an optional source note. Saved crops can also be
   read with the local OCR engine; the text, confidence and engine/language metadata
   are stored as an unverified proposal that can be reviewed, corrected, typed
-  manually or inserted. The per-page region library supports reinsertion and
+  manually or inserted. A reviewed equation region can also be inserted as a real
+  display equation: a dialog shows the saved crop beside a local KaTeX render,
+  refuses source that cannot be rendered, and writes only the LaTeX you confirm,
+  optionally numbered and with the usual provenance note. The per-page region
+  library supports reinsertion and
   deletion to local trash. If the page was changed after extraction, the region is
   marked stale; the saved crop is never silently treated as matching a newer page.
   A "Suggest regions" overlay derives reviewable figure, table and equation
@@ -169,7 +173,10 @@ data on your device, and treats every AI result as a reviewable proposal.
   Only the LaTeX source is stored, so equations work offline and are part of the
   document, versions, backups, Markdown (`$$` blocks and `$...$` formulas), plain
   text, Word export (native equations) and PDF export (exact LaTeX source).
-  Equations are typed by you; OCR or AI equation recognition is not implemented.
+  A saved equation region can be brought in the same way: its reviewed text starts
+  the LaTeX, the dialog previews it beside the crop and only inserts what you
+  confirm. Equations are never transcribed automatically; there is no OCR or AI
+  equation recognition.
 - **Footnotes** — insert a footnote from the toolbar and type its text in the
   dialog. Footnotes are numbered in document order, so inserting or deleting one
   renumbers the rest automatically; the number is never stored in the note. Export

@@ -98,6 +98,7 @@ import {
   type FigureTarget,
 } from "@/lib/editor-reference";
 import { findMatches } from "@/lib/editor-search";
+import { formulaInsertionContent } from "@/lib/formula-insertion";
 import { resolveLocale } from "@/lib/format";
 import { normalizeLinkUrl } from "@/lib/link";
 import { ocrInsertionContent } from "@/lib/ocr-insertion";
@@ -291,7 +292,9 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
         ? ocrInsertionContent(insertion.text, insertion.note)
         : insertion.type === "figure"
           ? figureInsertionContent(insertion)
-          : tableInsertionContent(insertion);
+          : insertion.type === "table"
+            ? tableInsertionContent(insertion)
+            : formulaInsertionContent(insertion);
     editor.chain().focus("end").insertContent(content).run();
     consumeInsertion(insertion.id);
   }, [editor, initialized, insertion, consumeInsertion]);
