@@ -10,7 +10,10 @@ import type {
   AiSuggestionDecisionInput,
   AiSuggestionDecisionResponse,
   AiSuggestionsResponse,
+  AiUsageHistoryResponse,
+  AiUsageOutcome,
   AiUsageResponse,
+  AiUsageTask,
 } from "@docurebuild/shared-types";
 
 import { latestOcrKey } from "@/hooks/use-ocr";
@@ -66,6 +69,23 @@ export function useAiUsage(enabled = true) {
     queryFn: api.getAiUsage,
     enabled,
     staleTime: 15_000,
+    retry: 1,
+  });
+}
+
+export interface AiUsageHistoryParams {
+  limit: number;
+  offset: number;
+  outcome?: AiUsageOutcome;
+  task?: AiUsageTask;
+}
+
+export function useAiUsageHistory(params: AiUsageHistoryParams, enabled = true) {
+  return useQuery<AiUsageHistoryResponse>({
+    queryKey: ["ai", "usage", "history", params],
+    queryFn: () => api.getAiUsageHistory(params),
+    enabled,
+    staleTime: 0,
     retry: 1,
   });
 }

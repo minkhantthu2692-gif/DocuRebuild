@@ -21,7 +21,10 @@ from app.schemas.ai import (
     AiSuggestionDecisionOut,
     AiSuggestionStatus,
     AiSuggestionsOut,
+    AiUsageHistoryOut,
     AiUsageOut,
+    AiUsageOutcome,
+    AiUsageTask,
 )
 from app.services import ai as ai_service
 from app.services import ai_usage
@@ -53,6 +56,24 @@ def list_ai_providers() -> dict[str, Any]:
 def read_ai_usage(session: DbSession) -> dict[str, Any]:
     ai_settings = get_app_settings(session).ai
     return ai_usage.usage_summary(session, ai_settings.request_limit)
+
+
+@router.get("/ai/usage/history", response_model=AiUsageHistoryOut)
+def read_ai_usage_history(
+    session: DbSession,
+    limit: int = Query(ai_usage.HISTORY_LIMIT, ge=1, le=ai_usage.HISTORY_MAX_LIMIT),
+    offset: int = Query(0, ge=0),
+    outcome: AiUsageOutcome | None = Query(None),
+    task: AiUsageTask | None = Query(None),
+) -> dict[str, Any]:
+    """Browse the local ledger beyond the five recent rows shown in Settings."""
+    return ai_usage.usage_history(
+        session,
+        limit=limit,
+        offset=offset,
+        outcome=outcome,
+        task=task,
+    )
 
 
 @router.post("/ai/probe", response_model=AiProbeOut)

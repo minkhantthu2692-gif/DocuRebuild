@@ -11,7 +11,10 @@ import type {
   AiSuggestionDecisionInput,
   AiSuggestionDecisionResponse,
   AiSuggestionsResponse,
+  AiUsageHistoryResponse,
+  AiUsageOutcome,
   AiUsageResponse,
+  AiUsageTask,
   AppCapabilities,
   AppMeta,
   AppSettings,
@@ -416,6 +419,22 @@ export const api = {
 
   listAiProviders: () => request<AiProvidersResponse>("/ai/providers"),
   getAiUsage: () => request<AiUsageResponse>("/ai/usage"),
+  getAiUsageHistory: (
+    params: {
+      limit?: number;
+      offset?: number;
+      outcome?: AiUsageOutcome;
+      task?: AiUsageTask;
+    } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (params.limit !== undefined) query.set("limit", String(params.limit));
+    if (params.offset !== undefined) query.set("offset", String(params.offset));
+    if (params.outcome) query.set("outcome", params.outcome);
+    if (params.task) query.set("task", params.task);
+    const suffix = query.size > 0 ? `?${query.toString()}` : "";
+    return request<AiUsageHistoryResponse>(`/ai/usage/history${suffix}`);
+  },
   probeAiProvider: (payload: AiProbeRequest) =>
     request<AiProbeResponse>("/ai/probe", {
       method: "POST",

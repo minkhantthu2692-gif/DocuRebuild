@@ -8,6 +8,7 @@ import {
   ExternalLink,
   FileDown,
   HardDrive,
+  History,
   Info,
   Languages,
   Palette,
@@ -41,6 +42,7 @@ import type {
   ThemeMode,
 } from "@docurebuild/shared-types";
 
+import { AiUsageHistoryDialog } from "@/components/settings/ai-usage-history-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -187,6 +189,7 @@ export function SettingsPage() {
   const [aiVisionDraft, setAiVisionDraft] = useState<string | null>(null);
   const [aiLimitDraft, setAiLimitDraft] = useState<string | null>(null);
   const [probeResult, setProbeResult] = useState<AiProbeResponse | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const settings = settingsQuery.data;
   const appearance = settings?.appearance;
@@ -924,8 +927,30 @@ export function SettingsPage() {
                       </li>
                     ))}
                   </ul>
+                  <div>
+                    <Button variant="outline" size="sm" onClick={() => setHistoryOpen(true)}>
+                      <History className="size-icon-sm" aria-hidden="true" />
+                      {t("ai.usageHistoryOpen")}
+                    </Button>
+                  </div>
                 </SettingRow>
-              ) : null}
+              ) : (
+                <SettingRow
+                  title={t("ai.usageHistory")}
+                  description={t("ai.usageHistoryDescription")}
+                  stacked
+                >
+                  <p className="text-2xs text-muted-foreground">
+                    {t("ai.usageHistoryEmpty")}
+                  </p>
+                  <div>
+                    <Button variant="outline" size="sm" onClick={() => setHistoryOpen(true)}>
+                      <History className="size-icon-sm" aria-hidden="true" />
+                      {t("ai.usageHistoryOpen")}
+                    </Button>
+                  </div>
+                </SettingRow>
+              )}
 
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -1132,6 +1157,8 @@ export function SettingsPage() {
           </div>
         </div>
       </div>
+
+      <AiUsageHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
     </div>
   );
 }

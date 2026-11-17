@@ -537,6 +537,24 @@ export interface AiUsageResponse {
   recent: AiUsageEntry[];
 }
 
+/** Tasks that can appear in the local usage ledger. */
+export type AiUsageTask =
+  | "ocr_cleanup"
+  | "region_proposals"
+  | "equation_transcription";
+
+export interface AiUsageHistoryEntry extends AiUsageEntry {
+  /** Null when the project was deleted or the attempt had no project. */
+  project_name: string | null;
+}
+
+export interface AiUsageHistoryResponse {
+  entries: AiUsageHistoryEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 /** One local AI server profile. Empty model means AI actions stay disabled. */
 export interface AiProfileSettings {
   provider: AiProviderKind;

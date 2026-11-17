@@ -1169,3 +1169,131 @@ def test_equation_latex_parser_strips_only_wrappers() -> None:
     assert parse_equation_latex("```\n$$x^{2}$$\n```") == "x^{2}"
     assert parse_equation_latex('"\\[ a + b \\]"') == "a + b"
     assert parse_equation_latex("  E = mc^2  ") == "E = mc^2"
+
+
+def _insert_usage(
+    *,
+    model: str,
+    task: str,
+    outcome: str,
+    created_at,
+    project_id: str | None,
+    error_code: str | None = None,
+) -> None:
+    import uuid
+
+    from app.db.models import AiUsage
+    from app.db.session import get_session_factory
+
+    with get_session_factory()() as session:
+        session.add(
+            AiUsage(
+                id=str(uuid.uuid4()),
+                provider="ollama",
+                model=model,
+                task=task,
+                outcome=outcome,
+                error_code=error_code,
+                project_id=project_id,
+                page_id=None,
+                block_id=None,
+                created_at=created_at,
+            )
+        )
+        session.commit()
+
+
+def test_ai_usage_history_pages_filters_and_names_projects(
+    client: TestClient, project: dict
+) -> None:
+    from datetime import datetime
+
+    other = client.post(
+        "/api/projects",
+        json={"name": "Second Ledger Project", "description": ""},
+    )
+    assert other.status_code == 201, other.text
+    other_id = other.json()["id"]
+
+    # Oldest first in insertion order; the endpoint must return newest first.
+    _insert_usage(
+        model="cleanup-model",
+        task="ocr_cleanup",
+        outcome="success",
+        created_at=datetime(2026, 1, 1, 10, 0, 0),
+        project_id=project["id"],
+    )
+    _insert_usage(
+        model="cleanup-model",
+        task="ocr_cleanup",
+        outcome="error",
+        error_code="ai_timeout",
+        created_at=datetime(2026, 1, 1, 11, 0, 0),
+        project_id=project["id"],
+    )
+    _insert_usage(
+        model="vision-model",
+        task="region_proposals",
+        outcome="success",
+        created_at=datetime(2026, 1, 1, 12, 0, 0),
+        project_id=other_id,
+    )
+    _insert_usage(
+        model="detached-model",
+        task="equation_transcription",
+        outcome="success",
+        created_at=datetime(2026, 1, 1, 13, 0, 0),
+        project_id=None,
+    )
+
+    response = client.get("/api/ai/usage/history")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["total"] == 4
+    assert body["limit"] == 25
+    assert body["offset"] == 0
+    assert [entry["model"] for entry in body["entries"]] == [
+        "detached-model",
+        "vision-model",
+        "cleanup-model",
+        "cleanup-model",
+    ]
+    assert body["entries"][0]["project_name"] is None
+    assert body["entries"][1]["project_name"] == "Second Ledger Project"
+    assert body["entries"][2]["project_name"] == "Quantum Mechanics"
+    assert body["entries"][2]["outcome"] == "error"
+    assert body["entries"][2]["error_code"] == "ai_timeout"
+
+    page = client.get("/api/ai/usage/history", params={"limit": 2, "offset": 1})
+    assert page.status_code == 200, page.text
+    assert page.json()["total"] == 4
+    assert [entry["model"] for entry in page.json()["entries"]] == [
+        "vision-model",
+        "cleanup-model",
+    ]
+
+    failed = client.get("/api/ai/usage/history", params={"outcome": "error"})
+    assert failed.status_code == 200, failed.text
+    assert failed.json()["total"] == 1
+    assert failed.json()["entries"][0]["error_code"] == "ai_timeout"
+
+    regions = client.get(
+        "/api/ai/usage/history", params={"task": "region_proposals"}
+    )
+    assert regions.status_code == 200, regions.text
+    assert regions.json()["total"] == 1
+    assert regions.json()["entries"][0]["project_name"] == "Second Ledger Project"
+
+    combined = client.get(
+        "/api/ai/usage/history",
+        params={"task": "ocr_cleanup", "outcome": "success"},
+    )
+    assert combined.status_code == 200, combined.text
+    assert combined.json()["total"] == 1
+    assert combined.json()["entries"][0]["project_name"] == "Quantum Mechanics"
+
+    assert client.get("/api/ai/usage/history", params={"limit": 0}).status_code == 422
+    assert (
+        client.get("/api/ai/usage/history", params={"task": "unknown"}).status_code
+        == 422
+    )

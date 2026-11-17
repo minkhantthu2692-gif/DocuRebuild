@@ -4,15 +4,17 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.db.models import AiUsage
+from app.db.models import AiUsage, Project
 from app.schemas.ai import AiUsageOutcome
 
 WINDOW_HOURS = 24
 RECENT_LIMIT = 20
+HISTORY_LIMIT = 25
+HISTORY_MAX_LIMIT = 100
 
 
 def _utc_naive_now() -> datetime:
@@ -103,4 +105,50 @@ def usage_summary(session: Session, request_limit: int) -> dict[str, Any]:
         "successful": successful,
         "failed": failed,
         "recent": [_entry(row) for row in rows[:RECENT_LIMIT]],
+    }
+
+
+def usage_history(
+    session: Session,
+    *,
+    limit: int,
+    offset: int,
+    outcome: AiUsageOutcome | None = None,
+    task: str | None = None,
+) -> dict[str, Any]:
+    """Page through the local AI ledger, newest first, with project names.
+
+    The ledger intentionally stores metadata only, so this never joins document
+    text or model replies. A deleted project leaves its history intact and shows
+    no project name.
+    """
+    filters = []
+    if outcome is not None:
+        filters.append(AiUsage.outcome == outcome)
+    if task is not None:
+        filters.append(AiUsage.task == task)
+
+    total = int(
+        session.execute(
+            select(func.count()).select_from(AiUsage).where(*filters)
+        ).scalar_one()
+    )
+    statement = (
+        select(AiUsage, Project.name)
+        .outerjoin(Project, AiUsage.project_id == Project.id)
+        .where(*filters)
+        .order_by(AiUsage.created_at.desc(), AiUsage.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    entries: list[dict[str, Any]] = []
+    for usage, project_name in session.execute(statement).all():
+        entry = _entry(usage)
+        entry["project_name"] = project_name
+        entries.append(entry)
+    return {
+        "entries": entries,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
     }

@@ -163,6 +163,7 @@ GET    /api/meta
 GET    /api/ocr/capabilities
 GET    /api/ai/providers
 GET    /api/ai/usage
+GET    /api/ai/usage/history
 POST   /api/ai/probe
 GET    /api/settings
 PATCH  /api/settings
@@ -1157,6 +1158,12 @@ src/
   task, outcome, error code, project/page/block ids and a timestamp — never document
   text or the model reply. `GET /api/ai/usage` returns the rolling 24-hour count,
   success/failure split and the 20 most recent entries.
+- `GET /api/ai/usage/history` pages the same ledger newest first for the Settings
+  history dialog. `limit` defaults to 25 (maximum 100), `offset` is zero-based and
+  the optional `outcome` and `task` filters are validated against the same literal
+  types used when recording. Each row joins the project name; a row whose project
+  was deleted stays visible with `project_name: null`. The endpoint is read-only and
+  still returns metadata only.
 - `ai.request_limit` (0 = unlimited, maximum 10,000) is checked before each cleanup
   request. Reaching the cap returns `429 ai_request_limit_reached` without contacting
   the provider. The limit and usage summary are shown in Settings, and the recent

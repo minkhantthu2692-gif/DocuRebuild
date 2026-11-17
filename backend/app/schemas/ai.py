@@ -22,6 +22,7 @@ AiProbeErrorCode = Literal[
     "ai_invalid_response",
 ]
 AiTask = Literal["ocr_cleanup"]
+AiUsageTask = Literal["ocr_cleanup", "region_proposals", "equation_transcription"]
 AiSuggestionStatus = Literal["pending", "accepted", "rejected"]
 AiUsageOutcome = Literal["success", "error"]
 
@@ -111,6 +112,17 @@ class AiUsageOut(BaseModel):
     successful: int
     failed: int
     recent: list[AiUsageEntryOut]
+
+
+class AiUsageHistoryEntryOut(AiUsageEntryOut):
+    project_name: str | None = None
+
+
+class AiUsageHistoryOut(BaseModel):
+    entries: list[AiUsageHistoryEntryOut]
+    total: int
+    limit: int
+    offset: int
 
 
 class AiSuggestionDecisionIn(BaseModel):

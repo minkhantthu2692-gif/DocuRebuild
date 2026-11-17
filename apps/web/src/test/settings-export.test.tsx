@@ -40,6 +40,7 @@ vi.mock("@/hooks/use-app", () => ({
 vi.mock("@/hooks/use-ai", () => ({
   useAiProviders: () => ({ data: undefined }),
   useAiUsage: () => ({ data: undefined, isError: false }),
+  useAiUsageHistory: () => ({ data: undefined, isLoading: false, isError: false }),
   useProbeAiProvider: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 

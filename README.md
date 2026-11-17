@@ -479,7 +479,9 @@ as metadata only: provider, model, task, outcome, error code and time. The selec
 document text, page image and model output are never written to that usage history.
 Settings shows the requests from the last 24 hours and the most recent entries; when
 a configured limit is reached, the backend refuses the next request before contacting
-the server.
+the server. **View full history** pages the whole local ledger with outcome and task
+filters, names the project each request belonged to and keeps rows after that project
+is deleted (without a name).
 
 The URL is only contacted when you press **Test connection**, **Ask local AI** or
 **Ask AI for regions**; nothing is downloaded, loaded or generated in the background.
@@ -917,8 +919,10 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   unless remote consent is explicitly enabled. Cleanup responses are stored in the
   project database as reviewable proposals; region proposals are not stored at all.
 - AI usage history lives in the application database and contains only provider,
-  model, task, outcome, error code and timestamps. It never stores the selected
-  document text, page images, model output or the full server response.
+  model, task, outcome, error code, project/page/block ids and timestamps. It never
+  stores the selected document text, page images, model output or the full server
+  response. Settings pages it through a read-only history dialog; deleted projects
+  leave their rows behind without a project name.
 - The project activity log is stored in `project.db` and contains event type,
   summary, a small metadata payload (such as counts, format, byte size or OCR
   language), and a timestamp. It never stores document text, OCR output, image data
@@ -1087,7 +1091,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 3. Import and image processing | Complete |
 | 4. Local OCR and layout detection | In progress: OCR, layout hints, reviewable table proposals and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
-| 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage history, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
+| 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage-history browser, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, reviewable automatic table proposals from OCR word boxes, merged-cell spans read from PDF vector rules, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; vision tables, nested tables and automatic equation extraction pending |
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
 | 9. History, backup and recovery | **Complete**: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
