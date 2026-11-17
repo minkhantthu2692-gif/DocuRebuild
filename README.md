@@ -135,7 +135,8 @@ data on your device, and treats every AI result as a reviewable proposal.
   are written as their LaTeX source with any numbering kept after the equation. Word
   output embeds the project's own figures, including pictures inserted inline in the
   text, and converts equations to native Word
-  equations, keeping the LaTeX as a visible fallback when a formula cannot be
+  equations, including multi-line `aligned`/`gather` environments, keeping the LaTeX
+  as a visible fallback when a formula cannot be
   converted. PDF output embeds the same figures, keeps links clickable and needs a
   Unicode Myanmar font on the device for Burmese text. Markdown and plain text cannot
   carry a local image path, so an inline picture is written as `[Image: alt]` with its
@@ -186,7 +187,8 @@ data on your device, and treats every AI result as a reviewable proposal.
   citation shows `Equation (n)` and follows the equation when it moves.
   Only the LaTeX source is stored, so equations work offline and are part of the
   document, versions, backups, Markdown (`$$` blocks and `$...$` formulas), plain
-  text, Word export (native equations) and PDF export (exact LaTeX source).
+  text, Word export (native equations, including multi-line aligned/gathered rows)
+  and PDF export (exact LaTeX source).
   A saved equation region can be brought in the same way: its reviewed text starts
   the LaTeX, the dialog previews it beside the crop and only inserts what you
   confirm. If a vision model is configured, the same dialog can transcribe the

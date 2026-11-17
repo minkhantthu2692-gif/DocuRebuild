@@ -16,7 +16,7 @@ presented in the UI until it actually works.
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, OCR-layout, embedded-PDF-image, vector-drawing and raster-page ink region suggestions with a named source in the extraction dialog, library, verification and figure/text insertion, reviewed equation crops inserted as real equations, and on-demand AI transcription of one equation crop into reviewable LaTeX done; structured table reconstruction pending |
 | 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage-history browser, bulk AI proposal review, reviewable persisted OCR text cleanup, optional vision region proposals and optional equation-crop transcription done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, merged cells from a PDF's drawn rules, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, inserting a reviewed equation crop as a real numbered equation, optional vision-model transcription of one saved equation crop into reviewable LaTeX, and faithful Markdown/TXT/Word/PDF export; vision tables, merged-cell detection for text-only tables and automatic page-wide equation recognition pending |
-| 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, footnotes, per-project page headers/footers, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
+| 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, multi-line Word equations, footnotes, per-project page headers/footers, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
 | 11. Final QA and production release | Planned | Requires all previous phases |
@@ -533,6 +533,15 @@ the user must review every region before extracting it.
   keeps the exact LaTeX. Backslashes are not escaped as prose. Word export converts
   each equation through MathML to Office Math, so it stays editable in Word, and
   numbered equations keep their `(n)` label.
+- Multi-line equation environments convert to native Word equations. `aligned`,
+  `align`, `alignat`, `flalign`, `gather`, `multline`, `split` and `eqnarray`
+  (starred or not, with an optional `\displaystyle` prefix) are split into rows and
+  alignment cells by a brace- and environment-aware scanner. A one-column array
+  becomes a Word equation array; alignment points become right/left matrix columns,
+  so rows and every symbol are kept. Automatic `(1)`, `(2)` labels that the MathML
+  converter would invent for an unstarred `align` are never written, because a
+  project equation keeps its own single block-level number. A cell that cannot be
+  converted falls back to the exact LaTeX source instead of a partial equation.
 - Footnotes: the toolbar dialog inserts an inline atom that stores its own text and a
   stable id; the number is generated from document order, so inserting or deleting a
   note renumbers the rest without touching stored text. The node view shows a
@@ -570,8 +579,8 @@ the document flow rather than the source page geometry, and a formula the local 
 converter cannot handle is written as its LaTeX source. PDF export keeps every
 equation as LaTeX source by design.
 
-**Pending** - source page layout, broader OMML coverage and a bundled
-offline LaTeX typesetter.
+**Pending** - source page layout, remaining OMML edge cases (for example
+colour and accent semantics) and a bundled offline LaTeX typesetter.
 
 ## Phase 9 — History, backup and recovery (complete)
 

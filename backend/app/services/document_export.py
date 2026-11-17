@@ -894,6 +894,200 @@ def _attach_footnotes(document: Any, notes: list[str]) -> None:
     document.part.relate_to(part, RT.FOOTNOTES)
 
 
+_EQUATION_ARRAY_ENVIRONMENTS = (
+    "alignedat",
+    "aligned",
+    "alignat*",
+    "alignat",
+    "align*",
+    "align",
+    "flalign*",
+    "flalign",
+    "gather*",
+    "gather",
+    "multline*",
+    "multline",
+    "split",
+    "eqnarray*",
+    "eqnarray",
+)
+# Longest first keeps names that share a prefix (`align`/`aligned`,
+# `alignat`/`alignat*`) unambiguous to read; the required `}` already
+# prevents a short name from matching a longer environment.
+_EQUATION_ARRAY_BEGIN = re.compile(
+    r"^\s*(?:\\displaystyle\s*)?\\begin\{("
+    + "|".join(
+        re.escape(name)
+        for name in sorted(_EQUATION_ARRAY_ENVIRONMENTS, key=len, reverse=True)
+    )
+    + r")\}"
+)
+_EQUATION_ARRAY_ANYWHERE = re.compile(
+    r"\\begin\{("
+    + "|".join(
+        re.escape(name)
+        for name in sorted(_EQUATION_ARRAY_ENVIRONMENTS, key=len, reverse=True)
+    )
+    + r")\}"
+)
+
+
+def _split_equation_body(body: str) -> list[list[str]]:
+    """Split an aligned/array environment into rows of cells.
+
+    A ``\\\\`` outside braces and nested environments starts a new row, and a bare
+    ``&`` starts a new cell. Escaped braces and ``\\&`` stay literal, and nested
+    matrices keep their own row and column separators.
+    """
+    rows: list[list[str]] = []
+    cells: list[str] = []
+    current: list[str] = []
+    brace_depth = 0
+    environment_depth = 0
+    index = 0
+    length = len(body)
+
+    while index < length:
+        if (
+            body.startswith("\\\\", index)
+            and brace_depth == 0
+            and environment_depth == 0
+        ):
+            cells.append("".join(current))
+            rows.append(cells)
+            cells = []
+            current = []
+            index += 2
+            # LaTeX allows optional row spacing after the separator.
+            spacing = re.match(r"\[[^\]]*\]", body[index:])
+            if spacing is not None:
+                index += spacing.end()
+            continue
+
+        char = body[index]
+        if char == "\\":
+            if body.startswith("\\&", index):
+                current.append("\\&")
+                index += 2
+                continue
+            if body.startswith("\\begin{", index) or body.startswith("\\end{", index):
+                closing = body.find("}", index)
+                if closing != -1:
+                    if body.startswith("\\begin{", index):
+                        environment_depth += 1
+                    else:
+                        environment_depth = max(0, environment_depth - 1)
+                    current.append(body[index : closing + 1])
+                    index = closing + 1
+                    continue
+            if index + 1 < length and body[index + 1] in "{}":
+                current.append(body[index : index + 2])
+                index += 2
+                continue
+            current.append(char)
+            index += 1
+            continue
+
+        if char == "&" and brace_depth == 0 and environment_depth == 0:
+            cells.append("".join(current))
+            current = []
+            index += 1
+            continue
+
+        if char == "{":
+            brace_depth += 1
+        elif char == "}":
+            brace_depth = max(0, brace_depth - 1)
+        current.append(char)
+        index += 1
+
+    cells.append("".join(current))
+    rows.append(cells)
+    # A trailing row separator leaves one empty row; LaTeX does not render it.
+    if len(rows) > 1 and all(not cell.strip() for cell in rows[-1]):
+        rows.pop()
+    return rows
+
+
+def _equation_cell_omml(cell: str) -> str | None:
+    """Convert one alignment cell to the inner XML of a Word math element."""
+    source = cell.strip()
+    if not source:
+        return ""
+    try:
+        mathml = latex2mathml.converter.convert(source)
+        omml = mathml2omml.convert(mathml)
+    except Exception:
+        return None
+    if not omml or not omml.startswith("<m:oMath") or not omml.endswith("</m:oMath>"):
+        return None
+    return omml[omml.index(">") + 1 : -len("</m:oMath>")]
+
+
+def _equation_array_omml(latex: str) -> tuple[bool, str | None]:
+    """Convert ``aligned``/``align``/``gather`` style environments to OMML.
+
+    Returns ``(detected, source)``. ``detected`` is true when the source is an
+    equation array, even if it could not be converted, so the caller does not fall
+    back to a converter that would invent per-row numbers. A one-column array
+    becomes a Word equation array; alignment points become right/left matrix
+    columns, which preserve the layout without dropping any symbol.
+    """
+    match = _EQUATION_ARRAY_BEGIN.match(latex)
+    if match is None:
+        return False, None
+    environment = match.group(1)
+    end_marker = f"\\end{{{environment}}}"
+    text = latex.strip()
+    if not text.endswith(end_marker):
+        return False, None
+    body = text[match.end() : -len(end_marker)]
+    if environment in ("alignedat", "alignat", "alignat*"):
+        # These environments require a column-pair count, e.g. {2}.
+        body = re.sub(r"^\s*\{\s*\d+\s*\}", "", body)
+    # A nested array environment would need recursive layout; keep the exact
+    # LaTeX fallback instead of emitting a half-converted equation.
+    if _EQUATION_ARRAY_ANYWHERE.search(body):
+        return True, None
+
+    rows = _split_equation_body(body)
+    converted: list[list[str]] = []
+    for row in rows:
+        cells: list[str] = []
+        for cell in row:
+            omml = _equation_cell_omml(cell)
+            if omml is None:
+                return True, None
+            cells.append(omml)
+        converted.append(cells or [""])
+
+    width = max(len(row) for row in converted)
+    if width == 1:
+        if len(converted) == 1:
+            return True, f"<m:oMath>{converted[0][0]}</m:oMath>"
+        body_rows = "".join(f"<m:e>{row[0]}</m:e>" for row in converted)
+        return True, f"<m:oMath><m:eqArr>{body_rows}</m:eqArr></m:oMath>"
+
+    columns = "".join(
+        '<m:mc><m:mcPr><m:count m:val="1"/><m:mcJc m:val="{}"/></m:mcPr></m:mc>'.format(
+            "right" if column % 2 == 0 else "left"
+        )
+        for column in range(width)
+    )
+    matrix_rows = []
+    for row in converted:
+        padded = row + [""] * (width - len(row))
+        cells = "".join(f"<m:e>{cell}</m:e>" for cell in padded)
+        matrix_rows.append(f"<m:mr>{cells}</m:mr>")
+    return True, (
+        "<m:oMath><m:m><m:mPr><m:mcs>"
+        f"{columns}"
+        "</m:mcs></m:mPr>"
+        + "".join(matrix_rows)
+        + "</m:m></m:oMath>"
+    )
+
+
 class _DocxRenderer:
     """Turn the stored Tiptap JSON into native Word content."""
 
@@ -912,13 +1106,16 @@ class _DocxRenderer:
     def _omml(self, latex: str) -> str | None:
         if latex in self._omml_cache:
             return self._omml_cache[latex]
-        source: str | None
-        try:
-            mathml = latex2mathml.converter.convert(latex)
-            source = mathml2omml.convert(mathml)
-        except Exception:
-            # A formula that cannot be converted keeps its LaTeX below.
-            source = None
+        detected, array_source = _equation_array_omml(latex)
+        if detected:
+            source = array_source
+        else:
+            try:
+                mathml = latex2mathml.converter.convert(latex)
+                source = mathml2omml.convert(mathml)
+            except Exception:
+                # A formula that cannot be converted keeps its LaTeX below.
+                source = None
         self._omml_cache[latex] = source
         return source
 

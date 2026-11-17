@@ -168,6 +168,73 @@ def test_docx_export_writes_native_equations(tmp_path: Path) -> None:
     assert all("a = b (1)" not in text for text in texts)
 
 
+def test_docx_export_writes_aligned_equations_as_native_math(tmp_path: Path) -> None:
+    latex = r"\begin{aligned} a &= b + c \\ d &= e \end{aligned}"
+    content = {"type": "doc", "content": [{"type": "blockMath", "attrs": {"latex": latex}}]}
+    document = _open(render_docx(content, tmp_path))
+    body = _body_xml(document)
+
+    # Each row is a matrix row with the alignment point kept as a column break.
+    assert "m:oMath" in body
+    assert "<m:m>" in body
+    assert body.count("<m:mr>") == 2
+    assert 'm:mcJc m:val="right"' in body
+    assert 'm:mcJc m:val="left"' in body
+    assert "<m:t>b</m:t>" in body and "<m:t>+</m:t>" in body
+    # The exact source is only used when conversion fails.
+    assert "aligned" not in body
+
+
+def test_docx_export_never_invents_align_row_numbers(tmp_path: Path) -> None:
+    latex = r"\begin{align} x &= 1 \\ y &= 2 \end{align}"
+    content = {"type": "doc", "content": [{"type": "blockMath", "attrs": {"latex": latex}}]}
+    body = _body_xml(_open(render_docx(content, tmp_path)))
+
+    # latex2mathml adds (1)/(2) for an unstarred align; DocuRebuild numbers a
+    # whole equation itself, so no per-row labels may appear.
+    assert "(1)" not in body
+    assert "(2)" not in body
+    assert "<m:t>x</m:t>" in body and "<m:t>y</m:t>" in body
+
+
+def test_docx_export_uses_an_equation_array_for_gather(tmp_path: Path) -> None:
+    latex = r"\begin{gather} a = b \\ c = d \end{gather}"
+    content = {"type": "doc", "content": [{"type": "blockMath", "attrs": {"latex": latex}}]}
+    body = _body_xml(_open(render_docx(content, tmp_path)))
+
+    assert "<m:eqArr>" in body
+    assert body.count("<m:box>") >= 2
+    assert "<m:t>a</m:t>" in body and "<m:t>d</m:t>" in body
+
+
+def test_docx_export_keeps_a_matrix_inside_an_aligned_equation(tmp_path: Path) -> None:
+    latex = (
+        r"\displaystyle\begin{aligned}"
+        r" A &= \begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix} \\ b &= c"
+        r" \end{aligned}"
+    )
+    content = {"type": "doc", "content": [{"type": "blockMath", "attrs": {"latex": latex}}]}
+    body = _body_xml(_open(render_docx(content, tmp_path)))
+
+    # The inner pmatrix keeps its own rows; the outer rows are not split by it.
+    assert "<m:m>" in body
+    assert "<m:t>4</m:t>" in body
+    assert "pmatrix" not in body
+
+
+def test_docx_export_falls_back_for_an_unconvertible_equation_array(
+    tmp_path: Path,
+) -> None:
+    latex = r"\begin{aligned} a &= \frac{ \\ b &= c \end{aligned}"
+    content = {"type": "doc", "content": [{"type": "blockMath", "attrs": {"latex": latex}}]}
+    document = _open(render_docx(content, tmp_path))
+    texts = _paragraph_texts(document)
+
+    # A broken row keeps the exact LaTeX rather than a partial equation.
+    assert any("\\begin{aligned}" in text for text in texts)
+    assert "m:oMath" not in _body_xml(document)
+
+
 def test_docx_export_falls_back_to_latex_when_conversion_fails(tmp_path: Path) -> None:
     content = {
         "type": "doc",

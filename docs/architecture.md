@@ -843,6 +843,18 @@ src/
   centered and numbered with the same document-order counter used by Markdown/TXT;
   inline math stays inline. When either converter rejects the source, the LaTeX is
   written in italics so the formula is still readable.
+- Multi-line equation environments (`aligned`, `align`, `alignat`, `flalign`,
+  `gather`, `multline`, `split` and `eqnarray`, starred or not) are converted by
+  `_equation_array_omml` before the generic converter runs. `latex2mathml` emits a
+  bare `&` for an `aligned` body, which is invalid XML, and adds invented `(1)`,
+  `(2)` labels for an unstarred `align`; both would either lose the equation or
+  fabricate numbering. Instead the rows are split outside nested environments,
+  optional row spacing is removed, escaped `\&` and `\{` stay literal, and each cell
+  is converted on its own. A one-column array becomes a Word `<m:eqArr>`; alignment
+  points become matrix columns with alternating right/left justification, so every
+  symbol and row is kept. A failed cell falls back to the exact LaTeX rather than
+  emitting a partial equation. Per-row numbers are never synthesized: DocuRebuild's
+  own block-level numbering remains the only source of equation labels.
 - Tables are native Word tables with the `Table Grid` style. Column spans and row
   spans are computed on a grid first, then the target cells are merged, so merged
   content is neither duplicated nor dropped. Header cells are bold and shaded.
