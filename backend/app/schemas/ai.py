@@ -141,3 +141,22 @@ class AiRegionProposalsOut(BaseModel):
     provider: AiProviderKind
     model: str
     proposals: list[RegionProposalOut]
+
+
+class AiEquationRequest(BaseModel):
+    """Optional per-request overrides for the saved vision connection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: AiProviderKind | None = None
+    base_url: str | None = None
+    model: str | None = None
+
+
+class AiEquationOut(BaseModel):
+    element_id: str
+    page_id: str
+    latex: str
+    provider: AiProviderKind
+    model: str
+    base_url: str

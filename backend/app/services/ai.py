@@ -62,6 +62,16 @@ MAX_VISION_REGIONS = 12
 MIN_VISION_REGION_SIDE = 0.02
 VISION_REGION_KINDS = frozenset({"figure", "table", "equation"})
 
+EQUATION_PROMPT = (
+    "You transcribe one mathematical equation from a document image crop for a "
+    "reconstruction tool. Return only the LaTeX that typesets exactly the equation "
+    "that is visible: no prose, no code fence, no delimiters and no explanation. "
+    "Never add symbols, terms or numbers that are not clearly visible, and never "
+    "simplify or solve the equation. If no equation can be read, return an empty "
+    "string."
+)
+MAX_EQUATION_LENGTH = 4_000
+
 
 class _FetchFailure(Exception):
     def __init__(
@@ -96,6 +106,15 @@ class VisionCompletion(NamedTuple):
     """Validated, normalized regions proposed from one page image."""
 
     regions: list[dict[str, Any]]
+    provider: AiProviderKind
+    model: str
+    base_url: str
+
+
+class EquationCompletion(NamedTuple):
+    """LaTeX proposed for one equation crop, still unverified."""
+
+    latex: str
     provider: AiProviderKind
     model: str
     base_url: str
@@ -418,29 +437,35 @@ def _vision_completion(
     base_url: str,
     model: str,
     image_b64: str,
+    *,
+    prompt: str = VISION_PROMPT,
+    user_text: str = "Analyse the attached document page image.",
+    json_mode: bool = True,
 ) -> str:
     # The data URL keeps the image in the same request body as the prompt, so
     # the server never has to fetch anything on its own.
     image_url = f"data:image/jpeg;base64,{image_b64}"
+    ollama_payload: dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": prompt},
+            {
+                "role": "user",
+                "content": user_text,
+                "images": [image_b64],
+            },
+        ],
+        "stream": False,
+        "options": {"temperature": 0},
+    }
+    if json_mode:
+        ollama_payload["format"] = "json"
     try:
         if provider == "ollama":
             _status, body = _read_json(
                 f"{base_url}/api/chat",
                 GENERATE_TIMEOUT,
-                {
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": VISION_PROMPT},
-                        {
-                            "role": "user",
-                            "content": "Analyse the attached document page image.",
-                            "images": [image_b64],
-                        },
-                    ],
-                    "stream": False,
-                    "format": "json",
-                    "options": {"temperature": 0},
-                },
+                ollama_payload,
             )
         else:
             _status, body = _read_json(
@@ -449,14 +474,11 @@ def _vision_completion(
                 {
                     "model": model,
                     "messages": [
-                        {"role": "system", "content": VISION_PROMPT},
+                        {"role": "system", "content": prompt},
                         {
                             "role": "user",
                             "content": [
-                                {
-                                    "type": "text",
-                                    "text": "Analyse the attached document page image.",
-                                },
+                                {"type": "text", "text": user_text},
                                 {"type": "image_url", "image_url": {"url": image_url}},
                             ],
                         },
@@ -469,7 +491,7 @@ def _vision_completion(
         raise AppError(
             502,
             exc.error_code,
-            "The configured local AI server could not analyse the page image.",
+            "The configured local AI server could not analyse the image.",
         ) from exc
     return _assistant_content(body, provider)
 
@@ -595,6 +617,88 @@ def request_region_proposals(
         RequestAttempt(resolved_provider, resolved_model, resolved_url, None),
     )
     return VisionCompletion(regions, resolved_provider, resolved_model, resolved_url)
+
+
+def parse_equation_latex(content: str) -> str:
+    """Reduce a model reply to the LaTeX source it contains.
+
+    Models often wrap the answer in a code fence, math delimiters or quotes even
+    when the prompt forbids it. Those wrappers are removed, but the expression
+    itself is never rewritten: an unreadable or empty reply is reported instead of
+    guessed at.
+    """
+    value = _strip_code_fence(content.strip())
+    if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+        value = value[1:-1].strip()
+    pairs = (("$$", "$$"), ("\\[", "\\]"), ("\\(", "\\)"), ("$", "$"))
+    for opening, closing in pairs:
+        if (
+            value.startswith(opening)
+            and value.endswith(closing)
+            and len(value) > len(opening) + len(closing)
+        ):
+            value = value[len(opening) : -len(closing)].strip()
+            break
+    if not value:
+        raise AppError(
+            502,
+            "ai_equation_empty",
+            "The configured local AI server returned no LaTeX for this equation.",
+        )
+    if len(value) > MAX_EQUATION_LENGTH:
+        raise AppError(
+            502,
+            "ai_text_too_long",
+            "The AI response was too long to use as one equation.",
+        )
+    return value
+
+
+def request_equation_latex(
+    profile: AiProfileSettings,
+    image_b64: str,
+    *,
+    vision_model: str,
+    provider: AiProviderKind | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+    on_attempt: Callable[[RequestAttempt], None] | None = None,
+) -> EquationCompletion:
+    resolved_provider, resolved_url, resolved_model = resolve_profile(
+        profile,
+        provider=provider,
+        base_url=base_url,
+        model=model if model is not None else vision_model,
+    )
+    try:
+        content = _vision_completion(
+            resolved_provider,
+            resolved_url,
+            resolved_model,
+            image_b64,
+            prompt=EQUATION_PROMPT,
+            user_text="Transcribe the equation in the attached crop.",
+            json_mode=False,
+        )
+    except AppError as exc:
+        report_attempt(
+            on_attempt,
+            RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
+        )
+        raise
+    try:
+        latex = parse_equation_latex(content)
+    except AppError as exc:
+        report_attempt(
+            on_attempt,
+            RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
+        )
+        raise
+    report_attempt(
+        on_attempt,
+        RequestAttempt(resolved_provider, resolved_model, resolved_url, None),
+    )
+    return EquationCompletion(latex, resolved_provider, resolved_model, resolved_url)
 
 
 def request_cleanup(

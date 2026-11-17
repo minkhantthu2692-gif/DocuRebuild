@@ -54,8 +54,8 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness |
 | `services.table_structure` | Reviewable table proposals: word-box row clustering and whitespace column bands, plus exact merged-cell grids from a PDF's drawn rules; cell text/confidence/flags/alignment, page-level grouping of vertically contiguous row blocks, vector/OCR de-duplication, source pixel box, size caps and typed refusal errors |
 | `app.ocr_benchmark` | Local CER/WER measurement against checked reference transcripts, by running the OCR adapter or scoring a stored transcript; validates fixtures and never uploads |
-| `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, vision region requests, listing and review decisions |
-| `services.ai_vision` | Page-image encoding, normalized-to-source rectangle mapping and filtering for optional vision region proposals |
+| `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, vision region and equation-crop requests, LaTeX reply reduction, listing and review decisions |
+| `services.ai_vision` | Page and region image encoding, normalized-to-source rectangle mapping and filtering for optional vision region proposals, and one-crop equation transcription |
 | `services.ai_usage` | Local AI request metadata, rolling-window request counting and usage summaries |
 | `app.scheduled_backup` | Optional one-pass CLI entry point for external schedulers: creates due automatic copies, respects saved preferences and reports failures |
 | `api.routes.*` | HTTP surface (`/api/...`) |
@@ -219,9 +219,11 @@ PATCH  /api/projects/{id}/ai-suggestions/{suggestion_id}
 GET    /api/projects/{id}/pages/{page_id}/elements
 POST   /api/projects/{id}/pages/{page_id}/elements
 GET    /api/projects/{id}/pages/{page_id}/region-proposals
+POST   /api/projects/{id}/pages/{page_id}/ai-region-proposals
 PATCH  /api/projects/{id}/elements/{element_id}
 POST   /api/projects/{id}/elements/{element_id}/text
 PATCH  /api/projects/{id}/elements/{element_id}/text
+POST   /api/projects/{id}/elements/{element_id}/ai-equation
 DELETE /api/projects/{id}/elements/{element_id}
 GET    /api/projects/{id}/assets/{asset_id}/file
 ```
@@ -478,6 +480,16 @@ src/
   usual provenance blockquote. The stored crop and the element's extracted text are
   unchanged, so the formula is a separate, reviewable reconstruction rather than a
   claim about the OCR text.
+- The same dialog can ask the configured vision model for LaTeX. It posts to
+  `POST .../elements/{element_id}/ai-equation`, which reads the element first, refuses
+  anything that is not an equation region (`409 ai_equation_region_required`) and
+  missing crops, then sends only the saved crop. The reply is reduced to its LaTeX
+  content (code fence, `$$`/`\[`/`\(`/`$` delimiters and wrapping quotes are removed,
+  never the expression itself); an empty reply is `502 ai_equation_empty`. The dialog
+  fills the review field and shows the model plus an unverified warning, but does not
+  persist an `ai_suggestions` row and never inserts on its own. The provenance note
+  credits the model only while the field still matches its reply; any edit falls back
+  to the manual note. Each attempt is recorded with task `equation_transcription`.
 - A selected figure can be edited through the toolbar caption dialog. Editing
   applies only to a real node selection (`selectedFigure` ignores a collapsed
   cursor), writes only the `caption`, `alt` and optional `numbered` attributes, and
@@ -634,7 +646,9 @@ src/
   through `renderEquationPreview` with `throwOnError: true` and `trust: false`
   (`displayMode` follows the equation kind); blank or invalid LaTeX disables
   insertion instead of saving a broken equation. Pasting LaTeX is supported through
-  the normal textarea, but the app does not recognise equations from OCR or AI yet.
+  the normal textarea. Equations are not recognised automatically; the only AI path
+  is the explicit per-region transcription described above, whose result stays
+  unverified until the user inserts it.
 - The inline extension's automatic `$$...$$` input rule is disabled, so typing
   dollars in prose is never silently converted into math. This keeps the dialog the
   single, explicit insertion path.
@@ -1122,7 +1136,7 @@ src/
   and saves explicitly, so typing a URL does not trigger a PATCH or a network request.
 - `app_settings.ai.vision_model` is a separate optional model name that reuses the
   same provider, base URL and remote-consent decision. An empty value keeps image AI
-  disabled and `POST .../ai-region-proposals` returns
+  disabled and both `POST .../ai-region-proposals` and `POST .../ai-equation` return
   `409 ai_vision_not_configured` before contacting the server or recording usage.
 - `POST /api/ai/probe` is user-triggered. It reads Ollama `/api/tags` and
   `/api/version`, or OpenAI-compatible `/models`, with a short timeout and a
@@ -1193,12 +1207,21 @@ src/
   dimensions, provider, model and low-confidence `ai_vision` proposals. It does not
   insert rows in `elements` or `ai_suggestions`; choosing a rectangle only prefills
   the extraction dialog. Each request is recorded with task `region_proposals`.
+- `POST .../elements/{element_id}/ai-equation` reuses the same saved vision model and
+  consent boundary. It resolves the element before any provider setting, refuses a
+  non-equation region and a missing crop, resizes only that crop, and asks for plain
+  LaTeX with `temperature: 0` and JSON mode off. The reply is returned as an
+  unverified proposal (`latex`, provider, model, base URL) and is not persisted; the
+  dialog keeps it in memory until the user edits or inserts it. Usage is recorded
+  with task `equation_transcription` and the element's page, without the crop, the
+  reply or any document text.
 - Tests use a loopback stub HTTP server, not a real model, and cover discovery,
   unreachable/timeout/HTTP/invalid probes, remote-consent refusal, both adapters,
   proposal listing and filtering, usage recording and rolling-limit enforcement,
   stale runs, stale text, rejection, validation, vision coordinate mapping and
-  vision output filtering. This verifies protocol handling and review safety, not
-  model quality.
+  vision output filtering, plus equation-crop transcription, wrapper reduction,
+  empty replies, region-kind refusal and remote consent. This verifies protocol
+  handling and review safety, not model quality.
 
 ### Design system
 

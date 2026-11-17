@@ -1,10 +1,12 @@
-import { Sigma } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { CircleAlert, Sigma, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import type { ElementSummary } from "@docurebuild/shared-types";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,7 +17,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/input";
+import { useApiErrorMessage } from "@/hooks/use-api-error";
+import { useAppSettings } from "@/hooks/use-app";
 import { api } from "@/lib/api";
 import { renderEquationPreview } from "@/lib/editor-equation";
 import { useWorkspaceActions } from "./workspace-actions-context";
@@ -49,40 +54,82 @@ export function RegionFormulaDialog({
   const { t } = useTranslation("workspace");
   const { t: tCommon } = useTranslation("common");
   const { insertEquation } = useWorkspaceActions();
+  const errorMessage = useApiErrorMessage();
+  const queryClient = useQueryClient();
+  const settingsQuery = useAppSettings();
+  const visionModel = settingsQuery.data?.ai.vision_model?.trim() ?? "";
 
   const [latex, setLatex] = useState("");
   const [numbered, setNumbered] = useState(false);
   const [includeNote, setIncludeNote] = useState(true);
+  const [aiProposal, setAiProposal] = useState<{
+    latex: string;
+    model: string;
+  } | null>(null);
+
+  const transcribe = useMutation({
+    mutationFn: (elementId: string) =>
+      api.createAiEquationProposal(projectId, elementId),
+    onSuccess: (response) => {
+      setLatex(response.latex);
+      setAiProposal({ latex: response.latex, model: response.model });
+      toast.success(t("elements.formula.aiProposedToast"));
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+    onSettled: () => {
+      // Every attempt counts against the local request limit.
+      void queryClient.invalidateQueries({ queryKey: ["ai", "usage"] });
+    },
+  });
 
   useEffect(() => {
     if (!open) return;
     setLatex(element?.text ?? "");
     setNumbered(false);
     setIncludeNote(true);
+    setAiProposal(null);
   }, [open, element?.id, element?.text]);
 
   const preview = useMemo(() => renderEquationPreview(latex, "block"), [latex]);
   const source = latex.trim();
   const canInsert = Boolean(element) && source.length > 0 && !preview.error;
+  const canTranscribe =
+    Boolean(element) &&
+    visionModel.length > 0 &&
+    !settingsQuery.isLoading &&
+    !transcribe.isPending;
+  // A note may only credit the model while the source still matches its reply.
+  const usesAiSource =
+    includeNote && aiProposal !== null && aiProposal.latex === source;
 
   const cropSrc = element
     ? api.assetUrl(projectId, element.asset_id, element.updated_at)
     : null;
 
+  const handleTranscribe = () => {
+    if (!element || !canTranscribe) return;
+    transcribe.mutate(element.id);
+  };
+
   const handleInsert = () => {
     if (!element || !canInsert) return;
-    insertEquation({
-      latex: source,
-      numbered,
-      note: includeNote
-        ? t("elements.formula.sourceNote", {
+    const status = element.verified
+      ? t("elements.verified")
+      : t("elements.unverified");
+    let note: string | null = null;
+    if (includeNote) {
+      note = usesAiSource
+        ? t("elements.formula.aiSourceNote", {
             page: pageNumber ?? "—",
-            status: element.verified
-              ? t("elements.verified")
-              : t("elements.unverified"),
+            model: aiProposal?.model ?? "",
+            status,
           })
-        : null,
-    });
+        : t("elements.formula.sourceNote", {
+            page: pageNumber ?? "—",
+            status,
+          });
+    }
+    insertEquation({ latex: source, numbered, note });
     toast.success(t("elements.formula.inserted"));
     onOpenChange(false);
     onInserted?.();
@@ -116,7 +163,23 @@ export function RegionFormulaDialog({
             ) : null}
 
             <div className="min-w-0 flex-1 space-y-1">
-              <Label htmlFor="formula-latex">{t("editor.equation.source")}</Label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="formula-latex">{t("editor.equation.source")}</Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={handleTranscribe}
+                  disabled={!canTranscribe}
+                >
+                  {transcribe.isPending ? (
+                    <Spinner className="size-icon-sm" />
+                  ) : (
+                    <Sparkles />
+                  )}
+                  {t("elements.formula.aiTranscribe")}
+                </Button>
+              </div>
               <Textarea
                 id="formula-latex"
                 dir="ltr"
@@ -130,6 +193,28 @@ export function RegionFormulaDialog({
               <p className="text-2xs leading-relaxed text-muted-foreground">
                 {t("elements.formula.sourceHint")}
               </p>
+              {visionModel ? (
+                <p className="text-2xs leading-relaxed text-muted-foreground">
+                  {t("elements.formula.aiHint")}
+                </p>
+              ) : (
+                <p className="text-2xs leading-relaxed text-muted-foreground">
+                  {t("elements.formula.aiUnavailable")}
+                </p>
+              )}
+              {aiProposal ? (
+                <div className="flex flex-wrap items-start gap-1.5 rounded-md border border-warning/30 bg-warning/5 px-2 py-1.5">
+                  <Badge variant="warning">
+                    <CircleAlert aria-hidden="true" />
+                    {t("elements.formula.aiProposed", {
+                      model: aiProposal.model,
+                    })}
+                  </Badge>
+                  <p className="text-2xs leading-relaxed text-muted-foreground">
+                    {t("elements.formula.aiWarning")}
+                  </p>
+                </div>
+              ) : null}
             </div>
           </div>
 

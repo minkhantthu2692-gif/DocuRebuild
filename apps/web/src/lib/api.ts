@@ -1,4 +1,6 @@
 import type {
+  AiEquationRequest,
+  AiEquationResponse,
   AiProbeRequest,
   AiProbeResponse,
   AiProvidersResponse,
@@ -400,6 +402,15 @@ export const api = {
   ) =>
     request<AiRegionProposalsResponse>(
       `/projects/${projectId}/pages/${pageId}/ai-region-proposals`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  createAiEquationProposal: (
+    projectId: string,
+    elementId: string,
+    payload: AiEquationRequest = {},
+  ) =>
+    request<AiEquationResponse>(
+      `/projects/${projectId}/elements/${elementId}/ai-equation`,
       { method: "POST", body: JSON.stringify(payload) },
     ),
 

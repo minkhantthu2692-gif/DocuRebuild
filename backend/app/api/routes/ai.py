@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import DbSession, ProjectDep
 from app.core.errors import AppError
 from app.schemas.ai import (
+    AiEquationOut,
+    AiEquationRequest,
     AiProbeOut,
     AiProbeRequest,
     AiProvidersOut,
@@ -99,6 +101,66 @@ def create_ai_region_proposals(
         result = ai_vision.propose_regions(
             directory,
             page_id,
+            ai_settings.text,
+            ai_settings.vision_model,
+            provider=payload.provider,
+            base_url=payload.base_url,
+            model=payload.model,
+            on_attempt=record_attempt,
+        )
+    except Exception:
+        _commit_usage(session)
+        raise
+    touch_project(session, project)
+    return result
+
+
+@router.post(
+    "/projects/{project_id}/elements/{element_id}/ai-equation",
+    response_model=AiEquationOut,
+)
+def create_ai_equation_proposal(
+    project: ProjectDep,
+    element_id: str,
+    payload: AiEquationRequest,
+    session: DbSession,
+) -> dict[str, Any]:
+    directory = project_service.ensure_project_storage(project)
+    # Resolve the element first so a missing region or a non-equation crop is
+    # reported before any provider setting or request limit is involved.
+    element = ai_vision.element_context(directory, element_id)
+    if element["kind"] != "equation":
+        raise AppError(
+            409,
+            "ai_equation_region_required",
+            "Only an equation region can be transcribed.",
+        )
+    ai_settings = get_app_settings(session).ai
+    if not ai_settings.vision_model:
+        raise AppError(
+            409,
+            "ai_vision_not_configured",
+            "Choose a vision model in Settings before transcribing equations.",
+        )
+    ai_usage.ensure_within_limit(session, ai_settings.request_limit)
+
+    def record_attempt(attempt: ai_service.RequestAttempt) -> None:
+        ai_usage.record_attempt(
+            session,
+            provider=attempt.provider,
+            model=attempt.model,
+            task="equation_transcription",
+            outcome="error" if attempt.error_code else "success",
+            error_code=attempt.error_code,
+            project_id=project.id,
+            page_id=element["page_id"],
+            block_id=None,
+        )
+
+    try:
+        result = ai_vision.transcribe_equation(
+            directory,
+            element_id,
             ai_settings.text,
             ai_settings.vision_model,
             provider=payload.provider,

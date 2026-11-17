@@ -979,3 +979,193 @@ def test_vision_region_proposals_respect_remote_consent_and_limit(
     blocked = _vision(client, project["id"], page["id"])
     assert blocked.status_code == 429, blocked.text
     assert blocked.json()["detail"]["code"] == "ai_request_limit_reached"
+
+
+def _equation_region(
+    client: TestClient, project_id: str, page_id: str, kind: str = "equation"
+) -> dict:
+    response = client.post(
+        f"/api/projects/{project_id}/pages/{page_id}/elements",
+        json={
+            "kind": kind,
+            "x": 100,
+            "y": 120,
+            "width": 300,
+            "height": 120,
+            "caption": "",
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _equation(
+    client: TestClient, project_id: str, element_id: str, payload: dict | None = None
+):
+    return client.post(
+        f"/api/projects/{project_id}/elements/{element_id}/ai-equation",
+        json=payload or {},
+    )
+
+
+def test_equation_transcription_requires_a_vision_model(
+    client: TestClient, project: dict
+) -> None:
+    page = upload_pages(client, project["id"], ["ai-equation-unconfigured.png"])[0]
+    element = _equation_region(client, project["id"], page["id"])
+    response = _equation(client, project["id"], element["id"])
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "ai_vision_not_configured"
+    assert _usage(client)["used"] == 0
+
+
+def test_equation_transcription_returns_a_reviewable_proposal(
+    client: TestClient, project: dict, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="llava:7b")
+    stub_ai.state.vision_content = "E = mc^{2}"
+    page = upload_pages(client, project["id"], ["ai-equation.png"])[0]
+    element = _equation_region(client, project["id"], page["id"])
+
+    response = _equation(client, project["id"], element["id"])
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["latex"] == "E = mc^{2}"
+    assert body["provider"] == "ollama"
+    assert body["model"] == "llava:7b"
+    assert body["element_id"] == element["id"]
+    assert body["page_id"] == page["id"]
+
+    payload = stub_ai.state.last_payload
+    assert payload is not None
+    # The saved vision model is used, not the text model, and the crop is inline.
+    assert payload["model"] == "llava:7b"
+    assert payload["messages"][-1]["images"]
+    # LaTeX is requested as plain text, so JSON mode must stay off.
+    assert "format" not in payload
+
+    # The proposal is not written anywhere: the element still has no text.
+    listed = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/elements"
+    )
+    assert listed.json()[0]["text"] == ""
+
+    usage = _usage(client)
+    assert usage["used"] == 1
+    assert usage["recent"][0]["task"] == "equation_transcription"
+    assert usage["recent"][0]["page_id"] == page["id"]
+    assert usage["recent"][0]["block_id"] is None
+
+
+def test_equation_transcription_strips_model_wrappers(
+    client: TestClient, project: dict, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="llava:7b")
+    stub_ai.state.vision_content = "```latex\n$$\nE = mc^2\n$$\n```"
+    page = upload_pages(client, project["id"], ["ai-equation-wrapper.png"])[0]
+    element = _equation_region(client, project["id"], page["id"])
+
+    response = _equation(client, project["id"], element["id"])
+    assert response.status_code == 200, response.text
+    assert response.json()["latex"] == "E = mc^2"
+
+
+def test_equation_transcription_refuses_other_region_kinds(
+    client: TestClient, project: dict, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="llava:7b")
+    page = upload_pages(client, project["id"], ["ai-equation-figure.png"])[0]
+    element = _equation_region(client, project["id"], page["id"], kind="figure")
+
+    response = _equation(client, project["id"], element["id"])
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "ai_equation_region_required"
+    assert stub_ai.state.requests == []
+    assert _usage(client)["used"] == 0
+
+
+def test_equation_transcription_reports_an_empty_reply(
+    client: TestClient, project: dict, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="llava:7b")
+    stub_ai.state.vision_content = "   "
+    page = upload_pages(client, project["id"], ["ai-equation-empty.png"])[0]
+    element = _equation_region(client, project["id"], page["id"])
+
+    response = _equation(client, project["id"], element["id"])
+    assert response.status_code == 502, response.text
+    assert response.json()["detail"]["code"] == "ai_equation_empty"
+    usage = _usage(client)
+    assert usage["used"] == 1
+    assert usage["recent"][0]["outcome"] == "error"
+    assert usage["recent"][0]["error_code"] == "ai_equation_empty"
+    assert usage["recent"][0]["task"] == "equation_transcription"
+
+
+def test_equation_transcription_supports_openai_compatible_override(
+    client: TestClient, project: dict, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="llava:7b")
+    stub_ai.state.vision_content = "\\frac{a}{b}"
+    page = upload_pages(client, project["id"], ["ai-equation-openai.png"])[0]
+    element = _equation_region(client, project["id"], page["id"])
+
+    response = _equation(
+        client,
+        project["id"],
+        element["id"],
+        {
+            "provider": "openai_compatible",
+            "base_url": stub_ai.base_url_v1,
+            "model": "vision-local",
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["latex"] == "\\frac{a}{b}"
+    assert body["provider"] == "openai_compatible"
+    assert body["model"] == "vision-local"
+
+    payload = stub_ai.state.last_payload
+    assert payload is not None
+    content = payload["messages"][-1]["content"]
+    assert isinstance(content, list)
+    image = next(item for item in content if item["type"] == "image_url")
+    assert image["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+
+def test_equation_transcription_respects_remote_consent(
+    client: TestClient, project: dict
+) -> None:
+    _configure_ai(
+        client,
+        base_url="http://192.0.2.10:11434",
+        vision_model="llava:7b",
+    )
+    page = upload_pages(client, project["id"], ["ai-equation-consent.png"])[0]
+    element = _equation_region(client, project["id"], page["id"])
+
+    response = _equation(client, project["id"], element["id"])
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"]["code"] == "ai_remote_not_allowed"
+    assert _usage(client)["used"] == 0
+
+
+def test_equation_transcription_rejects_an_unknown_region(
+    client: TestClient, project: dict, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="llava:7b")
+    missing = "00000000-0000-4000-8000-000000000000"
+    response = _equation(client, project["id"], missing)
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"]["code"] == "element_not_found"
+    assert stub_ai.state.requests == []
+    assert _usage(client)["used"] == 0
+
+
+def test_equation_latex_parser_strips_only_wrappers() -> None:
+    from app.services.ai import parse_equation_latex
+
+    assert parse_equation_latex("```\n$$x^{2}$$\n```") == "x^{2}"
+    assert parse_equation_latex('"\\[ a + b \\]"') == "a + b"
+    assert parse_equation_latex("  E = mc^2  ") == "E = mc^2"

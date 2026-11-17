@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ElementSummary } from "@docurebuild/shared-types";
 
@@ -7,10 +8,27 @@ import { RegionFormulaDialog } from "@/components/workspace/region-formula-dialo
 import { useWorkspaceActions } from "@/components/workspace/workspace-actions-context";
 import { WorkspaceActionsProvider } from "@/components/workspace/workspace-actions";
 import { i18n, initI18n } from "@/i18n";
+import { api } from "@/lib/api";
+
+const mocks = vi.hoisted(() => ({
+  visionModel: "llava:7b",
+}));
+
+vi.mock("@/hooks/use-app", () => ({
+  useAppSettings: () => ({
+    data: { ai: { vision_model: mocks.visionModel } },
+    isLoading: false,
+  }),
+}));
 
 beforeAll(async () => {
   initI18n();
   await i18n.changeLanguage("en");
+});
+
+beforeEach(() => {
+  mocks.visionModel = "llava:7b";
+  vi.restoreAllMocks();
 });
 
 function element(text = "E = mc^2"): ElementSummary {
@@ -46,23 +64,39 @@ function InsertionProbe() {
 }
 
 function renderDialog(onOpenChange = vi.fn()) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   render(
-    <WorkspaceActionsProvider>
-      <RegionFormulaDialog
-        projectId="project-1"
-        element={element()}
-        pageNumber={4}
-        open
-        onOpenChange={onOpenChange}
-      />
-      <InsertionProbe />
-    </WorkspaceActionsProvider>,
+    <QueryClientProvider client={queryClient}>
+      <WorkspaceActionsProvider>
+        <RegionFormulaDialog
+          projectId="project-1"
+          element={element()}
+          pageNumber={4}
+          open
+          onOpenChange={onOpenChange}
+        />
+        <InsertionProbe />
+      </WorkspaceActionsProvider>
+    </QueryClientProvider>,
   );
   return onOpenChange;
 }
 
 function insertion() {
   return JSON.parse(screen.getByTestId("insertion").textContent ?? "null");
+}
+
+function propose(latex = "E = mc^{2}") {
+  return vi.spyOn(api, "createAiEquationProposal").mockResolvedValue({
+    element_id: "element-1",
+    page_id: "page-1",
+    latex,
+    provider: "ollama",
+    model: "llava:7b",
+    base_url: "http://127.0.0.1:11434",
+  });
 }
 
 describe("region formula dialog", () => {
@@ -128,5 +162,51 @@ describe("region formula dialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Insert as equation" }));
 
     expect(insertion().note).toBeNull();
+  });
+
+  it("cannot transcribe without a configured vision model", () => {
+    mocks.visionModel = "";
+    renderDialog();
+
+    expect(
+      screen.getByRole("button", { name: "Transcribe with AI" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/Choose a vision model in Settings/),
+    ).toBeInTheDocument();
+  });
+
+  it("prefills the review field with the model proposal", async () => {
+    const transcribe = propose();
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Transcribe with AI" }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("LaTeX source")).toHaveValue("E = mc^{2}"),
+    );
+    expect(transcribe).toHaveBeenCalledWith("project-1", "element-1");
+    expect(screen.getByText(/Proposed by llava:7b/)).toBeInTheDocument();
+  });
+
+  it("credits the model only while its proposal is unchanged", async () => {
+    propose();
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Transcribe with AI" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("LaTeX source")).toHaveValue("E = mc^{2}"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Insert as equation" }));
+    expect(insertion().note).toContain("proposed by llava:7b");
+
+    fireEvent.change(screen.getByLabelText("LaTeX source"), {
+      target: { value: "E = mc^2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Insert as equation" }));
+
+    expect(insertion().note).not.toContain("llava:7b");
+    expect(insertion().note).toContain("reviewed from the region crop");
   });
 });

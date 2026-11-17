@@ -28,7 +28,7 @@ MAX_IMAGE_DIM = 1600
 IMAGE_QUALITY = 85
 
 
-def _encode_page_image(path: Path) -> str:
+def _encode_image(path: Path) -> str:
     try:
         with Image.open(path) as source:
             image = source.convert("RGB")
@@ -102,7 +102,7 @@ def propose_regions(
             ).fetchall()
         ]
 
-    image_b64 = _encode_page_image(image_path)
+    image_b64 = _encode_image(image_path)
     completion = ai_service.request_region_proposals(
         profile,
         image_b64,
@@ -158,4 +158,83 @@ def propose_regions(
         "provider": completion.provider,
         "model": completion.model,
         "proposals": proposals,
+    }
+
+
+def element_context(project_dir: Path, element_id: str) -> dict[str, str]:
+    """Resolve an element's page and kind before any AI request is attempted."""
+    with project_db(project_dir) as conn:
+        row = conn.execute(
+            "SELECT page_id, kind FROM elements WHERE id = ?", (element_id,)
+        ).fetchone()
+    if row is None:
+        raise AppError(404, "element_not_found", "Region not found.")
+    return {"page_id": str(row["page_id"]), "kind": str(row["kind"])}
+
+
+def transcribe_equation(
+    project_dir: Path,
+    element_id: str,
+    profile: AiProfileSettings,
+    vision_model: str,
+    *,
+    provider: AiProviderKind | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+    on_attempt: Callable[[ai_service.RequestAttempt], None] | None = None,
+) -> dict[str, Any]:
+    """Ask the configured vision model for the LaTeX of one equation crop.
+
+    Only the saved crop is sent, and the reply is a proposal: it is returned to
+    the reviewer, never written to the element or the document. A model reply
+    that contains no expression is reported instead of being filled in.
+    """
+    with project_db(project_dir) as conn:
+        element = conn.execute(
+            "SELECT * FROM elements WHERE id = ?", (element_id,)
+        ).fetchone()
+        if element is None:
+            raise AppError(404, "element_not_found", "Region not found.")
+        if element["kind"] != "equation":
+            raise AppError(
+                409,
+                "ai_equation_region_required",
+                "Only an equation region can be transcribed.",
+            )
+        asset = (
+            conn.execute(
+                "SELECT * FROM assets WHERE id = ?", (element["asset_id"],)
+            ).fetchone()
+            if element["asset_id"]
+            else None
+        )
+        if asset is None:
+            raise AppError(
+                409,
+                "ai_element_image_missing",
+                "The region crop could not be read for AI analysis.",
+            )
+        try:
+            image_path = resolve_within(project_dir, asset["relative_path"])
+        except ValueError as exc:
+            raise AppError(500, "asset_path_invalid", "Asset path is invalid.") from exc
+        page_id = str(element["page_id"])
+
+    image_b64 = _encode_image(image_path)
+    completion = ai_service.request_equation_latex(
+        profile,
+        image_b64,
+        vision_model=vision_model,
+        provider=provider,
+        base_url=base_url,
+        model=model,
+        on_attempt=on_attempt,
+    )
+    return {
+        "element_id": element_id,
+        "page_id": page_id,
+        "latex": completion.latex,
+        "provider": completion.provider,
+        "model": completion.model,
+        "base_url": completion.base_url,
     }

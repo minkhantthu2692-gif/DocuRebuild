@@ -10,7 +10,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 > The workspace, local project storage, image and PDF import, non-destructive
 > image adjustments, the rich-text editor, local Tesseract OCR, manual region
 > extraction, an optional local-AI OCR text cleanup, optional vision region
-> proposals, local Markdown/TXT/Word/PDF document export and document version history
+> proposals, optional on-demand transcription of a saved equation crop into
+> reviewable LaTeX, local Markdown/TXT/Word/PDF document export and document version history
 > are implemented. Imports run
 > as background jobs with page-level progress, cancellation and localized failures.
 > PDF pages are rendered locally and embedded text layers are stored as reviewable
@@ -110,7 +111,12 @@ data on your device, and treats every AI result as a reviewable proposal.
   current page image to that configured local server and shows its figure, table
   and equation proposals as clearly marked low-confidence regions. Nothing is
   saved automatically; each proposal goes through the same review and extraction
-  dialog, and every request counts toward the AI usage limit.
+  dialog, and every request counts toward the AI usage limit. A saved equation
+  crop can also be transcribed on demand: "Transcribe with AI" in the formula
+  dialog sends only that crop to the vision model and fills the review field with
+  the returned LaTeX, marked with the proposing model and an unverified warning.
+  Nothing is inserted until you compare it with the crop and confirm; manual
+  typing works without a vision model.
 - **Document editor** — Tiptap rich text with headings, paragraphs, lists,
   blockquotes, code blocks, alignment, inline formatting, links, undo/redo, word
   and character counts, debounced autosave, and find/replace with match-case and
@@ -175,8 +181,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   text, Word export (native equations) and PDF export (exact LaTeX source).
   A saved equation region can be brought in the same way: its reviewed text starts
   the LaTeX, the dialog previews it beside the crop and only inserts what you
-  confirm. Equations are never transcribed automatically; there is no OCR or AI
-  equation recognition.
+  confirm. If a vision model is configured, the same dialog can transcribe the
+  crop into a proposal on request; the reply is shown as unverified, only the crop
+  is sent, and the provenance note credits the model only while you leave its reply
+  unchanged. Equations are never recognised automatically: transcription is an
+  explicit action on one saved crop, and every reply needs manual review.
 - **Footnotes** — insert a footnote from the toolbar and type its text in the
   dialog. Footnotes are numbered in document order, so inserting or deleting one
   renumbers the rest automatically; the number is never stored in the note. Export
@@ -197,7 +206,7 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 ### Not available yet
 
-Automatic equation transcription, generative figure detection, cloud/free-tier AI
+Automatic page-wide equation transcription, generative figure detection, cloud/free-tier AI
 providers, image-generation profiles, desktop packaging and PWA install support are
 planned but not implemented. OCR extracts text blocks, reading order and
 conservative layout hints. It can turn a block the layout labels as a table into a
@@ -207,7 +216,9 @@ merged cells keep exactly the shape the document drew. It never inserts a grid o
 own, never invents a cell, and does not transcribe equations. Nested tables and
 vision-based table reading are not implemented.
 Region extraction produces exact pixel crops and can read their plain text locally;
-it does not build structured table cells or equation markup. Deterministic region
+it does not build structured table cells. Equation markup comes only from manual
+typing or the formula dialog's explicit, reviewed transcription of one saved crop.
+Deterministic region
 suggestions are heuristics over the OCR text layout, on PDF pages over the placement
 of embedded raster images and the shapes of vector drawings, and on a photographed
 page over ink that the text layout does not explain,

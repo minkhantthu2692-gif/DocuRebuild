@@ -647,6 +647,26 @@ export interface AiRegionProposalsResponse {
   proposals: RegionProposal[];
 }
 
+/** Optional per-request overrides for one equation transcription. */
+export interface AiEquationRequest {
+  provider?: AiProviderKind;
+  base_url?: string;
+  model?: string;
+}
+
+/**
+ * LaTeX proposed for one equation crop. It is unverified model output: the user
+ * must review the local preview before it becomes document content.
+ */
+export interface AiEquationResponse {
+  element_id: string;
+  page_id: string;
+  latex: string;
+  provider: AiProviderKind;
+  model: string;
+  base_url: string;
+}
+
 /* -------------------------------------------------------------------------- */
 /*                               Document model                               */
 /* -------------------------------------------------------------------------- */
