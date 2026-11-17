@@ -7,6 +7,8 @@ import type {
   AiRegionProposalsRequest,
   AiRegionProposalsResponse,
   AiSettings,
+  AiSuggestionBulkInput,
+  AiSuggestionBulkResponse,
   AiSuggestionCreate,
   AiSuggestionDecisionInput,
   AiSuggestionDecisionResponse,
@@ -478,6 +480,11 @@ export const api = {
     request<AiSuggestionDecisionResponse>(
       `/projects/${projectId}/ai-suggestions/${suggestionId}`,
       { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+  decideAiSuggestionsBulk: (projectId: string, payload: AiSuggestionBulkInput) =>
+    request<AiSuggestionBulkResponse>(
+      `/projects/${projectId}/ai-suggestions/bulk`,
+      { method: "POST", body: JSON.stringify(payload) },
     ),
 
   assetUrl: (projectId: string, assetId: string | null, version?: string) => {

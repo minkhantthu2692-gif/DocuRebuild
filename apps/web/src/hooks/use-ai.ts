@@ -6,6 +6,8 @@ import type {
   AiProvidersResponse,
   AiRegionProposalsRequest,
   AiRegionProposalsResponse,
+  AiSuggestionBulkInput,
+  AiSuggestionBulkResponse,
   AiSuggestionCreate,
   AiSuggestionDecisionInput,
   AiSuggestionDecisionResponse,
@@ -240,6 +242,32 @@ export function useDecideAiSuggestion(projectId: string) {
       // The project-wide queue lists pending proposals only.
       void queryClient.invalidateQueries({
         queryKey: projectAiSuggestionsKey(projectId, "pending"),
+      });
+    },
+  });
+}
+
+/**
+ * Decide several pending proposals in one request.
+ *
+ * The backend revalidates each proposal separately, so a stale item is reported
+ * as failed while the rest still change. Refreshing every proposal query for the
+ * project keeps an open page dialog and the project queue in sync.
+ */
+export function useBulkDecideAiSuggestions(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<
+    AiSuggestionBulkResponse,
+    Error,
+    AiSuggestionBulkInput
+  >({
+    mutationFn: (payload) => api.decideAiSuggestionsBulk(projectId, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["ai", "suggestions", projectId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["ocr", "latest", projectId],
       });
     },
   });

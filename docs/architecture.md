@@ -217,6 +217,7 @@ GET    /api/projects/{id}/pages/{page_id}/table-proposals
 GET    /api/projects/{id}/pages/{page_id}/ai-suggestions
 POST   /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}/ai-suggestions
 PATCH  /api/projects/{id}/ai-suggestions/{suggestion_id}
+POST   /api/projects/{id}/ai-suggestions/bulk
 GET    /api/projects/{id}/pages/{page_id}/elements
 POST   /api/projects/{id}/pages/{page_id}/elements
 GET    /api/projects/{id}/pages/{page_id}/region-proposals
@@ -1199,6 +1200,14 @@ src/
   text and calls the existing decision endpoint, so per-block stale/run checks still
   apply. The queue reads from the project database and never changes OCR text on its
   own.
+- `POST /api/projects/{project_id}/ai-suggestions/bulk` decides 1–100 proposals in
+  one request. It runs each id through the same single-decision path in request order,
+  so an acceptance still re-checks the run and current text and every refusal is
+  reported per item (`status: null` plus `error_code`) instead of aborting the batch.
+  Duplicate ids are processed once, the response reports requested/succeeded/failed
+  counts, and any proposal not decided stays pending. The dialog selects proposals,
+  requires a confirmation that names the count, and refreshes the queue and OCR text
+  after the batch. Bulk acceptance never marks a block verified.
 - The OCR dialog shows the current text and the proposal side by side with provider
   and model badges. It disables **Accept** when the block changed after the proposal
   and shows a Settings link when no model is configured.

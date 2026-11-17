@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.ocr import OcrRunOut
 from app.schemas.regions import RegionProposalOut
@@ -134,6 +134,28 @@ class AiSuggestionDecisionIn(BaseModel):
 class AiSuggestionDecisionOut(BaseModel):
     suggestion: AiSuggestionOut
     run: OcrRunOut
+
+
+class AiSuggestionBulkIn(BaseModel):
+    """Decide several pending proposals at once, with per-proposal revalidation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ids: list[str] = Field(min_length=1, max_length=100)
+    status: Literal["accepted", "rejected"]
+
+
+class AiSuggestionBulkItemOut(BaseModel):
+    id: str
+    status: AiSuggestionStatus | None = None
+    error_code: str | None = None
+
+
+class AiSuggestionBulkOut(BaseModel):
+    results: list[AiSuggestionBulkItemOut]
+    requested: int
+    succeeded: int
+    failed: int
 
 
 class AiRegionProposalsRequest(BaseModel):

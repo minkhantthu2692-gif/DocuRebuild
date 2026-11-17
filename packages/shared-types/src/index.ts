@@ -510,6 +510,26 @@ export interface AiSuggestionDecisionResponse {
   run: OcrRun;
 }
 
+/** Bulk decision input. Max 100 ids; each proposal is revalidated separately. */
+export interface AiSuggestionBulkInput {
+  ids: string[];
+  status: "accepted" | "rejected";
+}
+
+/** One per-id result; a failed item keeps only its machine-readable reason. */
+export interface AiSuggestionBulkItem {
+  id: string;
+  status: "accepted" | "rejected" | null;
+  error_code: string | null;
+}
+
+export interface AiSuggestionBulkResponse {
+  results: AiSuggestionBulkItem[];
+  requested: number;
+  succeeded: number;
+  failed: number;
+}
+
 export interface AiSuggestionsResponse {
   suggestions: AiSuggestion[];
 }

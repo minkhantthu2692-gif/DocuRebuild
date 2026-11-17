@@ -14,7 +14,7 @@ presented in the UI until it actually works.
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates), deterministic figure suggestions from embedded PDF images and vector drawings, and a local CER/WER benchmark harness done; measured real-document accuracy pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, OCR-layout, embedded-PDF-image, vector-drawing and raster-page ink region suggestions with a named source in the extraction dialog, library, verification and figure/text insertion, reviewed equation crops inserted as real equations, and on-demand AI transcription of one equation crop into reviewable LaTeX done; structured table reconstruction pending |
-| 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage-history browser, reviewable persisted OCR text cleanup, optional vision region proposals and optional equation-crop transcription done; free-tier/paid adapters and cost controls pending |
+| 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings, remote-consent boundary, request limits, usage-history browser, bulk AI proposal review, reviewable persisted OCR text cleanup, optional vision region proposals and optional equation-crop transcription done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, merged cells from a PDF's drawn rules, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, inserting a reviewed equation crop as a real numbered equation, optional vision-model transcription of one saved equation crop into reviewable LaTeX, and faithful Markdown/TXT/Word/PDF export; vision tables, merged-cell detection for text-only tables and automatic page-wide equation recognition pending |
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, footnotes, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
@@ -317,6 +317,12 @@ described as universally free or universally accurate.
   to Settings when no model is configured. The source viewer shows the vision
   proposal count, provider/model and a review warning, and clears the overlay when
   the page changes or rotates.
+- Multi-select batch review in the project-wide queue. Checkboxes and a select-all
+  control choose pending proposals, and **Accept selected** / **Reject selected**
+  require a confirmation that names the count. The backend decides each proposal
+  separately with the same stale/run checks and reports per-item failures, so a stale
+  proposal is skipped while the rest still change; the list refreshes afterwards and
+  skipped proposals stay pending.
 - SSRF guards for the configured URL: `http`/`https` only, no embedded credentials,
   and the well-known cloud metadata addresses are rejected. Requests use short
   connect/probe timeouts, bounded response size and no automatic paid fallback.
@@ -338,9 +344,8 @@ described as universally free or universally accurate.
   providers, plus provider fallbacks. No paid call may run without approval.
 - API-key storage outside the frontend and a secure secret store for future remote
   providers. Current local providers need no key.
-- AI usage history browsing across pages is done through the Settings ledger
-  dialog; bulk accept/reject is still pending, because the current queue reviews
-  pending proposals one at a time.
+- Batch actions currently cover OCR cleanup proposals in the project-wide queue;
+  other future proposal types use their own review dialogs.
 
 **Current limitation** — only an Ollama or OpenAI-compatible server that the user
 configures is supported; loopback is the default and a non-loopback endpoint requires

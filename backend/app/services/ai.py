@@ -985,3 +985,49 @@ def decide_suggestion(
             "SELECT * FROM ai_suggestions WHERE id = ?", (suggestion_id,)
         ).fetchone()
         return _suggestion_payload(updated), run_payload
+
+
+def decide_suggestions_bulk(
+    project_dir: Path,
+    suggestion_ids: list[str],
+    status: AiSuggestionStatus,
+) -> dict[str, Any]:
+    """Decide many proposals without aborting on the first refusal.
+
+    Each proposal goes through the same single-decision path, so accepting still
+    revalidates the OCR run and text and a stale proposal is skipped rather than
+    applied. The response reports one result per unique id in request order;
+    failed items carry the machine-readable reason and can be retried alone.
+    """
+    if status not in {"accepted", "rejected"}:
+        raise AppError(422, "invalid_ai_suggestion_status", "Unknown proposal decision.")
+
+    unique_ids = list(dict.fromkeys(suggestion_ids))
+    results: list[dict[str, Any]] = []
+    for suggestion_id in unique_ids:
+        try:
+            suggestion, _run = decide_suggestion(project_dir, suggestion_id, status)
+        except AppError as exc:
+            results.append(
+                {
+                    "id": suggestion_id,
+                    "status": None,
+                    "error_code": exc.code,
+                }
+            )
+            continue
+        results.append(
+            {
+                "id": suggestion_id,
+                "status": suggestion["status"],
+                "error_code": None,
+            }
+        )
+
+    succeeded = sum(1 for item in results if item["status"] == status)
+    return {
+        "results": results,
+        "requested": len(results),
+        "succeeded": succeeded,
+        "failed": len(results) - succeeded,
+    }

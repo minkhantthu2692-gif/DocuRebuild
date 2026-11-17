@@ -16,6 +16,8 @@ from app.schemas.ai import (
     AiProvidersOut,
     AiRegionProposalsOut,
     AiRegionProposalsRequest,
+    AiSuggestionBulkIn,
+    AiSuggestionBulkOut,
     AiSuggestionCreate,
     AiSuggestionDecisionIn,
     AiSuggestionDecisionOut,
@@ -297,3 +299,19 @@ def decide_ai_suggestion(
     suggestion, run = ai_service.decide_suggestion(directory, suggestion_id, payload.status)
     touch_project(session, project)
     return {"suggestion": suggestion, "run": run}
+
+
+@router.post(
+    "/projects/{project_id}/ai-suggestions/bulk",
+    response_model=AiSuggestionBulkOut,
+)
+def decide_ai_suggestions_bulk(
+    project: ProjectDep,
+    payload: AiSuggestionBulkIn,
+    session: DbSession,
+) -> dict[str, Any]:
+    """Review many pending proposals without hiding individual refusals."""
+    directory = project_service.ensure_project_storage(project)
+    result = ai_service.decide_suggestions_bulk(directory, payload.ids, payload.status)
+    touch_project(session, project)
+    return result

@@ -820,6 +820,115 @@ def test_rejected_suggestion_keeps_text_and_cannot_be_redecided(
     assert again.json()["detail"]["code"] == "ai_suggestion_not_pending"
 
 
+def test_bulk_reject_reviews_every_unique_pending_proposal(
+    client: TestClient, project: dict, monkeypatch, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url)
+    page, run = _ocr_page(client, project, monkeypatch, "ai-bulk-reject.png")
+    first = _suggest(
+        client, project["id"], page["id"], run["blocks"][0]["id"]
+    ).json()["suggestion"]
+    second = _suggest(
+        client, project["id"], page["id"], run["blocks"][1]["id"]
+    ).json()["suggestion"]
+
+    response = client.post(
+        f"/api/projects/{project['id']}/ai-suggestions/bulk",
+        json={"ids": [first["id"], second["id"], first["id"]], "status": "rejected"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["requested"] == 2
+    assert body["succeeded"] == 2
+    assert body["failed"] == 0
+    assert [item["id"] for item in body["results"]] == [first["id"], second["id"]]
+    assert [item["status"] for item in body["results"]] == ["rejected", "rejected"]
+    assert all(item["error_code"] is None for item in body["results"])
+
+    pending = client.get(
+        f"/api/projects/{project['id']}/ai-suggestions", params={"status": "pending"}
+    ).json()["suggestions"]
+    assert pending == []
+    rejected = client.get(
+        f"/api/projects/{project['id']}/ai-suggestions", params={"status": "rejected"}
+    ).json()["suggestions"]
+    assert {item["id"] for item in rejected} == {first["id"], second["id"]}
+
+    latest = client.get(f"/api/projects/{project['id']}/pages/{page['id']}/ocr").json()
+    assert [block["text"] for block in latest["blocks"]] == [
+        "Chapter One",
+        "A local OCR result.",
+    ]
+
+
+def test_bulk_accept_skips_stale_proposals_and_reports_each_item(
+    client: TestClient, project: dict, monkeypatch, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url)
+    page, run = _ocr_page(client, project, monkeypatch, "ai-bulk-accept.png")
+    stale_block = run["blocks"][0]
+    fresh_block = run["blocks"][1]
+    stale = _suggest(
+        client, project["id"], page["id"], stale_block["id"]
+    ).json()["suggestion"]
+    fresh = _suggest(
+        client, project["id"], page["id"], fresh_block["id"]
+    ).json()["suggestion"]
+
+    edited = client.patch(
+        f"/api/projects/{project['id']}/pages/{page['id']}/ocr/blocks/{stale_block['id']}",
+        json={"text": "Manual correction"},
+    )
+    assert edited.status_code == 200, edited.text
+
+    response = client.post(
+        f"/api/projects/{project['id']}/ai-suggestions/bulk",
+        json={"ids": [stale["id"], fresh["id"]], "status": "accepted"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["requested"] == 2
+    assert body["succeeded"] == 1
+    assert body["failed"] == 1
+    assert body["results"][0] == {
+        "id": stale["id"],
+        "status": None,
+        "error_code": "ai_suggestion_stale",
+    }
+    assert body["results"][1] == {
+        "id": fresh["id"],
+        "status": "accepted",
+        "error_code": None,
+    }
+
+    latest = client.get(f"/api/projects/{project['id']}/pages/{page['id']}/ocr").json()
+    assert latest["blocks"][0]["text"] == "Manual correction"
+    assert latest["blocks"][1]["text"] == "Chapter One (cleaned)"
+    pending = client.get(
+        f"/api/projects/{project['id']}/ai-suggestions", params={"status": "pending"}
+    ).json()["suggestions"]
+    assert [item["id"] for item in pending] == [stale["id"]]
+
+    missing = client.post(
+        f"/api/projects/{project['id']}/ai-suggestions/bulk",
+        json={"ids": ["missing-id"], "status": "rejected"},
+    )
+    assert missing.status_code == 200, missing.text
+    assert missing.json()["failed"] == 1
+    assert missing.json()["results"][0]["error_code"] == "ai_suggestion_not_found"
+
+    empty = client.post(
+        f"/api/projects/{project['id']}/ai-suggestions/bulk",
+        json={"ids": [], "status": "rejected"},
+    )
+    assert empty.status_code == 422
+    oversized = client.post(
+        f"/api/projects/{project['id']}/ai-suggestions/bulk",
+        json={"ids": [f"id-{index}" for index in range(101)], "status": "rejected"},
+    )
+    assert oversized.status_code == 422
+
+
 def test_project_schema_contains_ai_suggestions(client: TestClient, project: dict) -> None:
     from app.db.project_schema import project_db
 
