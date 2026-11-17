@@ -546,8 +546,16 @@
       "loading": "Reading the latest local layout…",
       "error": "Region suggestions could not be loaded.",
       "empty": "No regions were suggested for this page.",
-      "prefilled": "Suggested region. Check the type, rectangle and caption before saving; nothing is saved yet.",
-      "status": {
+      "prefilledFrom": "Suggested from {{source}}. Check the type, rectangle and caption before saving; nothing is saved yet.",
+      "source": {
+        "table_text_grid": "the OCR table layout",
+        "equation_text": "the OCR equation layout",
+        "figure_caption_gap": "the caption and the space above it",
+        "pdf_image_region": "an image embedded in the PDF",
+        "pdf_drawing_region": "vector artwork drawn on the PDF page",
+        "page_artwork_region": "ink outside the recognised text",
+        "ai_vision": "the configured vision model"
+      },      "status": {
         "no_ocr_run": "Run OCR on this page to get region suggestions.",
         "ocr_not_ready": "OCR is still running. Suggestions appear when it finishes.",
         "ocr_failed": "The latest OCR run failed, so there are no suggestions.",

@@ -572,13 +572,16 @@ src/
   `no_geometry`. A run is stale when its `source_asset_id` or `rotation` no longer
   matches the page.
 - The frontend draws the suggestions as dashed buttons over the measured image
-  frame. Choosing one opens the normal extraction dialog prefilled with the kind,
-  caption and rectangle and marked as a suggestion; nothing is saved until the
-  user confirms through the existing crop path.
-- Limitations: PDF vector drawings and artwork in photographed pages are not
-  detected, an embedded image on a page with no text run is not suggested, and no
-  cell or equation structure is derived. `region_proposals` in `/api/meta`
-  advertises the feature.
+  frame. Low-confidence regions use the warning style. Choosing one opens the
+  normal extraction dialog prefilled with the kind, caption and rectangle,
+  marked as a suggestion and naming the signal it came from; nothing is saved
+  until the user confirms through the existing crop path.
+- Limitations: drawings the PDF stores as an opaque page or form rather than
+  readable paths, artwork the OCR engine read as text, dark pages that cannot be
+  separated from their content and page-sized backgrounds are not suggested, an
+  embedded image on a page with no text run is not suggested, and no cell or
+  equation structure is derived. `region_proposals` in `/api/meta` advertises the
+  feature.
 
 ### Document tables
 

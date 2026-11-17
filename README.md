@@ -100,7 +100,8 @@ data on your device, and treats every AI result as a reviewable proposal.
   block is proposed as a low-confidence figure, so an uncaptioned picture can be
   reviewed without a vision model. A caption that describes the same artwork
   supplies its text. Suggestions are never
-  saved on their own: choosing one only prefills the normal extraction dialog.
+  saved on their own: choosing one only prefills the normal extraction dialog and
+  names the signal it came from.
   When a vision model is saved in Settings, "Ask AI for regions" sends only the
   current page image to that configured local server and shows its figure, table
   and equation proposals as clearly marked low-confidence regions. Nothing is

@@ -17,7 +17,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import type { ElementKind, PageSummary, RegionProposal } from "@docurebuild/shared-types";
+import type {
+  ElementKind,
+  PageSummary,
+  RegionProposal,
+  RegionProposalReason,
+} from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -175,7 +180,9 @@ export function ElementsDialog({
   const [textDraft, setTextDraft] = useState("");
   const [languageValue, setLanguageValue] = useState("eng");
   const [saving, setSaving] = useState(false);
-  const [fromProposal, setFromProposal] = useState(false);
+  const [fromProposal, setFromProposal] = useState<RegionProposalReason | null>(
+    null,
+  );
 
   const languageOptions = useMemo(
     () => buildLanguageOptions(capabilities?.languages, t),
@@ -207,7 +214,7 @@ export function ElementsDialog({
       setCaptionDraft("");
       setEditingTextId(null);
       setTextDraft("");
-      setFromProposal(false);
+      setFromProposal(null);
       return;
     }
     if (!pendingSelection) return;
@@ -220,7 +227,7 @@ export function ElementsDialog({
     setKind(pendingProposal.kind);
     setCaption(pendingProposal.caption);
     setDraft(draftFromRect(pendingProposal));
-    setFromProposal(true);
+    setFromProposal(pendingProposal.reason);
     onProposalConsumed();
   }, [open, pendingProposal, onProposalConsumed]);
 
@@ -228,7 +235,7 @@ export function ElementsDialog({
     setCaption("");
     setDraft(EMPTY_DRAFT);
     setKind("figure");
-    setFromProposal(false);
+    setFromProposal(null);
   };
 
   const save = async (insert: boolean) => {
@@ -459,7 +466,9 @@ export function ElementsDialog({
             {fromProposal ? (
               <p className="mt-2 flex items-start gap-1.5 rounded-md border border-primary/25 bg-primary/5 px-2 py-1.5 text-2xs leading-relaxed text-primary">
                 <Sparkles className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
-                {t("elements.proposals.prefilled")}
+                {t("elements.proposals.prefilledFrom", {
+                  source: t(`elements.proposals.source.${fromProposal}`),
+                })}
               </p>
             ) : null}
 

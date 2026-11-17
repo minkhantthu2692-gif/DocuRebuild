@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 
+import type { RegionProposalReason } from "@docurebuild/shared-types";
+
 import { NAMESPACES, resources } from "@/i18n";
+
+const PROPOSAL_REASONS: Record<RegionProposalReason, true> = {
+  table_text_grid: true,
+  equation_text: true,
+  figure_caption_gap: true,
+  pdf_image_region: true,
+  pdf_drawing_region: true,
+  page_artwork_region: true,
+  ai_vision: true,
+};
 
 function collectKeys(value: unknown, prefix = ""): string[] {
   if (typeof value !== "object" || value === null) return [prefix];
@@ -33,6 +45,28 @@ describe("localization resources", () => {
     }
     for (const value of collectValues(resources.my[namespace])) {
       expect(value.trim().length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("region suggestion sources", () => {
+  it("names the source of every proposal reason in both languages", () => {
+    for (const reason of Object.keys(PROPOSAL_REASONS)) {
+      for (const locale of ["en", "my"] as const) {
+        const label =
+          resources[locale].workspace.elements.proposals.source[
+            reason as RegionProposalReason
+          ];
+        expect(typeof label).toBe("string");
+        expect(label.trim().length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("keeps the prefilled suggestion notice tied to the source label", () => {
+    for (const locale of ["en", "my"] as const) {
+      const notice = resources[locale].workspace.elements.proposals.prefilledFrom;
+      expect(notice).toContain("{{source}}");
     }
   });
 });
