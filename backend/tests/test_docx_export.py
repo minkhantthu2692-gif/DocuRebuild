@@ -6,6 +6,7 @@ from pathlib import Path
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
 from fastapi.testclient import TestClient
 from lxml import etree
 
@@ -581,6 +582,98 @@ def test_docx_table_cell_honours_text_alignment(tmp_path: Path) -> None:
     table = document.tables[0]
     assert table.cell(0, 0).paragraphs[0].alignment == WD_ALIGN_PARAGRAPH.CENTER
     assert table.cell(0, 1).paragraphs[0].alignment == WD_ALIGN_PARAGRAPH.RIGHT
+
+
+def _field_instructions(paragraph) -> list[str]:
+    return [
+        (element.get(qn("w:instr")) or "").strip()
+        for element in paragraph._p.iter(qn("w:fldSimple"))
+    ]
+
+
+def test_docx_export_writes_project_header_footer_and_page_fields(
+    tmp_path: Path,
+) -> None:
+    document = _open(
+        render_docx(
+            _content(),
+            tmp_path,
+            "Quantum Mechanics",
+            header_text="Running head \u00b7 {title}",
+            footer_text="Draft copy",
+        )
+    )
+    section = document.sections[0]
+    assert section.header.paragraphs[0].text == (
+        "Running head \u00b7 Quantum Mechanics"
+    )
+    footer = section.footer.paragraphs[0]
+    assert footer.text.startswith("Draft copy\t")
+    # The page counter is written as real Word fields, not static numbers.
+    assert _field_instructions(footer) == ["PAGE", "NUMPAGES"]
+    assert 'w:val="right"' in footer._p.xml
+
+
+def test_docx_export_uses_explicit_page_tokens_once(tmp_path: Path) -> None:
+    document = _open(
+        render_docx(
+            _content(),
+            tmp_path,
+            "Quantum Mechanics",
+            footer_text="Page {page} of {pages}",
+        )
+    )
+    footer = document.sections[0].footer.paragraphs[0]
+    assert _field_instructions(footer) == ["PAGE", "NUMPAGES"]
+
+
+def test_docx_export_can_omit_page_numbers(tmp_path: Path) -> None:
+    document = _open(
+        render_docx(
+            _content(),
+            tmp_path,
+            "Quantum Mechanics",
+            footer_text="Footer only",
+            show_page_numbers=False,
+        )
+    )
+    footer = document.sections[0].footer.paragraphs[0]
+    assert footer.text == "Footer only"
+    assert _field_instructions(footer) == []
+
+
+def test_export_endpoint_applies_the_saved_layout(
+    client: TestClient, project: dict
+) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Word body."}],
+            }
+        ],
+    }
+    saved = client.put(
+        f"/api/projects/{project['id']}/document",
+        json={"content": content, "plain_text": "Word body."},
+    )
+    assert saved.status_code == 200, saved.text
+    layout = client.put(
+        f"/api/projects/{project['id']}/document/layout",
+        json={"header_text": "Word running head", "footer_text": "Word footer"},
+    )
+    assert layout.status_code == 200, layout.text
+
+    response = client.get(
+        f"/api/projects/{project['id']}/document/export",
+        params={"format": "docx"},
+    )
+    assert response.status_code == 200, response.text
+    document = _open(response.content)
+    section = document.sections[0]
+    assert section.header.paragraphs[0].text == "Word running head"
+    assert section.footer.paragraphs[0].text.startswith("Word footer\t")
 
 
 def test_export_endpoint_returns_docx(client: TestClient, project: dict) -> None:

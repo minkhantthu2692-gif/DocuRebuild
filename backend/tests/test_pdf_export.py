@@ -505,6 +505,99 @@ def test_pdf_export_honours_page_size_and_margin(tmp_path: Path) -> None:
     assert 70 <= left <= 74
 
 
+def test_pdf_export_writes_project_header_and_footer(tmp_path: Path) -> None:
+    data = render_pdf(
+        _content(),
+        tmp_path,
+        "Quantum Mechanics",
+        header_text="Running head \u00b7 {title}",
+        footer_text="Source copy",
+    )
+    text = _text(_open(data))
+
+    assert "Running head \u00b7 Quantum Mechanics" in text
+    assert "Source copy" in text
+    assert "1 / 1" in text
+
+
+def test_pdf_export_places_explicit_page_tokens_without_duplicating(
+    tmp_path: Path,
+) -> None:
+    data = render_pdf(
+        _content(),
+        tmp_path,
+        "Quantum Mechanics",
+        footer_text="Page {page} of {pages}",
+    )
+    text = _text(_open(data))
+
+    assert "Page 1 of 1" in text
+    # The project text supplied its own counter, so no second one is written.
+    assert "1 / 1" not in text
+
+
+def test_pdf_export_can_omit_page_numbers(tmp_path: Path) -> None:
+    data = render_pdf(
+        _content(),
+        tmp_path,
+        "Quantum Mechanics",
+        footer_text="Footer only",
+        show_page_numbers=False,
+    )
+    text = _text(_open(data))
+
+    assert "Footer only" in text
+    assert "1 / 1" not in text
+
+
+def test_pdf_export_fits_a_long_header_inside_the_margin(tmp_path: Path) -> None:
+    data = render_pdf(
+        _content(),
+        tmp_path,
+        "Quantum Mechanics",
+        header_text="A very long running head " * 8,
+        margin="narrow",
+    )
+    document = _open(data)
+    page = document[0]
+    # The header is the only text above the top margin.
+    header_words = [word for word in page.get_text("words") if word[3] <= 36]
+    assert header_words
+    # Every header word stays inside the page and never runs past the margin.
+    assert all(word[2] <= page.rect.width - 36 + 0.5 for word in header_words)
+
+
+def test_export_endpoint_applies_the_saved_layout(client: TestClient, project: dict) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Layout body."}],
+            }
+        ],
+    }
+    saved = client.put(
+        f"/api/projects/{project['id']}/document",
+        json={"content": content, "plain_text": "Layout body."},
+    )
+    assert saved.status_code == 200, saved.text
+    layout = client.put(
+        f"/api/projects/{project['id']}/document/layout",
+        json={"header_text": "Thesis running head", "footer_text": "Chapter one"},
+    )
+    assert layout.status_code == 200, layout.text
+
+    response = client.get(
+        f"/api/projects/{project['id']}/document/export",
+        params={"format": "pdf"},
+    )
+    assert response.status_code == 200, response.text
+    text = _text(_open(response.content))
+    assert "Thesis running head" in text
+    assert "Chapter one" in text
+
+
 def test_export_endpoint_uses_pdf_settings(client: TestClient, project: dict) -> None:
     content = {
         "type": "doc",

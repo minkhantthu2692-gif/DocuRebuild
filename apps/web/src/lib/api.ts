@@ -23,6 +23,8 @@ import type {
   AppearanceSettings,
   BackupSelection,
   BackupSettings,
+  DocumentLayout,
+  DocumentLayoutInput,
   DocumentRecord,
   DocumentRestoreResult,
   DocumentRevision,
@@ -247,6 +249,13 @@ export const api = {
 
   getDocument: (projectId: string) =>
     request<DocumentRecord>(`/projects/${projectId}/document`),
+  getDocumentLayout: (projectId: string) =>
+    request<DocumentLayout>(`/projects/${projectId}/document/layout`),
+  saveDocumentLayout: (projectId: string, layout: DocumentLayoutInput) =>
+    request<DocumentLayout>(`/projects/${projectId}/document/layout`, {
+      method: "PUT",
+      body: JSON.stringify(layout),
+    }),
   downloadDocument: (
     projectId: string,
     format: "markdown" | "txt" | "docx" | "pdf",

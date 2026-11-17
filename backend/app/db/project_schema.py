@@ -225,6 +225,18 @@ PROJECT_MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE ocr_blocks ADD COLUMN words TEXT NOT NULL DEFAULT '[]';
         """,
     ),
+    (
+        11,
+        """
+        CREATE TABLE IF NOT EXISTS document_layout (
+            id TEXT PRIMARY KEY,
+            header_text TEXT NOT NULL DEFAULT '',
+            footer_text TEXT NOT NULL DEFAULT '',
+            show_page_numbers INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL
+        );
+        """,
+    ),
 ]
 
 

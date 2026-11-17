@@ -139,7 +139,10 @@ data on your device, and treats every AI result as a reviewable proposal.
   converted. PDF output embeds the same figures, keeps links clickable and needs a
   Unicode Myanmar font on the device for Burmese text. Markdown and plain text cannot
   carry a local image path, so an inline picture is written as `[Image: alt]` with its
-  alt text instead of a broken link.
+  alt text instead of a broken link. Each project can also store a page header and
+  footer for Word and PDF, with `{page}`, `{pages}` and `{title}` placeholders and an
+  optional page-number switch; the text belongs to the project, not the document, and
+  is never uploaded.
 - **Document versions** — the editor header keeps a local version history. Automatic
   versions are captured when the document changes, a manual checkpoint can be saved
   at any time, restoring a version always keeps the state it replaces, so a restore

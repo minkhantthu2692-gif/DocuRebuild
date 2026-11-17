@@ -42,6 +42,7 @@ describe("activity filters", () => {
     expect(activityCategory("element_deleted")).toBe("regions");
     expect(activityCategory("ocr_failed")).toBe("text");
     expect(activityCategory("document_exported")).toBe("export");
+    expect(activityCategory("document_layout_updated")).toBe("export");
     expect(activityCategory("future_event")).toBe("other");
     expect(ACTIVITY_CATEGORIES).toContain("other");
   });

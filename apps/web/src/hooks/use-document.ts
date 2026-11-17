@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { JSONContent } from "@docurebuild/shared-types";
+import type {
+  DocumentLayoutInput,
+  JSONContent,
+} from "@docurebuild/shared-types";
 
 import { api } from "@/lib/api";
 
@@ -27,6 +30,31 @@ export function useSaveDocument(projectId: string) {
     mutationFn: ({ content, plainText }: SaveDocumentPayload) =>
       api.saveDocument(projectId, content, plainText),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
+export function useDocumentLayout(projectId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["document-layout", projectId],
+    queryFn: () => api.getDocumentLayout(projectId as string),
+    enabled: Boolean(projectId) && enabled,
+    // Re-open the dialog with the saved values, not a stale cache entry.
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: 1,
+  });
+}
+
+export function useSaveDocumentLayout(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (layout: DocumentLayoutInput) =>
+      api.saveDocumentLayout(projectId, layout),
+    onSuccess: (layout) => {
+      queryClient.setQueryData(["document-layout", projectId], layout);
       void queryClient.invalidateQueries({ queryKey: ["project", projectId] });
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
     },

@@ -730,6 +730,19 @@ export interface DocumentRecord {
   updated_at: string | null;
 }
 
+/**
+ * Per-project page header/footer for Word and PDF export. The text supports
+ * `{page}`, `{pages}` and `{title}` placeholders; other braces stay literal.
+ */
+export interface DocumentLayout {
+  header_text: string;
+  footer_text: string;
+  show_page_numbers: boolean;
+  updated_at: string;
+}
+
+export type DocumentLayoutInput = Omit<DocumentLayout, "updated_at">;
+
 export interface DocumentRevisionSummary {
   id: string;
   /** How the version was captured. */

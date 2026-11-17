@@ -39,7 +39,7 @@ import mathml2omml
 import pymupdf
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.opc.constants import CONTENT_TYPE as CT
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.opc.packuri import PackURI
@@ -75,6 +75,10 @@ _SAFE_LINK_PATTERN = re.compile(r"^(https?://|mailto:)", re.IGNORECASE)
 _UNSAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 _FIGURE_FALLBACK = "Figure"
 _INLINE_IMAGE_FALLBACK = "Image"
+# Optional placeholders in a project's page header/footer text. Unknown braces
+# stay literal; the text is never rewritten silently.
+_LAYOUT_TOKEN_PATTERN = re.compile(r"\{(page|pages|title)\}")
+_LAYOUT_PAGE_TOKENS = ("{page}", "{pages}")
 
 
 def _escape_inline(text: str) -> str:
@@ -1433,8 +1437,89 @@ class _DocxRenderer:
         properties.append(shade)
 
 
+def _docx_field(paragraph: Any, instruction: str) -> None:
+    """Append a simple Word field (for example a page number) to a paragraph."""
+    field = OxmlElement("w:fldSimple")
+    field.set(qn("w:instr"), f" {instruction} ")
+    run = OxmlElement("w:r")
+    text = OxmlElement("w:t")
+    # Word recalculates the field; this value is only a placeholder for other
+    # readers and is never treated as the real page count.
+    text.text = "1"
+    run.append(text)
+    field.append(run)
+    paragraph._p.append(field)
+
+
+def _add_docx_layout_runs(paragraph: Any, text: str, project_name: str) -> None:
+    """Write header/footer text, turning page tokens into real Word fields."""
+    position = 0
+    for match in _LAYOUT_TOKEN_PATTERN.finditer(text):
+        if match.start() > position:
+            paragraph.add_run(text[position : match.start()])
+        token = match.group(1)
+        if token == "title":
+            paragraph.add_run(project_name)
+        elif token == "page":
+            _docx_field(paragraph, "PAGE")
+        else:
+            _docx_field(paragraph, "NUMPAGES")
+        position = match.end()
+    if position < len(text):
+        paragraph.add_run(text[position:])
+
+
+def _has_layout_page_token(*values: str) -> bool:
+    return any(
+        token in value for value in values for token in _LAYOUT_PAGE_TOKENS
+    )
+
+
+def _apply_docx_layout(
+    document: Any,
+    project_name: str,
+    header_text: str,
+    footer_text: str,
+    show_page_numbers: bool,
+) -> None:
+    """Write the project header/footer into the document's first section.
+
+    A page counter is appended only when the header and footer do not already
+    place an explicit ``{page}`` or ``{pages}`` token, so numbers are never
+    duplicated.
+    """
+    section = document.sections[0]
+    if header_text:
+        _add_docx_layout_runs(section.header.paragraphs[0], header_text, project_name)
+
+    footer = section.footer.paragraphs[0]
+    if footer_text:
+        _add_docx_layout_runs(footer, footer_text, project_name)
+
+    if show_page_numbers and not _has_layout_page_token(header_text, footer_text):
+        if footer_text:
+            content_width = (
+                section.page_width - section.left_margin - section.right_margin
+            )
+            footer.paragraph_format.tab_stops.add_tab_stop(
+                content_width, WD_TAB_ALIGNMENT.RIGHT
+            )
+            footer.add_run("\t")
+        else:
+            footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _docx_field(footer, "PAGE")
+        footer.add_run(" / ")
+        _docx_field(footer, "NUMPAGES")
+
+
 def render_docx(
-    content: dict[str, Any], project_dir: Path, project_name: str = ""
+    content: dict[str, Any],
+    project_dir: Path,
+    project_name: str = "",
+    *,
+    header_text: str = "",
+    footer_text: str = "",
+    show_page_numbers: bool = True,
 ) -> bytes:
     """Render the document as a Word file, embedding local figures and OMML."""
     document = Document()
@@ -1444,6 +1529,9 @@ def render_docx(
     properties.author = ""
     properties.last_modified_by = ""
     properties.comments = ""
+    _apply_docx_layout(
+        document, project_name, header_text, footer_text, show_page_numbers
+    )
     renderer = _DocxRenderer(document, project_dir)
     renderer.figure_numbers = _figure_number_map(content)
     renderer.equation_numbers = _equation_number_map(content)
@@ -2014,6 +2102,86 @@ class _PdfRenderer:
         return ""
 
 
+def _layout_text_value(
+    text: str, project_name: str, page_number: int, page_total: int
+) -> str:
+    """Resolve the supported layout tokens for one page."""
+    if not text:
+        return ""
+
+    def replace(match: re.Match[str]) -> str:
+        token = match.group(1)
+        if token == "page":
+            return str(page_number)
+        if token == "pages":
+            return str(page_total)
+        return project_name
+
+    return _LAYOUT_TOKEN_PATTERN.sub(replace, text)
+
+
+@lru_cache(maxsize=8)
+def _layout_font(font_file: str) -> pymupdf.Font:
+    return pymupdf.Font(fontfile=font_file)
+
+
+def _layout_text_width(text: str, font_file: str | None, fontsize: float) -> float:
+    if font_file:
+        try:
+            return _layout_font(font_file).text_length(text, fontsize)
+        except Exception:
+            pass
+    return pymupdf.get_text_length(text, fontname="helv", fontsize=fontsize)
+
+
+def _fit_layout_text(
+    text: str, max_width: float, font_file: str | None, fontsize: float
+) -> str:
+    """Keep header/footer text on one line without drawing outside the margin."""
+    if max_width <= 0 or not text:
+        return ""
+    if _layout_text_width(text, font_file, fontsize) <= max_width:
+        return text
+    tail = "..."
+    trimmed = text
+    while trimmed and (
+        _layout_text_width(trimmed + tail, font_file, fontsize) > max_width
+    ):
+        trimmed = trimmed[:-1]
+    trimmed = trimmed.rstrip()
+    return f"{trimmed}{tail}" if trimmed else ""
+
+
+def _draw_layout_text(
+    page: pymupdf.Page,
+    text: str,
+    rect: pymupdf.Rect,
+    *,
+    align: int,
+    font_file: str | None,
+    fontname: str,
+    fontsize: float = 8.0,
+) -> None:
+    """Draw one line of generated chrome (header or footer) inside a margin."""
+    value = _fit_layout_text(text, rect.width, font_file, fontsize)
+    if not value:
+        return
+    width = _layout_text_width(value, font_file, fontsize)
+    if align == 1:
+        x = rect.x0 + max(0.0, (rect.width - width) / 2)
+    elif align == 2:
+        x = rect.x1 - width
+    else:
+        x = rect.x0
+    page.insert_text(
+        pymupdf.Point(x, rect.y1 - fontsize * 0.2),
+        value,
+        fontsize=fontsize,
+        fontname=fontname,
+        color=(0.45, 0.45, 0.45),
+    )
+
+
 def render_pdf(
     content: dict[str, Any],
     project_dir: Path,
@@ -2021,6 +2189,9 @@ def render_pdf(
     *,
     page_size: str = "a4",
     margin: str = "normal",
+    header_text: str = "",
+    footer_text: str = "",
+    show_page_numbers: bool = True,
 ) -> bytes:
     """Render the document as an A4 or Letter PDF, fully locally."""
     paper = _PDF_PAGE_SIZES.get(page_size, "a4")
@@ -2030,7 +2201,15 @@ def render_pdf(
     # Keep a tall scan inside one page while leaving room for its caption.
     max_image_height = max(120.0, media_box.height - 2 * margin_pt - 60.0)
 
-    has_myanmar = _has_myanmar(content)
+    # Header/footer text participates in the Myanmar font check, so a Burmese
+    # running head cannot be written as replacement characters.
+    header_source = header_text.replace("{title}", project_name)
+    footer_source = footer_text.replace("{title}", project_name)
+    has_myanmar = (
+        _has_myanmar(content)
+        or _has_myanmar(header_source)
+        or _has_myanmar(footer_source)
+    )
     font_path = _find_myanmar_font() if has_myanmar else None
     if has_myanmar and font_path is None:
         raise AppError(
@@ -2069,21 +2248,69 @@ def render_pdf(
 
     document = story.write_with_links(rectfn)
     total = document.page_count
+    layout_font_file = str(font_path) if font_path is not None else None
+    layout_fontname = "docu" if font_path is not None else "helv"
+    auto_page_numbers = show_page_numbers and not _has_layout_page_token(
+        header_text, footer_text
+    )
     for index, page in enumerate(document, start=1):
-        footer = pymupdf.Rect(
-            margin_pt,
-            page.rect.height - margin_pt + 2,
-            page.rect.width - margin_pt,
-            page.rect.height - margin_pt + 20,
-        )
-        page.insert_textbox(
-            footer,
-            f"{index} / {total}",
-            fontsize=8,
-            fontname="helv",
-            align=1,
-            color=(0.45, 0.45, 0.45),
-        )
+        header_value = _layout_text_value(header_text, project_name, index, total)
+        footer_value = _layout_text_value(footer_text, project_name, index, total)
+        if font_path is not None and (header_value or footer_value):
+            page.insert_font(fontname=layout_fontname, fontfile=layout_font_file)
+
+        if header_value:
+            header_rect = pymupdf.Rect(
+                margin_pt,
+                max(2.0, margin_pt - 24.0),
+                page.rect.width - margin_pt,
+                margin_pt - 2.0,
+            )
+            _draw_layout_text(
+                page,
+                header_value,
+                header_rect,
+                align=0,
+                font_file=layout_font_file,
+                fontname=layout_fontname,
+            )
+
+        if footer_value or auto_page_numbers:
+            footer_rect = pymupdf.Rect(
+                margin_pt,
+                page.rect.height - margin_pt + 2,
+                page.rect.width - margin_pt,
+                page.rect.height - margin_pt + 20,
+            )
+            if footer_value:
+                # Leave the right end of the margin for an automatic counter.
+                text_rect = (
+                    pymupdf.Rect(
+                        footer_rect.x0,
+                        footer_rect.y0,
+                        footer_rect.x1 - 80.0,
+                        footer_rect.y1,
+                    )
+                    if auto_page_numbers
+                    else footer_rect
+                )
+                _draw_layout_text(
+                    page,
+                    footer_value,
+                    text_rect,
+                    align=0,
+                    font_file=layout_font_file,
+                    fontname=layout_fontname,
+                )
+            if auto_page_numbers:
+                page.insert_textbox(
+                    footer_rect,
+                    f"{index} / {total}",
+                    fontsize=8,
+                    fontname="helv",
+                    align=2 if footer_value else 1,
+                    color=(0.45, 0.45, 0.45),
+                )
 
     document.set_metadata(
         {
@@ -2112,11 +2339,27 @@ def export_document(
     *,
     pdf_page_size: str = "a4",
     pdf_margin: str = "normal",
+    layout: dict[str, Any] | None = None,
 ) -> tuple[bytes, str, str]:
-    """Return ``(body, filename, content_type)`` for the stored document."""
+    """Return ``(body, filename, content_type)`` for the stored document.
+
+    ``layout`` carries the project's page header/footer. It is used by Word and
+    PDF; Markdown and plain text are not paginated, so they ignore it.
+    """
     document = documents.read_document(project_dir)
+    layout = layout or {}
+    header_text = str(layout.get("header_text") or "")
+    footer_text = str(layout.get("footer_text") or "")
+    show_page_numbers = bool(layout.get("show_page_numbers", True))
     if fmt == "docx":
-        body = render_docx(document["content"], project_dir, project_name)
+        body = render_docx(
+            document["content"],
+            project_dir,
+            project_name,
+            header_text=header_text,
+            footer_text=footer_text,
+            show_page_numbers=show_page_numbers,
+        )
     elif fmt == "pdf":
         body = render_pdf(
             document["content"],
@@ -2124,6 +2367,9 @@ def export_document(
             project_name,
             page_size=pdf_page_size,
             margin=pdf_margin,
+            header_text=header_text,
+            footer_text=footer_text,
+            show_page_numbers=show_page_numbers,
         )
     else:
         body = render(document["content"], fmt).encode("utf-8")

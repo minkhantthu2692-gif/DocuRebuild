@@ -87,6 +87,7 @@ const KNOWN_EVENTS = new Set([
   "element_text_updated",
   "element_deleted",
   "document_exported",
+  "document_layout_updated",
   "pages_restored",
   "document_restored",
   "page_assets_restored",

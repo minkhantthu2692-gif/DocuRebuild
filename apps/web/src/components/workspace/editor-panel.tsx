@@ -47,6 +47,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -106,6 +107,7 @@ import { ocrInsertionContent } from "@/lib/ocr-insertion";
 import { tableInsertionContent } from "@/lib/table-insertion";
 import { countCharacters, countWords } from "@/lib/text";
 import { cn } from "@/lib/utils";
+import { DocumentLayoutDialog } from "./document-layout-dialog";
 import { EditorTableMenu } from "./editor-table-menu";
 import { RevisionDialog } from "./revision-dialog";
 import { useWorkspaceActions } from "./workspace-actions-context";
@@ -200,6 +202,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [linkUrl, setLinkUrl] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [layoutOpen, setLayoutOpen] = useState(false);
   const [figureSelection, setFigureSelection] = useState<SelectedFigure | null>(null);
   const [figureOpen, setFigureOpen] = useState(false);
   const [figureCaption, setFigureCaption] = useState("");
@@ -877,6 +880,16 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
               >
                 <span>{t("export.pdf")}</span>
                 <span className="text-2xs text-muted-foreground">{t("export.pdfHint")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => setLayoutOpen(true)}
+                className="flex-col items-start gap-0.5"
+              >
+                <span>{t("editor.pageLayout.open")}</span>
+                <span className="text-2xs text-muted-foreground">
+                  {t("editor.pageLayout.menuHint")}
+                </span>
               </DropdownMenuItem>
               <DropdownMenuLabel className="max-w-64 whitespace-normal text-2xs font-normal leading-relaxed text-muted-foreground">
                 {t("export.note")}
@@ -1701,6 +1714,12 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           </form>
         </DialogContent>
       </Dialog>
+
+      <DocumentLayoutDialog
+        projectId={projectId}
+        open={layoutOpen}
+        onOpenChange={setLayoutOpen}
+      />
 
       <RevisionDialog
         projectId={projectId}

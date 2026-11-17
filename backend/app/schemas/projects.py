@@ -67,6 +67,39 @@ class DocumentOut(DocumentPayload):
     updated_at: str | None
 
 
+def _clean_layout_text(value: str) -> str:
+    """Collapse whitespace so a header/footer stays on one line."""
+    cleaned = " ".join(value.split())
+    if any(ord(char) < 32 or ord(char) == 127 for char in cleaned):
+        raise ValueError(
+            "Page header and footer text contains an unsupported control character."
+        )
+    return cleaned
+
+
+class DocumentLayoutUpdate(BaseModel):
+    """Plain header/footer text for paginated exports.
+
+    ``{page}``, ``{pages}`` and ``{title}`` are the only recognized tokens.
+    Unknown braces are kept literally, so the text is never silently rewritten.
+    """
+
+    header_text: str = Field(default="", max_length=200)
+    footer_text: str = Field(default="", max_length=200)
+    show_page_numbers: bool = True
+
+    @field_validator("header_text", "footer_text", mode="before")
+    @classmethod
+    def _normalize_text(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return _clean_layout_text(value)
+
+
+class DocumentLayoutOut(DocumentLayoutUpdate):
+    updated_at: str
+
+
 class DocumentRevisionSummary(BaseModel):
     id: str
     source: str

@@ -42,7 +42,8 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.pdf` | PDF open/validation, page rendering, embedded text extraction, embedded raster-image boxes, vector-artwork boxes, axis-aligned table rule extraction, capability detection |
 | `services.layout` | Shared deterministic block classification (heading, list, caption, equation, table-like grid, running header/footer, page number) for OCR and embedded PDF text |
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps, coalesced revision snapshots, manual checkpoints and restore |
-| `services.document_export` | Deterministic Tiptap-to-Markdown/TXT/DOCX/PDF rendering, escaping, OMML equations, figure and inline-image embedding, native footnotes, PDF layout and download names |
+| `services.document_layout` | Per-project page header/footer text for paginated exports: stored layout row, default page-number choice and token-ready plain text |
+| `services.document_export` | Deterministic Tiptap-to-Markdown/TXT/DOCX/PDF rendering, escaping, OMML equations, figure and inline-image embedding, native footnotes, PDF layout, page header/footer rendering and download names |
 | `services.project_backup` | Verified local zip creation, safe validation/extraction and additive restore as a new project |
 | `services.backup_crypto` | Optional `.drbz` container for downloaded backups: scrypt key derivation, chunked AES-256-GCM, password and corruption errors |
 | `services.local_backups` | Local backup vault: verified copy creation, retention pruning, safe name resolution and opt-in automatic copies |
@@ -73,6 +74,7 @@ Each project owns a portable folder and its own `project.db`:
 
 - `documents` — Tiptap JSON content and plain text
 - `document_revisions` — previous document states: exact Tiptap JSON, plain text, capture source (`autosave`/`manual`) and timestamp; newest 100 kept per project
+- `document_layout` — one row per project with single-line header and footer text, the page-number choice and a timestamp; it lives in the project database, so backups and restored copies keep it, and it never changes the document itself
 - `assets` — relative path, MIME type, size, checksum, dimensions
 - `pages` — page order, source/display/thumbnail asset references, rotation,
   `pdf_page_number` for PDF pages, status, and an `edits` JSON document holding the
@@ -189,6 +191,8 @@ POST   /api/projects/{id}/backup/selection/{token}/element-assets
 POST   /api/projects/restore
 GET    /api/projects/{id}/document
 PUT    /api/projects/{id}/document
+GET    /api/projects/{id}/document/layout
+PUT    /api/projects/{id}/document/layout
 GET    /api/projects/{id}/document/export?format=markdown|txt|docx|pdf
 GET    /api/projects/{id}/document/revisions?limit=50
 POST   /api/projects/{id}/document/revisions
@@ -744,6 +748,15 @@ src/
   free-form measurements, which keeps the PDF geometry deterministic and testable;
   the frontend defaults mirror the backend defaults (`a4`, `normal`). Only PDF
   rendering reads them, so Markdown, TXT and DOCX output is unaffected.
+- Page header/footer text belongs to the project (`services.document_layout` in
+  `document_layout`), not to app settings, because it describes the reconstructed
+  document. Each field is one line after whitespace collapsing, capped at 200
+  characters, and may contain `{page}`, `{pages}` and `{title}`; unknown braces stay
+  literal. Word and PDF render it, while Markdown and plain text are not paginated
+  and ignore it. An automatic page counter is added only when neither field already
+  uses a page token, so a user-supplied counter is never duplicated. Saving the
+  layout records a metadata-only `document_layout_updated` event; the text itself is
+  not copied into the activity log.
 - `services.document_export` maps every known node deterministically: doc,
   paragraph, heading (levels 1–6, clamped), bullet/ordered lists (including
   `start`), listItem, blockquote, codeBlock (fence widened when the code contains
@@ -842,6 +855,14 @@ src/
   package. A document without footnotes gets no footnotes part.
 - Core properties keep the project title but clear author, last-modified-by and
   comments, so the exporting machine's identity is not written into the file.
+- The project's header and footer are written into the first section's header/footer
+  parts using the `Header` and `Footer` styles. `{page}` and `{pages}` become real
+  `w:fldSimple` `PAGE`/`NUMPAGES` fields, so Word updates them on open and when the
+  document grows; `{title}` is written as the project title. A footer that also holds
+  an automatic counter gets a right tab stop at the section's content width, otherwise
+  the counter is centred. Turning page numbers off writes no field, but an explicit
+  token is still honoured. The generated placeholders inside the field definitions are
+  not treated as the real page count.
 - The Word file is produced only from local libraries and project data; no provider
   is contacted, and PDF page layout is not reconstructed.
 
@@ -855,7 +876,16 @@ src/
   width and maximum figure height are derived from the chosen media box, and a
   zero body margin in the CSS makes the configured margin exact. The page is a
   document flow, not the original scan geometry: text reflows and the file grows to
-  as many pages as needed. A footer writes `n / total` outside the text rectangle.
+  as many pages as needed.
+- Header and footer text is drawn as one line inside the top and bottom margins, in
+  the same grey as the generated page counter. A footer with extra text keeps the
+  counter at the right edge; with no footer text the counter stays centred, which
+  preserves the previous `n / total` output. Long text is measured with the active
+  font and shortened with `...` rather than running past the margin. The header and
+  footer strings participate in the Myanmar font check, so a Burmese running head
+  cannot silently become replacement characters. If a field already supplies
+  `{page}` or `{pages}`, no second counter is added, and the page-number setting can
+  remove the automatic counter without disabling explicit tokens.
 - The same node set as the other renderers is mapped to HTML: headings (levels 1–6),
   paragraphs with alignment, lists (including `start` and nesting), blockquotes, code
   blocks, rules, native tables with `colspan`/`rowspan`, bold, italic, strike,

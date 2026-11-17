@@ -26,6 +26,8 @@ from app.schemas.pages import (
 )
 from app.schemas.projects import (
     BackupSelectionOut,
+    DocumentLayoutOut,
+    DocumentLayoutUpdate,
     DocumentOut,
     DocumentPayload,
     DocumentRestoreOut,
@@ -46,10 +48,11 @@ from app.schemas.projects import (
     ProjectSummary,
     ProjectUpdate,
 )
-from app.services import backup_crypto, documents, projects as project_service
+from app.services import backup_crypto, document_layout, documents
 from app.services import history as history_service
 from app.services import imports as import_service
 from app.services import local_backups
+from app.services import projects as project_service
 from app.services import page_restore
 from app.services import pages as page_service
 from app.services import project_backup
@@ -426,6 +429,39 @@ def write_document(
     return document
 
 
+@router.get("/{project_id}/document/layout", response_model=DocumentLayoutOut)
+def read_document_layout(project: ProjectDep) -> dict[str, Any]:
+    """Page header/footer text used by Word and PDF export."""
+    directory = project_service.ensure_project_storage(project)
+    return document_layout.read_layout(directory)
+
+
+@router.put("/{project_id}/document/layout", response_model=DocumentLayoutOut)
+def write_document_layout(
+    project: ProjectDep, payload: DocumentLayoutUpdate, session: DbSession
+) -> dict[str, Any]:
+    """Save the project's page header/footer; Markdown and TXT ignore it."""
+    directory = project_service.ensure_project_storage(project)
+    layout = document_layout.write_layout(
+        directory,
+        header_text=payload.header_text,
+        footer_text=payload.footer_text,
+        show_page_numbers=payload.show_page_numbers,
+    )
+    touch_project(session, project)
+    project_service.record_history(
+        directory,
+        "document_layout_updated",
+        "Updated page header and footer",
+        {
+            "has_header": bool(layout["header_text"]),
+            "has_footer": bool(layout["footer_text"]),
+            "show_page_numbers": layout["show_page_numbers"],
+        },
+    )
+    return layout
+
+
 @router.get("/{project_id}/document/export")
 def export_document_file(
     project: ProjectDep,
@@ -435,12 +471,14 @@ def export_document_file(
     """Return the stored document as an attachment (Markdown, TXT, DOCX or PDF)."""
     directory = project_service.ensure_project_storage(project)
     export_prefs = get_app_settings(session).export
+    layout = document_layout.read_layout(directory)
     body, filename, content_type = export_document(
         directory,
         project.name,
         export_format,
         pdf_page_size=export_prefs.pdf_page_size,
         pdf_margin=export_prefs.pdf_margin,
+        layout=layout,
     )
     ascii_name = safe_filename(project.name, export_format)
     project_service.record_history(

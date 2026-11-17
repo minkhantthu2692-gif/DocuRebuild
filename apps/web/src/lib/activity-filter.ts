@@ -35,6 +35,7 @@ const CATEGORY_BY_EVENT: Record<string, KnownCategory> = {
   element_text_updated: "regions",
   element_deleted: "regions",
   document_exported: "export",
+  document_layout_updated: "export",
   ocr_started: "text",
   ocr_succeeded: "text",
   ocr_failed: "text",
