@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/hooks/use-app", () => ({
   useAppSettings: () => ({
-    data: { ai: { vision_model: mocks.visionModel } },
+    data: { ai: { vision: { model: mocks.visionModel } } },
     isLoading: false,
   }),
 }));

@@ -182,13 +182,16 @@ export function SettingsPage() {
   const aiProvidersQuery = useAiProviders();
   const aiUsageQuery = useAiUsage();
   const probeAi = useProbeAiProvider();
+  const probeVisionAi = useProbeAiProvider();
   const updateSettings = useUpdateSettings();
   const errorMessage = useApiErrorMessage();
   const [copied, setCopied] = useState(false);
   const [aiDraftOverride, setAiDraftOverride] = useState<AiProfileSettings | null>(null);
-  const [aiVisionDraft, setAiVisionDraft] = useState<string | null>(null);
+  const [aiVisionDraftOverride, setAiVisionDraftOverride] =
+    useState<AiProfileSettings | null>(null);
   const [aiLimitDraft, setAiLimitDraft] = useState<string | null>(null);
   const [probeResult, setProbeResult] = useState<AiProbeResponse | null>(null);
+  const [visionProbeResult, setVisionProbeResult] = useState<AiProbeResponse | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const settings = settingsQuery.data;
@@ -200,14 +203,14 @@ export function SettingsPage() {
   const ocr = ocrQuery.data;
 
   const aiSaved = settings?.ai?.text ?? DEFAULT_AI_PROFILE;
-  const aiVisionSaved = settings?.ai?.vision_model ?? "";
+  const aiVisionSaved = settings?.ai?.vision ?? DEFAULT_AI_PROFILE;
   const aiLimitSaved = settings?.ai?.request_limit ?? 0;
   const backupPrefs = settings?.backups ?? DEFAULT_BACKUPS;
   const exportPrefs = settings?.export ?? DEFAULT_EXPORT;
   const intervalOptions = withCurrentValue(BACKUP_INTERVALS, backupPrefs.interval_hours);
   const keepOptions = withCurrentValue(BACKUP_KEEP_COPIES, backupPrefs.keep_copies);
   const aiDraft = aiDraftOverride ?? aiSaved;
-  const aiVisionValue = aiVisionDraft ?? aiVisionSaved;
+  const aiVisionDraft = aiVisionDraftOverride ?? aiVisionSaved;
   const aiLimitValue = aiLimitDraft ?? String(aiLimitSaved);
   const parsedAiLimit = Number(aiLimitValue);
   const aiLimitValid =
@@ -220,16 +223,28 @@ export function SettingsPage() {
     aiDraft.base_url !== aiSaved.base_url ||
     aiDraft.model !== aiSaved.model ||
     aiDraft.allow_remote !== aiSaved.allow_remote ||
-    aiVisionValue.trim() !== aiVisionSaved ||
+    aiVisionDraft.provider !== aiVisionSaved.provider ||
+    aiVisionDraft.base_url !== aiVisionSaved.base_url ||
+    aiVisionDraft.model !== aiVisionSaved.model ||
+    aiVisionDraft.allow_remote !== aiVisionSaved.allow_remote ||
     (aiLimitValid && parsedAiLimit !== aiLimitSaved);
   const aiUsage = aiUsageQuery.data;
   const providerDefault =
     aiProvidersQuery.data?.providers.find((item) => item.id === aiDraft.provider)
       ?.default_base_url ?? "";
+  const visionProviderDefault =
+    aiProvidersQuery.data?.providers.find((item) => item.id === aiVisionDraft.provider)
+      ?.default_base_url ?? "";
   const discoveredModels = probeResult?.status === "ready" ? probeResult.models : [];
+  const visionDiscoveredModels =
+    visionProbeResult?.status === "ready" ? visionProbeResult.models : [];
 
   const updateAiDraft = (patch: Partial<AiProfileSettings>) => {
     setAiDraftOverride({ ...aiDraft, ...patch });
+  };
+
+  const updateAiVisionDraft = (patch: Partial<AiProfileSettings>) => {
+    setAiVisionDraftOverride({ ...aiVisionDraft, ...patch });
   };
 
   const ocrReason =
@@ -260,20 +275,34 @@ export function SettingsPage() {
     );
   };
 
+  const testVisionConnection = () => {
+    probeVisionAi.mutate(
+      {
+        provider: aiVisionDraft.provider,
+        base_url: aiVisionDraft.base_url,
+        allow_remote: aiVisionDraft.allow_remote,
+      },
+      {
+        onSuccess: (result) => setVisionProbeResult(result),
+        onError: (error) => toast.error(errorMessage(error)),
+      },
+    );
+  };
+
   const saveAiProfile = () => {
     if (!aiLimitValid) return;
     updateSettings.mutate(
       {
         ai: {
           text: aiDraft,
-          vision_model: aiVisionValue.trim(),
+          vision: aiVisionDraft,
           request_limit: parsedAiLimit,
         },
       },
       {
         onSuccess: () => {
           setAiDraftOverride(null);
-          setAiVisionDraft(null);
+          setAiVisionDraftOverride(null);
           setAiLimitDraft(null);
           toast.success(t("ai.saved"));
         },
@@ -786,24 +815,156 @@ export function SettingsPage() {
                 ) : null}
               </SettingRow>
 
-              <SettingRow
-                title={t("ai.visionModel")}
-                description={t("ai.visionModelDescription")}
-              >
-                <Input
-                  value={aiVisionValue}
-                  placeholder={t("ai.visionModelPlaceholder")}
-                  spellCheck={false}
-                  aria-label={t("ai.visionModel")}
-                  list={discoveredModels.length > 0 ? "ai-model-options" : undefined}
-                  onChange={(event) => setAiVisionDraft(event.target.value)}
-                />
-                <p className="text-2xs leading-relaxed text-muted-foreground">
-                  {aiVisionValue.trim()
-                    ? t("ai.visionModelEnabled")
-                    : t("ai.visionModelDisabled")}
-                </p>
-              </SettingRow>
+              <div className="space-y-4 rounded-lg border border-border/60 bg-background/40 p-3">
+                <div className="space-y-1">
+                  <h4 className="text-xs font-semibold">{t("ai.visionTitle")}</h4>
+                  <p className="text-2xs leading-relaxed text-muted-foreground">
+                    {t("ai.visionDescription")}
+                  </p>
+                </div>
+
+                <SettingRow
+                  title={t("ai.provider")}
+                  description={t("ai.visionProviderDescription")}
+                >
+                  <SegmentedControl
+                    label={`${t("ai.visionTitle")}: ${t("ai.provider")}`}
+                    value={aiVisionDraft.provider}
+                    onValueChange={(value) => {
+                      setVisionProbeResult(null);
+                      updateAiVisionDraft({ provider: value as AiProviderKind });
+                    }}
+                    options={[
+                      { value: "ollama", label: t("ai.providerOllama") },
+                      { value: "openai_compatible", label: t("ai.providerOpenAI") },
+                    ]}
+                  />
+                </SettingRow>
+
+                <SettingRow
+                  title={t("ai.baseUrl")}
+                  description={t("ai.visionBaseUrlDescription")}
+                >
+                  <Input
+                    value={aiVisionDraft.base_url}
+                    placeholder={visionProviderDefault}
+                    spellCheck={false}
+                    aria-label={`${t("ai.visionTitle")}: ${t("ai.baseUrl")}`}
+                    onChange={(event) => {
+                      setVisionProbeResult(null);
+                      updateAiVisionDraft({ base_url: event.target.value });
+                    }}
+                  />
+                </SettingRow>
+
+                <SettingRow
+                  title={t("ai.allowRemote")}
+                  description={t("ai.visionAllowRemoteDescription")}
+                >
+                  <label className="flex items-start gap-2 text-xs leading-relaxed">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 size-3.5 shrink-0 accent-primary"
+                      checked={aiVisionDraft.allow_remote}
+                      onChange={(event) => {
+                        setVisionProbeResult(null);
+                        updateAiVisionDraft({ allow_remote: event.target.checked });
+                      }}
+                    />
+                    <span>{t("ai.visionAllowRemoteLabel")}</span>
+                  </label>
+                </SettingRow>
+
+                <SettingRow
+                  title={t("ai.visionModel")}
+                  description={t("ai.visionModelDescription")}
+                >
+                  <Input
+                    value={aiVisionDraft.model}
+                    placeholder={t("ai.visionModelPlaceholder")}
+                    spellCheck={false}
+                    aria-label={t("ai.visionModel")}
+                    list={
+                      visionDiscoveredModels.length > 0
+                        ? "ai-vision-model-options"
+                        : undefined
+                    }
+                    onChange={(event) =>
+                      updateAiVisionDraft({ model: event.target.value })
+                    }
+                  />
+                  {visionDiscoveredModels.length > 0 ? (
+                    <datalist id="ai-vision-model-options">
+                      {visionDiscoveredModels.map((model) => (
+                        <option key={model.id} value={model.id} />
+                      ))}
+                    </datalist>
+                  ) : null}
+                  <p className="text-2xs leading-relaxed text-muted-foreground">
+                    {aiVisionDraft.model.trim()
+                      ? t("ai.visionModelEnabled")
+                      : t("ai.visionModelDisabled")}
+                  </p>
+                </SettingRow>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium">{t("ai.status")}</span>
+                    <Badge
+                      variant={
+                        probeVisionAi.isPending
+                          ? "outline"
+                          : visionProbeResult?.status === "ready"
+                            ? "success"
+                            : visionProbeResult
+                              ? "warning"
+                              : "outline"
+                      }
+                    >
+                      {probeVisionAi.isPending
+                        ? t("ai.testing")
+                        : visionProbeResult?.status === "ready"
+                          ? t("ai.connected")
+                          : visionProbeResult
+                            ? t("ai.disconnected")
+                            : t("ai.notTested")}
+                    </Badge>
+                    {visionProbeResult?.version ? (
+                      <span className="text-2xs text-muted-foreground">
+                        v{visionProbeResult.version}
+                      </span>
+                    ) : null}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 self-start sm:self-auto"
+                    disabled={probeVisionAi.isPending}
+                    onClick={testVisionConnection}
+                  >
+                    <RefreshCw
+                      className={probeVisionAi.isPending ? "animate-spin" : undefined}
+                    />
+                    {t("ai.testConnection")}
+                  </Button>
+                </div>
+
+                {visionProbeResult?.status === "ready" ? (
+                  <p className="text-2xs text-muted-foreground">
+                    {visionDiscoveredModels.length > 0
+                      ? t("ai.modelsFound", { count: visionDiscoveredModels.length })
+                      : t("ai.noModels")}
+                  </p>
+                ) : visionProbeResult ? (
+                  <p className="text-2xs text-warning">
+                    {t(
+                      `ai.errorReasons.${visionProbeResult.error_code ?? "ai_unreachable"}`,
+                    )}
+                  </p>
+                ) : (
+                  <p className="text-2xs text-muted-foreground">{t("ai.testHint")}</p>
+                )}
+              </div>
 
               <SettingRow
                 title={t("ai.requestLimit")}

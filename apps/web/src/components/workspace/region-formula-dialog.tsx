@@ -57,7 +57,7 @@ export function RegionFormulaDialog({
   const errorMessage = useApiErrorMessage();
   const queryClient = useQueryClient();
   const settingsQuery = useAppSettings();
-  const visionModel = settingsQuery.data?.ai.vision_model?.trim() ?? "";
+  const visionModel = settingsQuery.data?.ai.vision.model?.trim() ?? "";
 
   const [latex, setLatex] = useState("");
   const [numbered, setNumbered] = useState(false);

@@ -24,7 +24,7 @@ const settings = {
   export: { pdf_page_size: "a4" as const, pdf_margin: "normal" as const },
   ai: {
     text: { provider: "ollama" as const, base_url: "", model: "", allow_remote: false },
-    vision_model: "",
+    vision: { provider: "ollama" as const, base_url: "", model: "", allow_remote: false },
     request_limit: 0,
   },
   backups: { auto_on_open: false, interval_hours: 24, keep_copies: 5 },

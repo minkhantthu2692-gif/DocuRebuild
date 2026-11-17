@@ -51,7 +51,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.artwork` | Deterministic locator for large ink clusters that the OCR text layout does not explain on a photographed page: grayscale grid, text masking, cluster joining and size filters; returns boxes only |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout, raster-page ink, and embedded PDF raster-image placement and vector-drawing geometry |
-| `services.settings` | Persisted appearance, language, editor, AI profile, vision model and request-limit settings |
+| `services.settings` | Persisted appearance, language, editor, AI text and vision task profiles and request-limit settings |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness |
 | `services.table_structure` | Reviewable table proposals: word-box row clustering and whitespace column bands, plus exact merged-cell grids from a PDF's drawn rules; cell text/confidence/flags/alignment, page-level grouping of vertically contiguous row blocks, vector/OCR de-duplication, source pixel box, size caps and typed refusal errors |
 | `app.ocr_benchmark` | Local CER/WER measurement against checked reference transcripts, by running the OCR adapter or scoring a stored transcript; validates fixtures and never uploads |
@@ -66,7 +66,7 @@ to the same local API; the API is not intended to be exposed publicly.
 The application database (`app.db`) contains only global state:
 
 - `projects` — id, name, description, directory, timestamps
-- `app_settings` — key/value JSON (appearance, language, editor, export layout, local AI profile, vision model, request limit and local backup preferences)
+- `app_settings` - key/value JSON (appearance, language, editor, export layout, local AI text and vision profiles, request limit and local backup preferences)
 - `ai_usage` — local AI request metadata: provider, model, task, outcome, error code, project/page/block ids and timestamp; never document text
 - `schema_migrations` — created by Alembic
 
@@ -1197,10 +1197,14 @@ src/
   every AI action disabled. `allow_remote` defaults to `false` and is the user's
   explicit consent for a non-loopback endpoint. The Settings page edits a local draft
   and saves explicitly, so typing a URL does not trigger a PATCH or a network request.
-- `app_settings.ai.vision_model` is a separate optional model name that reuses the
-  same provider, base URL and remote-consent decision. An empty value keeps image AI
-  disabled and both `POST .../ai-region-proposals` and `POST .../ai-equation` return
+- `app_settings.ai.vision` is a separate task profile with its own provider, base
+  URL, model and remote-consent decision, so image analysis can run on a different
+  local server or device than text cleanup. An empty model keeps image AI disabled
+  and both `POST .../ai-region-proposals` and `POST .../ai-equation` return
   `409 ai_vision_not_configured` before contacting the server or recording usage.
+  Settings saved by an older build kept one `ai.vision_model` string next to the
+  text server; on read it is mapped to a vision profile with the same provider, URL
+  and consent, and the legacy key is replaced on the next save.
 - `POST /api/ai/probe` is user-triggered. It reads Ollama `/api/tags` and
   `/api/version`, or OpenAI-compatible `/models`, with a short timeout and a
   1 MB response cap. Expected failures (`unreachable`, `timeout`, `http_error`,
@@ -1272,19 +1276,20 @@ src/
 - The OCR dialog shows the current text and the proposal side by side with provider
   and model badges. It disables **Accept** when the block changed after the proposal
   and shows a Settings link when no model is configured.
-- Vision region proposals reuse the same provider resolution, consent boundary and
-  usage ledger. `services.ai_vision` reads the page's display (or original) asset,
-  resizes it to a bounded JPEG in memory and sends it as base64 to the configured
-  vision model. The model returns normalized 0–1 rectangles; the backend validates
-  the JSON, drops unsupported kinds, non-finite or out-of-page origins, clamps boxes
-  to the page, adds the heuristic padding and removes duplicates or regions that
-  already have an extracted element. Coordinates are mapped with the stored page
-  width/height, so the source viewer can overlay them without extra geometry.
+- Vision region proposals use their own saved task profile (provider, base URL,
+  model and remote consent) and the same usage ledger. `services.ai_vision` reads the
+  page's display (or original) asset, resizes it to a bounded JPEG in memory and
+  sends it as base64 to the configured vision model. The model returns normalized
+  0-1 rectangles; the backend validates the JSON, drops unsupported kinds, non-finite
+  or out-of-page origins, clamps boxes to the page, adds the heuristic padding and
+  removes duplicates or regions that already have an extracted element. Coordinates
+  are mapped with the stored page width/height, so the source viewer can overlay them
+  without extra geometry.
 - `POST .../pages/{page_id}/ai-region-proposals` returns `status: ready`, page
   dimensions, provider, model and low-confidence `ai_vision` proposals. It does not
   insert rows in `elements` or `ai_suggestions`; choosing a rectangle only prefills
   the extraction dialog. Each request is recorded with task `region_proposals`.
-- `POST .../elements/{element_id}/ai-equation` reuses the same saved vision model and
+- `POST .../elements/{element_id}/ai-equation` uses the same saved vision profile and
   consent boundary. It resolves the element before any provider setting, refuses a
   non-equation region and a missing crop, resizes only that crop, and asks for plain
   LaTeX with `temperature: 0` and JSON mode off. The reply is returned as an

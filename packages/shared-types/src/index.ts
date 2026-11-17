@@ -585,8 +585,11 @@ export interface AiProfileSettings {
 
 export interface AiSettings {
   text: AiProfileSettings;
-  /** Model used for page-image region proposals. Empty keeps image AI disabled. */
-  vision_model: string;
+  /**
+   * Image analysis is a separate task profile: it can use its own local server,
+   * model and remote consent. An empty model keeps image AI disabled.
+   */
+  vision: AiProfileSettings;
   /** Rolling 24-hour request cap. Zero means unlimited. */
   request_limit: number;
 }

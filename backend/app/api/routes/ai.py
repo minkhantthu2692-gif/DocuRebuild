@@ -99,7 +99,8 @@ def create_ai_region_proposals(
 ) -> dict[str, Any]:
     directory = project_service.ensure_project_storage(project)
     ai_settings = get_app_settings(session).ai
-    if not ai_settings.vision_model:
+    vision = ai_settings.vision
+    if not vision.model:
         raise AppError(
             409,
             "ai_vision_not_configured",
@@ -124,8 +125,7 @@ def create_ai_region_proposals(
         result = ai_vision.propose_regions(
             directory,
             page_id,
-            ai_settings.text,
-            ai_settings.vision_model,
+            vision,
             provider=payload.provider,
             base_url=payload.base_url,
             model=payload.model,
@@ -159,7 +159,8 @@ def create_ai_equation_proposal(
             "Only an equation region can be transcribed.",
         )
     ai_settings = get_app_settings(session).ai
-    if not ai_settings.vision_model:
+    vision = ai_settings.vision
+    if not vision.model:
         raise AppError(
             409,
             "ai_vision_not_configured",
@@ -184,8 +185,7 @@ def create_ai_equation_proposal(
         result = ai_vision.transcribe_equation(
             directory,
             element_id,
-            ai_settings.text,
-            ai_settings.vision_model,
+            vision,
             provider=payload.provider,
             base_url=payload.base_url,
             model=payload.model,

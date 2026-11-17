@@ -243,7 +243,15 @@ def _configure_ai(
         }
     }
     if vision_model is not None:
-        ai["vision_model"] = vision_model
+        # Vision is a separate task profile; the older helper keeps the same
+        # server as text and only swaps the model, which is what the settings
+        # migration does for pre-existing installations.
+        ai["vision"] = {
+            "provider": provider,
+            "base_url": base_url,
+            "model": vision_model,
+            "allow_remote": allow_remote,
+        }
     response = client.patch("/api/settings", json={"ai": ai})
     assert response.status_code == 200, response.text
 
@@ -428,6 +436,8 @@ def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> N
         "model": "",
         "allow_remote": False,
     }
+    # Image analysis has its own provider, URL, model and consent.
+    assert ai_settings["vision"] == defaults
 
     saved = client.patch(
         "/api/settings",
@@ -458,12 +468,29 @@ def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> N
     assert limited.json()["ai"]["request_limit"] == 25
     assert client.get("/api/ai/usage").json()["request_limit"] == 25
 
+    vision_saved = client.patch(
+        "/api/settings",
+        json={"ai": {"vision": {"provider": "ollama", "model": " llava:7b "}}},
+    )
+    assert vision_saved.status_code == 200, vision_saved.text
+    assert vision_saved.json()["ai"]["vision"] == {
+        "provider": "ollama",
+        "base_url": "",
+        "model": "llava:7b",
+        "allow_remote": False,
+    }
+    # Saving the vision profile never changes the text profile.
+    assert vision_saved.json()["ai"]["text"]["provider"] == "openai_compatible"
+    assert vision_saved.json()["ai"]["text"]["model"] == "local-model"
+
     for bad in (
         {"base_url": "ftp://127.0.0.1:1234"},
         {"base_url": "http://user:secret@127.0.0.1:1234"},
         {"model": "x" * 201},
     ):
         response = client.patch("/api/settings", json={"ai": {"text": bad}})
+        assert response.status_code == 422, bad
+        response = client.patch("/api/settings", json={"ai": {"vision": bad}})
         assert response.status_code == 422, bad
 
     for bad_limit in (-1, 10_001):
@@ -956,6 +983,93 @@ def test_vision_region_proposals_require_a_vision_model(
     assert response.json()["detail"]["code"] == "ai_vision_not_configured"
     # Nothing was sent, so nothing is counted.
     assert _usage(client)["used"] == 0
+
+
+def test_vision_tasks_use_their_own_server_profile(
+    client: TestClient, project: dict, monkeypatch, stub_ai
+) -> None:
+    closed = _closed_port_url()
+    saved = client.patch(
+        "/api/settings",
+        json={
+            "ai": {
+                "text": {
+                    "provider": "ollama",
+                    "base_url": closed,
+                    "model": "qwen2.5:7b",
+                },
+                "vision": {
+                    "provider": "ollama",
+                    "base_url": stub_ai.base_url,
+                    "model": "llava:7b",
+                },
+            }
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    page = upload_pages(client, project["id"], ["ai-vision-separate.png"])[0]
+    vision = _vision(client, project["id"], page["id"])
+    assert vision.status_code == 200, vision.text
+    assert vision.json()["model"] == "llava:7b"
+    assert ("POST", "/api/chat") in stub_ai.state.requests
+
+    # The text task keeps using its own unreachable server instead of falling
+    # back to the working vision server.
+    page, run = _ocr_page(client, project, monkeypatch, "ai-text-separate.png")
+    cleanup = _suggest(client, project["id"], page["id"], run["blocks"][0]["id"])
+    assert cleanup.status_code == 502, cleanup.text
+    assert cleanup.json()["detail"]["code"] == "ai_unreachable"
+
+    tasks = [(row["task"], row["outcome"]) for row in _usage(client)["recent"]]
+    assert ("region_proposals", "success") in tasks
+    assert ("ocr_cleanup", "error") in tasks
+
+
+def test_legacy_vision_model_migrates_to_a_vision_profile(client: TestClient) -> None:
+    from app.db.models import AppSetting
+    from app.db.session import get_session_factory
+
+    session = get_session_factory()()
+    try:
+        session.add(
+            AppSetting(
+                key="app",
+                value={
+                    "ai": {
+                        "text": {
+                            "provider": "openai_compatible",
+                            "base_url": "http://127.0.0.1:1234/v1",
+                            "model": "local-model",
+                        },
+                        "vision_model": " llava:7b ",
+                    }
+                },
+            )
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    migrated = client.get("/api/settings").json()["ai"]
+    assert migrated["vision"] == {
+        "provider": "openai_compatible",
+        "base_url": "http://127.0.0.1:1234/v1",
+        "model": "llava:7b",
+        "allow_remote": False,
+    }
+    assert "vision_model" not in migrated
+
+    # The legacy key is replaced with the new profile on the next save.
+    assert client.patch("/api/settings", json={"language": "en"}).status_code == 200
+    session = get_session_factory()()
+    try:
+        stored = session.get(AppSetting, "app")
+        assert stored is not None
+        assert "vision_model" not in stored.value["ai"]
+        assert stored.value["ai"]["vision"]["model"] == "llava:7b"
+    finally:
+        session.close()
 
 
 def test_vision_region_proposals_map_coordinates_and_record_usage(

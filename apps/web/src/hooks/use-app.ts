@@ -47,7 +47,7 @@ function mergeSettings(current: AppSettings | undefined, patch: SettingsPatch): 
     export: { pdf_page_size: "a4", pdf_margin: "normal" },
     ai: {
       text: { provider: "ollama", base_url: "", model: "", allow_remote: false },
-      vision_model: "",
+      vision: { provider: "ollama", base_url: "", model: "", allow_remote: false },
       request_limit: 0,
     },
     backups: { auto_on_open: false, interval_hours: 24, keep_copies: 5 },

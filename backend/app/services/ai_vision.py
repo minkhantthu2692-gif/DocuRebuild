@@ -48,7 +48,6 @@ def propose_regions(
     project_dir: Path,
     page_id: str,
     profile: AiProfileSettings,
-    vision_model: str,
     *,
     provider: AiProviderKind | None = None,
     base_url: str | None = None,
@@ -106,7 +105,6 @@ def propose_regions(
     completion = ai_service.request_region_proposals(
         profile,
         image_b64,
-        vision_model=vision_model,
         provider=provider,
         base_url=base_url,
         model=model,
@@ -176,7 +174,6 @@ def transcribe_equation(
     project_dir: Path,
     element_id: str,
     profile: AiProfileSettings,
-    vision_model: str,
     *,
     provider: AiProviderKind | None = None,
     base_url: str | None = None,
@@ -224,7 +221,6 @@ def transcribe_equation(
     completion = ai_service.request_equation_latex(
         profile,
         image_b64,
-        vision_model=vision_model,
         provider=provider,
         base_url=base_url,
         model=model,

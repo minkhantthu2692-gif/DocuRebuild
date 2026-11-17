@@ -579,7 +579,6 @@ def request_region_proposals(
     profile: AiProfileSettings,
     image_b64: str,
     *,
-    vision_model: str,
     provider: AiProviderKind | None = None,
     base_url: str | None = None,
     model: str | None = None,
@@ -589,7 +588,7 @@ def request_region_proposals(
         profile,
         provider=provider,
         base_url=base_url,
-        model=model if model is not None else vision_model,
+        model=model,
     )
     try:
         content = _vision_completion(
@@ -658,7 +657,6 @@ def request_equation_latex(
     profile: AiProfileSettings,
     image_b64: str,
     *,
-    vision_model: str,
     provider: AiProviderKind | None = None,
     base_url: str | None = None,
     model: str | None = None,
@@ -668,7 +666,7 @@ def request_equation_latex(
         profile,
         provider=provider,
         base_url=base_url,
-        model=model if model is not None else vision_model,
+        model=model,
     )
     try:
         content = _vision_completion(

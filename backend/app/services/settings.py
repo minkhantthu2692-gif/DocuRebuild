@@ -25,11 +25,39 @@ def _deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
+def _migrate_legacy_ai(merged: dict[str, Any]) -> dict[str, Any]:
+    """Map a stored single ``vision_model`` string onto a vision task profile.
+
+    Older settings kept one vision model next to a shared text server. Copying it
+    into ``vision`` preserves the exact provider, URL and consent that were in use,
+    and the legacy key disappears the next time settings are saved.
+    """
+    ai = merged.get("ai")
+    if not isinstance(ai, dict):
+        return merged
+    legacy = ai.pop("vision_model", None)
+    if not isinstance(legacy, str) or not legacy.strip():
+        return merged
+    vision = ai.get("vision")
+    if isinstance(vision, dict) and str(vision.get("model") or "").strip():
+        return merged
+    text = ai.get("text") if isinstance(ai.get("text"), dict) else {}
+    ai["vision"] = {
+        "provider": text.get("provider", "ollama"),
+        "base_url": text.get("base_url", ""),
+        "model": legacy.strip(),
+        "allow_remote": bool(text.get("allow_remote", False)),
+    }
+    return merged
+
+
 def get_app_settings(session: Session) -> AppSettings:
     row = session.get(AppSetting, SETTINGS_KEY)
     if row is None:
         return AppSettings()
-    merged = _deep_merge(AppSettings().model_dump(), row.value or {})
+    merged = _migrate_legacy_ai(
+        _deep_merge(AppSettings().model_dump(), row.value or {})
+    )
     try:
         return AppSettings.model_validate(merged)
     except ValidationError:

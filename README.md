@@ -109,8 +109,9 @@ data on your device, and treats every AI result as a reviewable proposal.
   supplies its text. Suggestions are never
   saved on their own: choosing one only prefills the normal extraction dialog and
   names the signal it came from.
-  When a vision model is saved in Settings, "Ask AI for regions" sends only the
-  current page image to that configured local server and shows its figure, table
+  When a vision model is saved in the image analysis profile, "Ask AI for regions"
+  sends only the current page image to that configured local server and shows its
+  figure, table
   and equation proposals as clearly marked low-confidence regions. Nothing is
   saved automatically; each proposal goes through the same review and extraction
   dialog, and every request counts toward the AI usage limit. A saved equation
@@ -191,7 +192,8 @@ data on your device, and treats every AI result as a reviewable proposal.
   and PDF export (exact LaTeX source).
   A saved equation region can be brought in the same way: its reviewed text starts
   the LaTeX, the dialog previews it beside the crop and only inserts what you
-  confirm. If a vision model is configured, the same dialog can transcribe the
+  confirm. If a vision model is saved in the image analysis profile, the same dialog
+  can transcribe the
   crop into a proposal on request; the reply is shown as unverified, only the crop
   is sent, and the provenance note credits the model only while you leave its reply
   unchanged. Equations are never recognised automatically: transcription is an
@@ -461,8 +463,11 @@ application, and OCR review works without it.
    contact that URL for either a connection test or a cleanup.
 4. Optionally set a rolling 24-hour **Request limit**. Zero means unlimited.
    Connection tests are not counted.
-5. Optionally add a **Vision model** name (for example `llava:7b`) if the same
-   server has one installed. Leave it empty to keep image AI disabled.
+5. Optionally configure **Image analysis server** (provider, URL, consent and a
+   **Vision model** such as `llava:7b`) if you want AI region proposals or
+   equation-crop transcription. It is a separate task profile, so it can use a
+   different server or device than text cleanup. Leave the model empty to keep
+   image AI disabled.
 6. Open **Extract text** on a page and select **Ask local AI** on one text block.
    For region proposals, use **Ask AI for regions** in the source viewer.
 
@@ -481,7 +486,7 @@ proposals enables **Accept selected** / **Reject selected**; a confirmation name
 count, each proposal is re-checked separately, and a stale one is skipped instead of
 applied.
 
-Region proposals use the same saved connection and the optional vision model. Only
+Region proposals use the saved image analysis profile and its vision model. Only
 the current page image is resized locally and sent; the reply is shown as
 low-confidence figure, table and equation rectangles. Nothing is saved until you
 choose a rectangle and confirm the normal extraction dialog, so the proposal can
@@ -925,8 +930,9 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   Deleting a PDF page keeps the shared original until its last page is removed.
 - Asset paths stored in databases are relative and validated against traversal.
 - The local API binds to loopback by default and sends no telemetry.
-- The AI settings profile (provider, local base URL, text model, optional vision
-  model, remote consent) is stored in `app.db`. No API keys exist in this phase.
+- The AI settings profile (provider, local base URL and remote consent) is stored
+  per task in `app.db`: text cleanup and image analysis each keep their own server,
+  model and consent decision. No API keys exist in this phase.
   Project text sent for cleanup and the current page image sent for region
   proposals go only to the configured server URL; a non-loopback URL is refused
   unless remote consent is explicitly enabled. Cleanup responses are stored in the
@@ -1066,7 +1072,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   the user configures are supported; loopback is the default, and any other host
   requires explicit remote consent before a request. Cleanup attempts are counted
   against an optional rolling 24-hour limit; connection tests are not. Cloud free
-  tiers, paid providers, API keys, vision tasks, cost estimation, rate-limit handling
+  tiers, paid providers, API keys, cost estimation, rate-limit handling
   and provider fallbacks are not implemented yet. A local server's "free" status
   depends on the user's own installation and hardware, so nothing is advertised as
   universally free.
@@ -1104,7 +1110,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 3. Import and image processing | Complete |
 | 4. Local OCR and layout detection | In progress: OCR, layout hints, reviewable table proposals and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
-| 6. AI integration and free usage first | In progress: local AI providers, remote-consent boundary, request limits, usage-history browser, bulk AI proposal review, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
+| 6. AI integration and free usage first | In progress: local AI providers, separate text and vision task profiles, remote-consent boundary, request limits, usage-history browser, bulk AI proposal review, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, reviewable automatic table proposals from OCR word boxes, merged-cell spans read from PDF vector rules, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; vision tables, nested tables and automatic equation extraction pending |
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
 | 9. History, backup and recovery | **Complete**: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |

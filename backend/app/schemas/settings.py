@@ -154,28 +154,19 @@ class AiSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: AiProfileSettings = Field(default_factory=AiProfileSettings)
-    # Model used for page-image region proposals. Empty keeps image AI disabled.
-    vision_model: str = Field(default="", max_length=200)
+    # Image analysis is a separate task profile, so it can use its own local
+    # server, model and remote consent. Empty model keeps image AI disabled.
+    vision: AiProfileSettings = Field(default_factory=AiProfileSettings)
     # Rolling 24-hour cap for AI request attempts. Zero means unlimited.
     request_limit: int = Field(default=0, ge=0, le=10_000)
-
-    @field_validator("vision_model")
-    @classmethod
-    def _check_vision_model(cls, value: str) -> str:
-        return value.strip()
 
 
 class AiPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: AiProfilePatch | None = None
-    vision_model: str | None = Field(default=None, max_length=200)
+    vision: AiProfilePatch | None = None
     request_limit: int | None = Field(default=None, ge=0, le=10_000)
-
-    @field_validator("vision_model")
-    @classmethod
-    def _check_vision_model(cls, value: str | None) -> str | None:
-        return None if value is None else value.strip()
 
 
 class AppSettings(BaseModel):
