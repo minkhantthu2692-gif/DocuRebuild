@@ -74,6 +74,7 @@ _MARKDOWN_SPECIALS = frozenset("\\`*_[]<>")
 _SAFE_LINK_PATTERN = re.compile(r"^(https?://|mailto:)", re.IGNORECASE)
 _UNSAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 _FIGURE_FALLBACK = "Figure"
+_INLINE_IMAGE_FALLBACK = "Image"
 
 
 def _escape_inline(text: str) -> str:
@@ -159,6 +160,8 @@ def _inline_markdown(nodes: list[dict[str, Any]] | None) -> str:
             parts.append("  \n")
         elif kind == "figure":
             parts.append(_figure_marker(node, markdown=True))
+        elif kind == "inlineImage":
+            parts.append(_inline_image_marker(node, markdown=True))
         elif kind == "figureReference":
             parts.append(_figure_reference_marker(node))
         elif kind == "equationReference":
@@ -189,6 +192,8 @@ def _inline_text(nodes: list[dict[str, Any]] | None) -> str:
             parts.append("\n")
         elif kind == "figure":
             parts.append(_figure_marker(node, markdown=False))
+        elif kind == "inlineImage":
+            parts.append(_inline_image_marker(node, markdown=False))
         elif kind == "figureReference":
             parts.append(_figure_reference_marker(node))
         elif kind == "equationReference":
@@ -231,6 +236,19 @@ def _figure_marker(node: dict[str, Any], *, markdown: bool) -> str:
             else:
                 marker = f"{marker}\n" + "\n".join(note_lines)
     return marker
+
+
+def _inline_image_marker(node: dict[str, Any], *, markdown: bool) -> str:
+    """A readable marker for a local inline picture outside DOCX/PDF.
+
+    Markdown and plain text cannot reference the project's local API path, so
+    the alt text is kept instead of an unusable image link. Nothing is invented.
+    """
+    attrs = node.get("attrs") or {}
+    alt = str(attrs.get("alt") or "").strip() or _INLINE_IMAGE_FALLBACK
+    if markdown:
+        return f"\\[Image: {_escape_inline(alt)}\\]"
+    return f"[Image: {alt}]"
 
 
 def _equation_latex(node: dict[str, Any]) -> str:
@@ -615,6 +633,8 @@ def _block_markdown(node: dict[str, Any], depth: int = 0) -> str:
         return "---"
     if kind == "figure":
         return _figure_marker(node, markdown=True)
+    if kind == "inlineImage":
+        return _inline_image_marker(node, markdown=True)
     if kind == "blockMath":
         return _equation_marker(node, markdown=True, block=True)
     if kind == "table":
@@ -682,6 +702,8 @@ def _block_text(node: dict[str, Any]) -> str:
         return "-" * 3
     if kind == "figure":
         return _figure_marker(node, markdown=False)
+    if kind == "inlineImage":
+        return _inline_image_marker(node, markdown=False)
     if kind == "blockMath":
         return _equation_marker(node, markdown=False, block=True)
     if kind == "table":
@@ -776,6 +798,10 @@ def download_filename(name: str, fmt: ExportFormat) -> str:
 # from another project or from the filesystem.
 _ASSET_SRC = re.compile(r"/assets/([0-9A-Fa-f-]{36})/file")
 _MAX_IMAGE_WIDTH = Inches(6.0)
+# An inline picture shares a line with prose, so it is capped in both directions
+# instead of taking over the page.
+_MAX_INLINE_IMAGE_WIDTH = Inches(2.2)
+_MAX_INLINE_IMAGE_HEIGHT = Inches(1.4)
 _ALIGNMENTS = {
     "left": WD_ALIGN_PARAGRAPH.LEFT,
     "center": WD_ALIGN_PARAGRAPH.CENTER,
@@ -983,6 +1009,8 @@ class _DocxRenderer:
                 latex = _equation_latex(node)
                 if latex and not self._add_math(paragraph, latex):
                     paragraph.add_run(latex).italic = True
+            elif kind == "inlineImage":
+                self._add_inline_image(paragraph, node)
             elif kind == "hardBreak":
                 paragraph.add_run().add_break()
             elif kind == "figure":
@@ -1207,6 +1235,46 @@ class _DocxRenderer:
                 run.font.size = Pt(9)
 
     def _add_picture(self, container: Any, src: Any, alt: str) -> bool:
+        paragraph = container.add_paragraph()
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = paragraph.add_run()
+        if not self._fill_picture_run(
+            run, src, alt, max_width=_MAX_IMAGE_WIDTH
+        ):
+            paragraph._p.getparent().remove(paragraph._p)
+            return False
+        return True
+
+    def _add_inline_image(self, paragraph: Any, node: dict[str, Any]) -> None:
+        """Embed a small picture inside the running paragraph.
+
+        A missing or unreadable asset becomes a visible marker so the sentence
+        never silently loses the picture. The alt text doubles as the Word
+        drawing description, exactly like a block figure.
+        """
+        attrs = node.get("attrs") or {}
+        alt = str(attrs.get("alt") or "")
+        run = paragraph.add_run()
+        if self._fill_picture_run(
+            run,
+            attrs.get("src"),
+            alt,
+            max_width=_MAX_INLINE_IMAGE_WIDTH,
+            max_height=_MAX_INLINE_IMAGE_HEIGHT,
+        ):
+            return
+        label = alt.strip() or _INLINE_IMAGE_FALLBACK
+        paragraph.add_run(f"[Image: {label}]")
+
+    def _fill_picture_run(
+        self,
+        run: Any,
+        src: Any,
+        alt: str,
+        *,
+        max_width: int,
+        max_height: int | None = None,
+    ) -> bool:
         if not isinstance(src, str):
             return False
         match = _ASSET_SRC.search(src)
@@ -1222,9 +1290,6 @@ class _DocxRenderer:
         except OSError:
             return False
 
-        paragraph = container.add_paragraph()
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = paragraph.add_run()
         shape = None
         try:
             # A stream gives the image part a generic name, so the local asset
@@ -1243,15 +1308,22 @@ class _DocxRenderer:
             except Exception:
                 shape = None
         if shape is None:
-            paragraph._p.getparent().remove(paragraph._p)
             return False
 
-        name = alt.strip() or "Figure"
+        name = alt.strip() or _FIGURE_FALLBACK
         shape._inline.graphic.graphicData.pic.nvPicPr.cNvPr.set("name", name)
         if alt:
             shape._inline.docPr.set("descr", alt)
-        if shape.width > _MAX_IMAGE_WIDTH:
-            ratio = _MAX_IMAGE_WIDTH / shape.width
+        width_ratio = (
+            max_width / shape.width if shape.width > max_width else 1.0
+        )
+        height_ratio = (
+            max_height / shape.height
+            if max_height is not None and shape.height > max_height
+            else 1.0
+        )
+        ratio = min(width_ratio, height_ratio)
+        if ratio < 1.0:
             shape.width = int(shape.width * ratio)
             shape.height = int(shape.height * ratio)
         return True
@@ -1394,6 +1466,10 @@ _PDF_IMAGE_SUFFIXES = frozenset(
     {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff"}
 )
 _TEXT_ALIGNMENTS = frozenset({"left", "center", "right", "justify"})
+# An inline picture stays on its sentence's line, so it is much smaller than a
+# block figure.
+_PDF_INLINE_IMAGE_MAX_WIDTH = 150.0
+_PDF_INLINE_IMAGE_MAX_HEIGHT = 90.0
 _MYANMAR_TEXT = re.compile(r"[\u1000-\u109F\uA9E0-\uA9FF\uAA60-\uAA7F]")
 _MYANMAR_FONT_TOKENS = (
     "myanmar",
@@ -1550,6 +1626,7 @@ def _pdf_css(font_file: str | None) -> str:
             ".equation { text-align: center; margin: 8pt 0; }",
             ".equation code { font-size: 10pt; }",
             ".inline-equation { font-size: 9.5pt; }",
+            ".inline-image { vertical-align: middle; max-width: 100%; }",
             (
                 ".notes-title { font-size: 14pt; margin: 18pt 0 6pt; "
                 "border-top: 0.6pt solid #ccc; padding-top: 8pt; }"
@@ -1582,7 +1659,9 @@ class _PdfRenderer:
         self.figure_number = 0
         self.equation_number = 0
         self.image_count = 0
-        self._image_cache: dict[str, tuple[str, float] | None] = {}
+        self._image_cache: dict[
+            tuple[str, float | None, float | None], tuple[str, float] | None
+        ] = {}
 
     def render(self) -> str:
         body = self._blocks(self.content.get("content") or [])
@@ -1780,6 +1859,24 @@ class _PdfRenderer:
                         '<code class="inline-equation">'
                         f"{html.escape(latex, quote=False)}</code>"
                     )
+            elif kind == "inlineImage":
+                attrs = node.get("attrs") or {}
+                alt = str(attrs.get("alt") or "")
+                image = self._image(
+                    attrs.get("src"),
+                    max_width=_PDF_INLINE_IMAGE_MAX_WIDTH,
+                    max_height=_PDF_INLINE_IMAGE_MAX_HEIGHT,
+                )
+                if image is None:
+                    label = alt.strip() or _INLINE_IMAGE_FALLBACK
+                    parts.append(f"[Image: {html.escape(label, quote=False)}]")
+                else:
+                    name, width = image
+                    parts.append(
+                        f'<img class="inline-image" src="{name}" '
+                        f'alt="{html.escape(alt, quote=True)}" '
+                        f'style="width: {width:.1f}pt">'
+                    )
             elif kind == "figure":
                 attrs = node.get("attrs") or {}
                 caption = str(
@@ -1842,12 +1939,19 @@ class _PdfRenderer:
 
     # -- assets ---------------------------------------------------------
 
-    def _image(self, src: Any) -> tuple[str, float] | None:
+    def _image(
+        self,
+        src: Any,
+        *,
+        max_width: float | None = None,
+        max_height: float | None = None,
+    ) -> tuple[str, float] | None:
         """Copy one project figure into the story archive.
 
         Only an asset id from this project's own document can resolve. A
-        missing or unreadable image becomes the explicit caption marker in
-        ``_figure`` instead of aborting the whole export.
+        missing or unreadable image becomes the explicit marker in ``_figure``
+        or ``_inline`` instead of aborting the whole export. The optional caps
+        keep an inline picture on the same line as its sentence.
         """
         if not isinstance(src, str):
             return None
@@ -1855,13 +1959,14 @@ class _PdfRenderer:
         if not match:
             return None
         asset_id = match.group(1)
-        if asset_id in self._image_cache:
-            return self._image_cache[asset_id]
+        cache_key = (asset_id, max_width, max_height)
+        if cache_key in self._image_cache:
+            return self._image_cache[cache_key]
         try:
             path, _mime = pages.get_asset_file(self.project_dir, asset_id)
             data = path.read_bytes()
         except Exception:
-            self._image_cache[asset_id] = None
+            self._image_cache[cache_key] = None
             return None
 
         suffix = path.suffix.lower()
@@ -1876,7 +1981,7 @@ class _PdfRenderer:
                     data = buffer.getvalue()
                     suffix = ".png"
         except Exception:
-            self._image_cache[asset_id] = None
+            self._image_cache[cache_key] = None
             return None
 
         name = f"figure-{self.image_count}{suffix}"
@@ -1884,18 +1989,20 @@ class _PdfRenderer:
         try:
             self.archive.add(data, name)
         except Exception:
-            self._image_cache[asset_id] = None
+            self._image_cache[cache_key] = None
             return None
 
         width = max(width_px * 72.0 / 96.0, 1.0)
         height = max(height_px * 72.0 / 96.0, 1.0)
+        limit_width = min(max_width or self.text_width, self.text_width)
+        limit_height = min(max_height or self.max_image_height, self.max_image_height)
         scale = min(
             1.0,
-            self.text_width / width,
-            self.max_image_height / height,
+            limit_width / width,
+            limit_height / height,
         )
         result = (name, width * scale)
-        self._image_cache[asset_id] = result
+        self._image_cache[cache_key] = result
         return result
 
     # -- formatting -----------------------------------------------------

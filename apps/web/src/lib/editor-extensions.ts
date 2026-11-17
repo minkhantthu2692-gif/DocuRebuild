@@ -8,6 +8,7 @@ import { NumberedBlockMath } from "./editor-equation";
 import { EquationReference } from "./editor-equation-reference";
 import { FootnoteNode } from "./editor-footnote";
 import { FigureNode } from "./editor-figure";
+import { InlineImageNode } from "./editor-inline-image";
 import { FigureReference } from "./editor-reference";
 import { normalizeLinkUrl } from "./link";
 
@@ -43,6 +44,9 @@ export function createEditorExtensions(placeholder: () => string) {
       },
     }),
     FigureNode,
+    // An inline image is a paragraph-level atom for small pictures in a
+    // sentence. It stores only src/alt and never claims a caption or number.
+    InlineImageNode,
     // Inline references resolve to a numbered figure by id. The stored node keeps
     // only the target id; the visible "Figure n" is computed, so a moved figure
     // renumbers its references and a deleted one becomes an explicit missing marker.

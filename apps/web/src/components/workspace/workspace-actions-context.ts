@@ -23,6 +23,13 @@ export interface WorkspaceFigureInsertion {
   height: number | null;
 }
 
+export interface WorkspaceInlineImageInsertion {
+  id: number;
+  type: "inlineImage";
+  src: string;
+  alt: string;
+}
+
 export interface WorkspaceTableInsertion {
   id: number;
   type: "table";
@@ -50,10 +57,15 @@ export interface WorkspaceEquationInsertion {
 export type WorkspaceInsertion =
   | WorkspaceTextInsertion
   | WorkspaceFigureInsertion
+  | WorkspaceInlineImageInsertion
   | WorkspaceTableInsertion
   | WorkspaceEquationInsertion;
 
 export type FigureInsertionInput = Omit<WorkspaceFigureInsertion, "id" | "type">;
+export type InlineImageInsertionInput = Omit<
+  WorkspaceInlineImageInsertion,
+  "id" | "type"
+>;
 export type TableInsertionInput = Omit<WorkspaceTableInsertion, "id" | "type">;
 export type EquationInsertionInput = Omit<WorkspaceEquationInsertion, "id" | "type">;
 
@@ -61,6 +73,7 @@ export interface WorkspaceActions {
   insertion: WorkspaceInsertion | null;
   insertText: (text: string, note?: string | null) => void;
   insertFigure: (figure: FigureInsertionInput) => void;
+  insertInlineImage: (image: InlineImageInsertionInput) => void;
   insertTable: (table: TableInsertionInput) => void;
   insertEquation: (equation: EquationInsertionInput) => void;
   consumeInsertion: (id: number) => void;

@@ -303,6 +303,68 @@ def test_docx_export_marks_a_missing_figure_instead_of_dropping_it(
     assert len(document.inline_shapes) == 0
 
 
+def test_docx_export_embeds_an_inline_image_inside_its_paragraph(
+    client: TestClient, project: dict
+) -> None:
+    page = upload_pages(client, project["id"], ["figure.png"])[0]
+    asset_id = page["display_asset_id"] or page["original_asset_id"]
+    src = f"/api/projects/{project['id']}/assets/{asset_id}/file"
+
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "The state "},
+                    {
+                        "type": "inlineImage",
+                        "attrs": {"src": src, "alt": "Wave function"},
+                    },
+                    {"type": "text", "text": " is shown above."},
+                ],
+            }
+        ],
+    }
+    directory = get_settings().projects_dir / project["id"]
+    document = _open(render_docx(content, directory, project["name"]))
+
+    assert len(document.paragraphs) == 1
+    text = document.paragraphs[0].text
+    assert "The state " in text
+    assert " is shown above." in text
+    assert len(document.inline_shapes) == 1
+    shape = document.inline_shapes[0]
+    assert shape.width <= int(2.2 * 914400)
+    assert shape.height <= int(1.4 * 914400)
+    assert shape._inline.docPr.get("descr") == "Wave function"
+    assert asset_id not in _body_xml(document)
+
+
+def test_docx_export_marks_a_missing_inline_image_in_the_sentence(
+    client: TestClient, project: dict
+) -> None:
+    missing = "00000000-0000-0000-0000-000000000000"
+    src = f"/api/projects/{project['id']}/assets/{missing}/file"
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "Before "},
+                    {"type": "inlineImage", "attrs": {"src": src, "alt": "Chart"}},
+                    {"type": "text", "text": " after."},
+                ],
+            }
+        ],
+    }
+    directory = get_settings().projects_dir / project["id"]
+    document = _open(render_docx(content, directory))
+    assert "Before [Image: Chart] after." in _paragraph_texts(document)
+    assert len(document.inline_shapes) == 0
+
+
 def test_docx_export_merges_table_cells(tmp_path: Path) -> None:
     content = {
         "type": "doc",

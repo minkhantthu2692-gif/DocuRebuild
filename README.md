@@ -86,7 +86,9 @@ data on your device, and treats every AI result as a reviewable proposal.
   or type its source-pixel coordinates, then crop a figure, table or equation
   region. Crops are stored as immutable project assets, can be captioned, verified
   and inserted into
-  the document as figures with an optional source note. Saved crops can also be
+  the document as figures with an optional source note, or as an inline image that
+  stays inside the current sentence and carries only its alt text. Saved crops can
+  also be
   read with the local OCR engine; the text, confidence and engine/language metadata
   are stored as an unverified proposal that can be reviewed, corrected, typed
   manually or inserted. A reviewed equation region can also be inserted as a real
@@ -131,10 +133,13 @@ data on your device, and treats every AI result as a reviewable proposal.
   changes are flushed first, and the download is refused if that save fails. Extracted
   text is escaped so it can never turn into Markdown structure or HTML, and equations
   are written as their LaTeX source with any numbering kept after the equation. Word
-  output embeds the project's own figure images and converts equations to native Word
+  output embeds the project's own figures, including pictures inserted inline in the
+  text, and converts equations to native Word
   equations, keeping the LaTeX as a visible fallback when a formula cannot be
   converted. PDF output embeds the same figures, keeps links clickable and needs a
-  Unicode Myanmar font on the device for Burmese text.
+  Unicode Myanmar font on the device for Burmese text. Markdown and plain text cannot
+  carry a local image path, so an inline picture is written as `[Image: alt]` with its
+  alt text instead of a broken link.
 - **Document versions** — the editor header keeps a local version history. Automatic
   versions are captured when the document changes, a manual checkpoint can be saved
   at any time, restoring a version always keeps the state it replaces, so a restore

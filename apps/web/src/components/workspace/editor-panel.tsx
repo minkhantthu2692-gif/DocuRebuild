@@ -92,6 +92,7 @@ import {
   type SelectedFootnote,
 } from "@/lib/editor-footnote";
 import { figureInsertionContent, createFigureId, figureAt, selectedFigure, type SelectedFigure } from "@/lib/editor-figure";
+import { inlineImageInsertionContent } from "@/lib/editor-inline-image";
 import {
   figureReferenceContent,
   numberedFigureTargets,
@@ -292,9 +293,11 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
         ? ocrInsertionContent(insertion.text, insertion.note)
         : insertion.type === "figure"
           ? figureInsertionContent(insertion)
-          : insertion.type === "table"
-            ? tableInsertionContent(insertion)
-            : formulaInsertionContent(insertion);
+          : insertion.type === "inlineImage"
+            ? inlineImageInsertionContent(insertion)
+            : insertion.type === "table"
+              ? tableInsertionContent(insertion)
+              : formulaInsertionContent(insertion);
     editor.chain().focus("end").insertContent(content).run();
     consumeInsertion(insertion.id);
   }, [editor, initialized, insertion, consumeInsertion]);

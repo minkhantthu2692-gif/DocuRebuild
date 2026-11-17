@@ -340,6 +340,71 @@ def test_pdf_export_marks_a_missing_figure_instead_of_dropping_it(
     assert "[Figure: Missing figure]" in text
 
 
+def test_pdf_export_embeds_an_inline_image_in_the_sentence(
+    client: TestClient, project: dict
+) -> None:
+    page = upload_pages(client, project["id"], ["figure.png"])[0]
+    asset_id = page["display_asset_id"] or page["original_asset_id"]
+    src = f"/api/projects/{project['id']}/assets/{asset_id}/file"
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "The state "},
+                    {
+                        "type": "inlineImage",
+                        "attrs": {"src": src, "alt": "Wave function"},
+                    },
+                    {"type": "text", "text": " is shown above."},
+                ],
+            }
+        ],
+    }
+    directory = get_settings().projects_dir / project["id"]
+    data = render_pdf(content, directory, project["name"])
+    document = _open(data)
+
+    assert document[0].get_images()
+    text = _text(document)
+    # The surrounding sentence survives around the embedded picture.
+    assert "The state" in text
+    assert "is shown above." in text
+    # Nothing about the local asset path leaks into the export.
+    assert asset_id.encode() not in data
+    assert b"/api/" not in data
+
+
+def test_pdf_export_marks_a_missing_inline_image_in_the_sentence(
+    tmp_path: Path,
+) -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "Before "},
+                    {
+                        "type": "inlineImage",
+                        "attrs": {
+                            "src": "/api/projects/project-1/assets/"
+                            "00000000-0000-0000-0000-000000000000/file",
+                            "alt": "Chart",
+                        },
+                    },
+                    {"type": "text", "text": " after."},
+                ],
+            }
+        ],
+    }
+    document = _open(render_pdf(content, tmp_path))
+    text = _text(document)
+    assert "Before [Image: Chart] after." in text
+    assert not document[0].get_images()
+
+
 def test_pdf_export_writes_footnotes_as_endnotes(tmp_path: Path) -> None:
     content = {
         "type": "doc",

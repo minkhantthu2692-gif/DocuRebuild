@@ -6,6 +6,7 @@ import {
   WorkspaceActionsContext,
   type EquationInsertionInput,
   type FigureInsertionInput,
+  type InlineImageInsertionInput,
   type TableInsertionInput,
   type WorkspaceInsertion,
 } from "./workspace-actions-context";
@@ -23,6 +24,10 @@ export function WorkspaceActionsProvider({ children }: { children: ReactNode }) 
 
   const insertFigure = useCallback((figure: FigureInsertionInput) => {
     setInsertion({ id: nextInsertionId++, type: "figure", ...figure });
+  }, []);
+
+  const insertInlineImage = useCallback((image: InlineImageInsertionInput) => {
+    setInsertion({ id: nextInsertionId++, type: "inlineImage", ...image });
   }, []);
 
   const insertTable = useCallback((table: TableInsertionInput) => {
@@ -50,6 +55,7 @@ export function WorkspaceActionsProvider({ children }: { children: ReactNode }) 
       insertion,
       insertText,
       insertFigure,
+      insertInlineImage,
       insertTable,
       insertEquation,
       consumeInsertion,
@@ -61,6 +67,7 @@ export function WorkspaceActionsProvider({ children }: { children: ReactNode }) 
       insertion,
       insertText,
       insertFigure,
+      insertInlineImage,
       insertTable,
       insertEquation,
       consumeInsertion,

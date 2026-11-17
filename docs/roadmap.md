@@ -452,6 +452,14 @@ the user must review every region before extracting it.
   equation updates every citation; a deleted, unnumbered or inline target exports as
   `Equation (missing)`. Figure and equation citations share the same reference node
   implementation.
+- Inline images in running text: an extracted crop can enter the document as a
+  paragraph-level atom instead of a block figure, either when a new region is saved
+  and inserted or from a saved region’s “Insert inline” action. The node stores only
+  the project asset URL and alt text, so no caption, note or number is invented; the
+  picture stays in its sentence, is capped in size and can be selected and deleted
+  without touching the surrounding text. Markdown and plain text write
+  `\[Image: alt\]`/`[Image: alt]` rather than an unusable local path, while Word and
+  PDF embed the actual asset inline.
 
 **Pending**
 
@@ -459,8 +467,8 @@ the user must review every region before extracting it.
   rules: vision-based tables and nested tables, always as a reviewable proposal that
   is never inserted without approval. Cross-block grouping and merged-cell spans
   from a PDF's vector rules are delivered.
-- Inline images in running text and optional structured figure reconstruction with
-  approval. Figure numbering and prose cross-references are delivered.
+- Optional structured figure reconstruction with approval. Figure numbering, prose
+  cross-references and inline images are delivered.
 - Automatic equation recognition from OCR or vision across a page as a reviewable
   proposal. Word export now converts typed equations to native OMML, a reviewed
   equation region can be inserted as a real equation, and one saved crop can be
@@ -535,8 +543,8 @@ the user must review every region before extracting it.
 - `export` in `/api/meta`, English and Burmese labels, backend serializer and
   endpoint tests.
 - PDF export: A4 or US Letter pages with a page-number footer, embedded project
-  figures, clickable links, native tables with merged cells, aligned headings and
-  paragraphs, and a numbered **Notes** list for footnotes. **Settings → Export**
+  figures (block and inline), clickable links, native tables with merged cells, aligned
+  headings and paragraphs, and a numbered **Notes** list for footnotes. **Settings → Export**
   chooses the page size and a narrow/normal/wide margin (36/50/72 pt); both are
   validated presets stored in app settings and applied to later downloads. The output
   is deterministic and carries only the project title plus `DocuRebuild` as
@@ -547,14 +555,14 @@ the user must review every region before extracting it.
   replacement characters.
 
 **Current limitation** — export covers headings, paragraphs, lists, blockquotes,
-code blocks, rules, inline marks, tables, figures, equations and footnotes. Page
-layout is not part of the editor model yet. Word and PDF export follow the document
-flow rather than the source page geometry, and a formula the local Word converter
-cannot handle is written as its LaTeX source. PDF export keeps every equation as
-LaTeX source by design.
+code blocks, rules, inline marks, tables, figures (block and inline), equations and
+footnotes. Page layout is not part of the editor model yet. Word and PDF export follow
+the document flow rather than the source page geometry, and a formula the local Word
+converter cannot handle is written as its LaTeX source. PDF export keeps every
+equation as LaTeX source by design.
 
-**Pending** - images inline in text, source page layout, headers/footers, broader
-OMML coverage and a bundled offline LaTeX typesetter.
+**Pending** - source page layout, headers/footers, broader OMML coverage and a bundled
+offline LaTeX typesetter.
 
 ## Phase 9 — History, backup and recovery (complete)
 

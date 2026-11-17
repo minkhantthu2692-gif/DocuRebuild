@@ -211,6 +211,53 @@ def test_text_export_is_plain_and_omits_asset_paths() -> None:
     assert "/api/" not in text
 
 
+def test_inline_images_stay_in_their_sentence() -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "Before "},
+                    {
+                        "type": "inlineImage",
+                        "attrs": {
+                            "src": "/api/projects/abc/assets/local-only.png",
+                            "alt": "wave [peak]",
+                        },
+                    },
+                    {"type": "text", "text": " after."},
+                ],
+            }
+        ],
+    }
+    markdown = render_markdown(content)
+    # Alt text is escaped so it cannot become Markdown structure, and the local
+    # asset path never reaches the file.
+    assert markdown == "Before \\[Image: wave \\[peak\\]\\] after.\n"
+    assert "/api/" not in markdown
+
+    text = render_text(content)
+    assert text == "Before [Image: wave [peak]] after.\n"
+    assert "/api/" not in text
+
+
+def test_inline_image_without_alt_stays_an_explicit_marker() -> None:
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "inlineImage", "attrs": {"src": "/api/projects/p/a/f"}},
+                ],
+            }
+        ],
+    }
+    assert render_markdown(content) == "\\[Image: Image\\]\n"
+    assert render_text(content) == "[Image: Image]\n"
+
+
 def test_numbered_figures_export_in_document_order() -> None:
     content = {
         "type": "doc",

@@ -12,6 +12,7 @@ import {
   Sigma,
   Sparkles,
   Trash2,
+  WrapText,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -38,6 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input, Textarea } from "@/components/ui/input";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
@@ -73,6 +75,9 @@ interface ElementsDialogProps {
 }
 
 const KINDS: readonly ElementKind[] = ["figure", "table", "equation"];
+
+/** How an extracted crop enters the document. */
+type InsertPlacement = "block" | "inline";
 
 interface CoordinateDraft {
   x: string;
@@ -157,7 +162,7 @@ export function ElementsDialog({
   const { t } = useTranslation("workspace");
   const { t: tCommon } = useTranslation("common");
   const errorMessage = useApiErrorMessage();
-  const { insertFigure, insertText } = useWorkspaceActions();
+  const { insertFigure, insertInlineImage, insertText } = useWorkspaceActions();
 
   const elementsQuery = useElements(projectId, page?.id ?? null, open);
   const elements = useMemo(
@@ -176,6 +181,7 @@ export function ElementsDialog({
   const [caption, setCaption] = useState("");
   const [draft, setDraft] = useState<CoordinateDraft>(EMPTY_DRAFT);
   const [includeNote, setIncludeNote] = useState(true);
+  const [placement, setPlacement] = useState<InsertPlacement>("block");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [captionDraft, setCaptionDraft] = useState("");
@@ -215,6 +221,7 @@ export function ElementsDialog({
       setCaption("");
       setDraft(EMPTY_DRAFT);
       setIncludeNote(true);
+      setPlacement("block");
       setDeleteId(null);
       setEditingId(null);
       setCaptionDraft("");
@@ -271,20 +278,28 @@ export function ElementsDialog({
       if (insert) {
         const url = api.assetUrl(projectId, element.asset_id, element.updated_at);
         if (url) {
-          insertFigure({
-            src: url,
-            alt: element.caption || t(`elements.kind.${element.kind}`),
-            caption: element.caption,
-            note: includeNote
-              ? t("elements.sourceNote", {
-                  page: page.page_number,
-                  status: element.verified ? t("elements.verified") : t("elements.unverified"),
-                })
-              : null,
-            width: element.width,
-            height: element.height,
-          });
-          toast.success(t("elements.inserted"));
+          if (placement === "inline") {
+            insertInlineImage({
+              src: url,
+              alt: element.caption || t(`elements.kind.${element.kind}`),
+            });
+            toast.success(t("elements.insertedInline"));
+          } else {
+            insertFigure({
+              src: url,
+              alt: element.caption || t(`elements.kind.${element.kind}`),
+              caption: element.caption,
+              note: includeNote
+                ? t("elements.sourceNote", {
+                    page: page.page_number,
+                    status: element.verified ? t("elements.verified") : t("elements.unverified"),
+                  })
+                : null,
+              width: element.width,
+              height: element.height,
+            });
+            toast.success(t("elements.inserted"));
+          }
           onInserted?.();
         }
       } else {
@@ -298,12 +313,21 @@ export function ElementsDialog({
     }
   };
 
-  const insertSaved = (elementId: string) => {
+  const insertSaved = (elementId: string, mode: InsertPlacement = "block") => {
     const element = elements.find((item) => item.id === elementId);
     if (!element || !page) return;
     const url = api.assetUrl(projectId, element.asset_id, element.updated_at);
     if (!url) {
       toast.error(t("elements.errors.missingAsset"));
+      return;
+    }
+    if (mode === "inline") {
+      insertInlineImage({
+        src: url,
+        alt: element.caption || t(`elements.kind.${element.kind}`),
+      });
+      toast.success(t("elements.insertedInline"));
+      onInserted?.();
       return;
     }
     insertFigure({
@@ -558,16 +582,44 @@ export function ElementsDialog({
               </div>
             </div>
 
+            <div className="mt-3 space-y-1.5">
+              <p className="text-2xs font-medium text-muted-foreground">
+                {t("elements.placementLabel")}
+              </p>
+              <SegmentedControl
+                value={placement}
+                onValueChange={(value) => setPlacement(value as InsertPlacement)}
+                options={[
+                  { value: "block", label: t("elements.placementBlock") },
+                  {
+                    value: "inline",
+                    label: t("elements.placementInline"),
+                    icon: <WrapText />,
+                  },
+                ]}
+                label={t("elements.placementLabel")}
+              />
+              {placement === "inline" ? (
+                <p className="text-2xs leading-relaxed text-muted-foreground">
+                  {t("elements.placementInlineHint")}
+                </p>
+              ) : null}
+            </div>
+
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <label className="flex items-center gap-1.5 text-2xs text-muted-foreground">
-                <input
-                  type="checkbox"
-                  className="size-3.5 accent-primary"
-                  checked={includeNote}
-                  onChange={(event) => setIncludeNote(event.target.checked)}
-                />
-                {t("elements.includeNote")}
-              </label>
+              {placement === "block" ? (
+                <label className="flex items-center gap-1.5 text-2xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    className="size-3.5 accent-primary"
+                    checked={includeNote}
+                    onChange={(event) => setIncludeNote(event.target.checked)}
+                  />
+                  {t("elements.includeNote")}
+                </label>
+              ) : (
+                <span />
+              )}
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -886,6 +938,15 @@ export function ElementsDialog({
                         >
                           <ImagePlus />
                           {t("elements.insert")}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => insertSaved(element.id, "inline")}
+                        >
+                          <WrapText />
+                          {t("elements.insertInline")}
                         </Button>
                         {element.kind === "equation" && element.text.trim() ? (
                           <Button

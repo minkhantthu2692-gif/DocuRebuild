@@ -42,7 +42,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.pdf` | PDF open/validation, page rendering, embedded text extraction, embedded raster-image boxes, vector-artwork boxes, axis-aligned table rule extraction, capability detection |
 | `services.layout` | Shared deterministic block classification (heading, list, caption, equation, table-like grid, running header/footer, page number) for OCR and embedded PDF text |
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps, coalesced revision snapshots, manual checkpoints and restore |
-| `services.document_export` | Deterministic Tiptap-to-Markdown/TXT/DOCX/PDF rendering, escaping, OMML equations, figure embedding, native footnotes, PDF layout and download names |
+| `services.document_export` | Deterministic Tiptap-to-Markdown/TXT/DOCX/PDF rendering, escaping, OMML equations, figure and inline-image embedding, native footnotes, PDF layout and download names |
 | `services.project_backup` | Verified local zip creation, safe validation/extraction and additive restore as a new project |
 | `services.backup_crypto` | Optional `.drbz` container for downloaded backups: scrypt key derivation, chunked AES-256-GCM, password and corruption errors |
 | `services.local_backups` | Local backup vault: verified copy creation, retention pruning, safe name resolution and opt-in automatic copies |
@@ -278,7 +278,8 @@ src/
 - The editor extension list is defined once in `lib/editor-extensions.ts` and used
   by both the React editor and the tests, so a node cannot work in a test while
   being absent from the real editor. StarterKit, text alignment, the figure node,
-  the block and inline equation nodes, the placeholder and `TableKit` live there.
+  the inline-image node, the block and inline equation nodes, the placeholder and
+  `TableKit` live there.
 - A best-effort flush runs when leaving the workspace. It complements the document
   version history but is not a substitute for a project backup.
 - Imports start a job and poll it every 500 ms while active. The progress panel
@@ -475,6 +476,14 @@ src/
   node, so they survive document saves. The document references the project asset
   by URL; the crop itself is not embedded or re-encoded. Extracted text is inserted
   through the normal text insertion path with a provenance note.
+- The extraction dialog also offers an inline placement. `inlineImage` is a separate
+  paragraph-level atom that stores only `src` and `alt`, so the picture stays in the
+  current sentence and no caption, note or figure number is invented. The same
+  dialog and the saved-region library both expose it ("Insert inline"), and both use
+  the existing project asset URL. One picture can be selected and deleted without
+  touching the surrounding text. Markdown and plain text write an explicit
+  `[Image: alt]` marker, while Word and PDF embed the asset at a smaller size cap;
+  a missing asset leaves the same visible marker.
 - An equation region's reviewed text can become a real display equation instead of
   a picture. The dialog shows the saved crop beside a local KaTeX render of the
   LaTeX being edited, refuses empty or unrenderable source, and inserts only the
@@ -738,10 +747,10 @@ src/
 - `services.document_export` maps every known node deterministically: doc,
   paragraph, heading (levels 1–6, clamped), bullet/ordered lists (including
   `start`), listItem, blockquote, codeBlock (fence widened when the code contains
-  backticks), horizontalRule, hardBreak, table, text marks, the custom `figure`,
-  `figureReference`, `equationReference` and `footnote` atoms and the math nodes.
-  Markdown and TXT share that traversal; DOCX uses a separate `_DocxRenderer` and
-  PDF a `_PdfRenderer`, both over the same JSON.
+  backticks), horizontalRule, hardBreak, table, text marks, the custom `figure` and
+  `inlineImage`, `figureReference`, `equationReference` and `footnote` atoms and the
+  math nodes. Markdown and TXT share that traversal; DOCX uses a separate
+  `_DocxRenderer` and PDF a `_PdfRenderer`, both over the same JSON.
 - Markdown output escapes `` \ ` * _ [ ] < > `` and line-start markers (`#`,
   `-`, `+`, `>`, `1.`/`1)` and `---`), so extracted OCR text cannot become
   structure or raw HTML. Code spans are built from raw text so their content stays
@@ -751,7 +760,9 @@ src/
   project, so the node becomes `[Figure: <caption>]` plus the source note. A numbered
   figure becomes `[Figure n: <caption>]`, counted in document order with the same
   token approach as equations. The project asset itself remains untouched and
-  reinsertable.
+  reinsertable. An `inlineImage` is a prose atom rather than a block, so it becomes
+  `\[Image: <alt>\]` in Markdown (alt text escaped) and `[Image: <alt>]` in plain
+  text; an empty alt falls back to `Image`. No path or asset id is written.
 - Figure references are resolved before the file is returned. A pre-pass maps every
   numbered figure id to its document-order number, then `\x00figure-ref:<id>\x00`
   tokens written during traversal are replaced with `Figure n`. A missing or
@@ -808,6 +819,10 @@ src/
   A figure reference in running text is written as the same resolved `Figure n`
   label (or `Figure (missing)`), using the precomputed id-to-number map; it is
   static text, not a Word cross-reference field.
+- An inline image is embedded in its own paragraph run, so it keeps the sentence's
+  flow. It is capped at 2.2 × 1.4 inches, and the stream/PNG fallback and drawing
+  description are shared with block figures through `_fill_picture_run`. A missing
+  asset leaves `[Image: <alt>]` in the sentence; no placeholder picture is created.
 - Equations are converted locally: `latex2mathml` produces MathML,
   `mathml2omml` converts it to Office Math, and the `<m:oMath>` element is appended
   to the paragraph. The conversion output has no `m` namespace declaration, so it is
@@ -855,7 +870,11 @@ src/
   page. The caption is centered below the image, the source note is kept, and a
   numbered figure gains a `Figure n.` prefix. A missing asset becomes an explicit
   `[Figure n: <caption>]` marker (or `[Figure: <caption>]` when unnumbered). Local
-  asset ids and API paths never enter the file.
+  asset ids and API paths never enter the file. An inline image is written as an
+  `<img>` in the same paragraph and capped at 150 × 90 pt so it stays on the line;
+  the archive cache is keyed by asset id plus both caps, so inline and block uses of
+  one asset do not inherit each other's size. A missing asset leaves
+  `[Image: <alt>]` text.
 - Equations keep their exact LaTeX source in a monospace style with the optional `(n)`
   label, because no offline LaTeX typesetter is bundled; inventing a rendered formula
   would violate the accuracy rule. Inline math stays inside its sentence, and equation

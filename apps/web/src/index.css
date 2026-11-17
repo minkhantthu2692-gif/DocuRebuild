@@ -113,6 +113,16 @@
     @apply mx-auto h-auto max-h-[34rem] w-auto max-w-full rounded-md border border-border/60 bg-muted/20 object-contain;
   }
 
+  /* An inline image shares the line with the surrounding prose. It is capped in
+     height so one picture cannot turn a sentence into a full-page block. */
+  .doc-content .ProseMirror img.doc-inline-image {
+    @apply inline-block h-auto max-h-32 w-auto max-w-full rounded-sm border border-border/60 bg-muted/20 object-contain align-middle;
+  }
+
+  .doc-content .ProseMirror img.doc-inline-image.ProseMirror-selectednode {
+    @apply outline outline-2 outline-offset-2 outline-primary/50;
+  }
+
   .doc-content .ProseMirror figure.doc-figure figcaption {
     @apply flex flex-col gap-0.5 text-center text-xs leading-relaxed text-muted-foreground;
   }
