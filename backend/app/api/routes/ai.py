@@ -50,6 +50,47 @@ def _commit_usage(session: Session) -> None:
         session.rollback()
 
 
+def _effective_cost_class(profile: Any, payload: Any) -> str:
+    """Classify the server this request would actually reach.
+
+    The target URL is validated first, so remote consent and URL errors keep
+    their own status codes before a cost decision is made. Loopback is always
+    local inference. A saved remote profile keeps a declared "free" class; any
+    other remote target needs confirmation because the user may be billed.
+    """
+    provider = getattr(payload, "provider", None) or profile.provider
+    base_url = getattr(payload, "base_url", None)
+    if base_url is None:
+        base_url = profile.base_url
+    resolved = ai_service.normalize_base_url(
+        provider, base_url, allow_remote=profile.allow_remote
+    )
+    if ai_service.is_loopback_base_url(provider, resolved):
+        return "local"
+    if getattr(payload, "provider", None) is None and getattr(
+        payload, "base_url", None
+    ) is None and profile.cost_class == "free":
+        return "free"
+    return "paid"
+
+
+def _require_paid_approval(profile: Any, payload: Any) -> None:
+    """Refuse a paid generation request that the user has not approved.
+
+    This runs before the usage limit check and before any network request, so a
+    refused action never costs money or counts against the request limit.
+    """
+    if getattr(payload, "confirm_paid", False):
+        return
+    if _effective_cost_class(profile, payload) != "paid":
+        return
+    raise AppError(
+        409,
+        "ai_paid_confirmation_required",
+        "This AI profile is marked as paid. Confirm the request before it is sent.",
+    )
+
+
 def _probe_api_key(payload: AiProbeRequest, session: Session) -> str | None:
     if payload.api_key:
         return ai_secrets.clean_api_key(payload.api_key)
@@ -144,6 +185,7 @@ def create_ai_region_proposals(
             "ai_vision_not_configured",
             "Choose a vision model in Settings before analysing page images.",
         )
+    _require_paid_approval(vision, payload)
     ai_usage.ensure_within_limit(session, ai_settings.request_limit)
 
     def record_attempt(attempt: ai_service.RequestAttempt) -> None:
@@ -205,6 +247,7 @@ def create_ai_equation_proposal(
             "ai_vision_not_configured",
             "Choose a vision model in Settings before transcribing equations.",
         )
+    _require_paid_approval(vision, payload)
     ai_usage.ensure_within_limit(session, ai_settings.request_limit)
 
     def record_attempt(attempt: ai_service.RequestAttempt) -> None:
@@ -292,6 +335,7 @@ def create_ai_cleanup_suggestion(
 ) -> dict[str, Any]:
     directory = project_service.ensure_project_storage(project)
     ai_settings = get_app_settings(session).ai
+    _require_paid_approval(ai_settings.text, payload)
     ai_usage.ensure_within_limit(session, ai_settings.request_limit)
 
     def record_attempt(attempt: ai_service.RequestAttempt) -> None:

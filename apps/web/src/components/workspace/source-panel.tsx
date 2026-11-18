@@ -58,7 +58,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAiRegionProposals } from "@/hooks/use-ai";
-import { useAppMeta } from "@/hooks/use-app";
+import { useAppMeta, useAppSettings } from "@/hooks/use-app";
 import { useElements, useRegionProposals } from "@/hooks/use-elements";
 import { useLatestOcr } from "@/hooks/use-ocr";
 import {
@@ -89,6 +89,7 @@ import { OcrDialog } from "./ocr-dialog";
 import { EditsDialog } from "./edits-dialog";
 import { ElementsDialog } from "./elements-dialog";
 import { AiReviewDialog } from "./ai-review-dialog";
+import { usePaidAiGuard } from "./paid-ai-confirm-dialog";
 
 interface SourcePanelProps {
   projectId: string;
@@ -282,6 +283,8 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   const queryClient = useQueryClient();
   const pagesQuery = usePages(projectId);
   const metaQuery = useAppMeta();
+  const settingsQuery = useAppSettings();
+  const paidAi = usePaidAiGuard();
   const pages = useMemo(() => pagesQuery.data ?? [], [pagesQuery.data]);
   const meta = metaQuery.data;
 
@@ -455,12 +458,15 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     setPendingProposal(null);
   }, []);
 
-  const requestAiRegions = () => {
+  const requestAiRegions = async () => {
     if (!currentPage || aiRegions.isPending) return;
+    // Paid image analysis is approved for this request only.
+    const approved = await paidAi.requestApproval(settingsQuery.data?.ai.vision);
+    if (!approved) return;
     cancelRegionSelect();
     setProposalsOn(false);
     aiRegions.mutate(
-      {},
+      { payload: { confirm_paid: true } },
       {
         onSuccess: (result) => {
           if (result.proposals.length === 0) {
@@ -1081,7 +1087,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
               icon={WandSparkles}
               active={Boolean(aiRegionData)}
               disabled={aiRegions.isPending || !currentPage}
-              onClick={requestAiRegions}
+              onClick={() => void requestAiRegions()}
             />
 
             <ToolButton
@@ -1499,6 +1505,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {paidAi.paidDialog}
     </section>
   );
 }

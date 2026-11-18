@@ -85,8 +85,10 @@ data on your device, and treats every AI result as a reviewable proposal.
   created, and OCR text changes are refused if the run is stale. If the chosen
   provider requires authentication, an optional **API key** can be saved per task;
   it is encrypted at rest, write-only in the API, and sent only as a bearer token to
-  the saved server. No cloud provider
-  or paid API is used, and AI output never becomes document content automatically.
+  the saved server. Each profile is declared **local**, **free** or **paid**: a remote
+  URL is saved as paid unless the user explicitly marks it as a free tier, and a paid
+  action asks for confirmation before any request is sent. No request runs silently,
+  and AI output never becomes document content automatically.
 - **Region extraction (manual + suggestions)** — drag a rectangle on the source page
   or type its source-pixel coordinates, then crop a figure, table or equation
   region. Crops are stored as immutable project assets, can be captioned, verified
@@ -223,15 +225,18 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 ### Not available yet
 
-Automatic page-wide equation transcription, generative figure detection, cloud/free-tier AI
-providers, image-generation profiles, desktop packaging and PWA install support are
-planned but not implemented. OCR extracts text blocks, reading order and
-conservative layout hints. It can turn a block the layout labels as a table into a
-reviewable cell grid derived from its word boxes, group vertically contiguous
-paragraph blocks into one page-level candidate, and read a PDF's drawn table rules so
-merged cells keep exactly the shape the document drew. It never inserts a grid on its
-own, never invents a cell, and does not transcribe equations. Nested tables and
-vision-based table reading are not implemented.
+Automatic page-wide equation transcription, generative figure detection, verified
+provider pricing/quota metadata, spending caps, automatic provider routing,
+image-generation profiles, desktop packaging and PWA install support are planned but
+not implemented. Remote free-tier and paid OpenAI-compatible providers can already be
+configured explicitly; a paid profile is gated by a per-action confirmation, but the
+application does not estimate prices or verify what the provider charges. OCR extracts
+text blocks, reading order and conservative layout hints. It can turn a block the
+layout labels as a table into a reviewable cell grid derived from its word boxes,
+group vertically contiguous paragraph blocks into one page-level candidate, and read a
+PDF's drawn table rules so merged cells keep exactly the shape the document drew. It
+never inserts a grid on its own, never invents a cell, and does not transcribe
+equations. Nested tables and vision-based table reading are not implemented.
 Region extraction produces exact pixel crops and can read their plain text locally;
 it does not build structured table cells. Equation markup comes only from manual
 typing or the formula dialog's explicit, reviewed transcription of one saved crop.

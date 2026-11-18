@@ -134,6 +134,17 @@
     "allowRemote": "Remote endpoint consent",
     "allowRemoteDescription": "Localhost and loopback addresses work without this. Any other host or IP requires explicit consent before text is sent.",
     "allowRemoteLabel": "Allow sending OCR text to a non-loopback server I control",
+    "costClass": "Cost class",
+    "costClassDescription": "How this server is billed. Paid profiles ask for confirmation before every AI action; connection tests never need it.",
+    "costClassValues": {
+      "local": "Local",
+      "free": "Free",
+      "paid": "Paid"
+    },
+    "costClassHintLocal": "Runs on this device. No provider charge.",
+    "costClassHintFree": "A remote free tier. Its limits and availability are set by the provider and can change.",
+    "costClassHintPaid": "Every AI action asks for approval before anything is sent.",
+    "costClassRemoteHint": "This URL is not on this device. It is saved as paid unless you verify a free tier.",
     "model": "Text model",
     "modelDescription": "Used for OCR text cleanup. Type a model name or test the connection to discover installed models.",
     "modelPlaceholder": "For example qwen2.5:7b",

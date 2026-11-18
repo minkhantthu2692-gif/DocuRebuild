@@ -25,6 +25,7 @@ import { toast } from "sonner";
 
 import type {
   AccentName,
+  AiCostClass,
   AiProfilePatch,
   AiProfileSettings,
   AiProbeResponse,
@@ -60,6 +61,7 @@ import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAiProviders, useAiUsage, useProbeAiProvider } from "@/hooks/use-ai";
 import { useAppMeta, useAppSettings, useHealth, useUpdateSettings } from "@/hooks/use-app";
 import { useOcrCapabilities } from "@/hooks/use-ocr";
+import { isLoopbackUrl } from "@/lib/ai-cost";
 import { formatDateTime, formatNumber, resolveLocale } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -99,8 +101,19 @@ const DEFAULT_AI_PROFILE: AiProfileSettings = {
   base_url: "",
   model: "",
   allow_remote: false,
+  cost_class: "local",
   has_api_key: false,
 };
+
+/**
+ * A remote URL cannot stay classified as local inference. Only an explicit
+ * "free" choice survives a URL change; local escalates to paid so the draft
+ * matches what the backend will store.
+ */
+function costClassForUrl(current: AiCostClass, baseUrl: string): AiCostClass {
+  if (current !== "local") return current;
+  return isLoopbackUrl(baseUrl) ? "local" : "paid";
+}
 
 function aiProfilePatch(
   draft: AiProfileSettings,
@@ -112,6 +125,7 @@ function aiProfilePatch(
     base_url: draft.base_url,
     model: draft.model,
     allow_remote: draft.allow_remote,
+    cost_class: draft.cost_class,
     ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
     ...(clearKey ? { clear_api_key: true } : {}),
   };
@@ -244,10 +258,12 @@ export function SettingsPage() {
     aiDraft.base_url !== aiSaved.base_url ||
     aiDraft.model !== aiSaved.model ||
     aiDraft.allow_remote !== aiSaved.allow_remote ||
+    aiDraft.cost_class !== aiSaved.cost_class ||
     aiVisionDraft.provider !== aiVisionSaved.provider ||
     aiVisionDraft.base_url !== aiVisionSaved.base_url ||
     aiVisionDraft.model !== aiVisionSaved.model ||
     aiVisionDraft.allow_remote !== aiVisionSaved.allow_remote ||
+    aiVisionDraft.cost_class !== aiVisionSaved.cost_class ||
     textApiKeyDraft.trim() !== "" ||
     visionApiKeyDraft.trim() !== "" ||
     clearTextApiKey ||
@@ -820,8 +836,12 @@ export function SettingsPage() {
                     spellCheck={false}
                     aria-label={`${t("ai.textTitle")}: ${t("ai.baseUrl")}`}
                     onChange={(event) => {
+                      const nextUrl = event.target.value;
                       setProbeResult(null);
-                      updateAiDraft({ base_url: event.target.value });
+                      updateAiDraft({
+                        base_url: nextUrl,
+                        cost_class: costClassForUrl(aiDraft.cost_class, nextUrl),
+                      });
                     }}
                   />
                 </SettingRow>
@@ -842,6 +862,39 @@ export function SettingsPage() {
                     />
                     <span>{t("ai.allowRemoteLabel")}</span>
                   </label>
+                </SettingRow>
+
+                <SettingRow
+                  title={t("ai.costClass")}
+                  description={t("ai.costClassDescription")}
+                >
+                  <div className="space-y-1.5">
+                    <SegmentedControl
+                      label={`${t("ai.textTitle")}: ${t("ai.costClass")}`}
+                      value={aiDraft.cost_class}
+                      onValueChange={(value) =>
+                        updateAiDraft({ cost_class: value as AiCostClass })
+                      }
+                      options={[
+                        { value: "local", label: t("ai.costClassValues.local") },
+                        { value: "free", label: t("ai.costClassValues.free") },
+                        { value: "paid", label: t("ai.costClassValues.paid") },
+                      ]}
+                    />
+                    <p className="text-2xs leading-relaxed text-muted-foreground">
+                      {aiDraft.cost_class === "local"
+                        ? t("ai.costClassHintLocal")
+                        : aiDraft.cost_class === "free"
+                          ? t("ai.costClassHintFree")
+                          : t("ai.costClassHintPaid")}
+                    </p>
+                    {aiDraft.cost_class === "local" &&
+                    !isLoopbackUrl(aiDraft.base_url) ? (
+                      <p className="text-2xs leading-relaxed text-warning">
+                        {t("ai.costClassRemoteHint")}
+                      </p>
+                    ) : null}
+                  </div>
                 </SettingRow>
 
                 <SettingRow title={t("ai.model")} description={t("ai.modelDescription")}>
@@ -1008,8 +1061,12 @@ export function SettingsPage() {
                     spellCheck={false}
                     aria-label={`${t("ai.visionTitle")}: ${t("ai.baseUrl")}`}
                     onChange={(event) => {
+                      const nextUrl = event.target.value;
                       setVisionProbeResult(null);
-                      updateAiVisionDraft({ base_url: event.target.value });
+                      updateAiVisionDraft({
+                        base_url: nextUrl,
+                        cost_class: costClassForUrl(aiVisionDraft.cost_class, nextUrl),
+                      });
                     }}
                   />
                 </SettingRow>
@@ -1030,6 +1087,39 @@ export function SettingsPage() {
                     />
                     <span>{t("ai.visionAllowRemoteLabel")}</span>
                   </label>
+                </SettingRow>
+
+                <SettingRow
+                  title={t("ai.costClass")}
+                  description={t("ai.costClassDescription")}
+                >
+                  <div className="space-y-1.5">
+                    <SegmentedControl
+                      label={`${t("ai.visionTitle")}: ${t("ai.costClass")}`}
+                      value={aiVisionDraft.cost_class}
+                      onValueChange={(value) =>
+                        updateAiVisionDraft({ cost_class: value as AiCostClass })
+                      }
+                      options={[
+                        { value: "local", label: t("ai.costClassValues.local") },
+                        { value: "free", label: t("ai.costClassValues.free") },
+                        { value: "paid", label: t("ai.costClassValues.paid") },
+                      ]}
+                    />
+                    <p className="text-2xs leading-relaxed text-muted-foreground">
+                      {aiVisionDraft.cost_class === "local"
+                        ? t("ai.costClassHintLocal")
+                        : aiVisionDraft.cost_class === "free"
+                          ? t("ai.costClassHintFree")
+                          : t("ai.costClassHintPaid")}
+                    </p>
+                    {aiVisionDraft.cost_class === "local" &&
+                    !isLoopbackUrl(aiVisionDraft.base_url) ? (
+                      <p className="text-2xs leading-relaxed text-warning">
+                        {t("ai.costClassRemoteHint")}
+                      </p>
+                    ) : null}
+                  </div>
                 </SettingRow>
 
                 <SettingRow

@@ -48,6 +48,7 @@ import {
 } from "@/lib/ocr-display";
 import { cn } from "@/lib/utils";
 import { PageTablesDialog } from "./page-tables-dialog";
+import { usePaidAiGuard } from "./paid-ai-confirm-dialog";
 import { TableProposalDialog } from "./table-proposal-dialog";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
@@ -139,6 +140,7 @@ export function OcrDialog({
   const decideSuggestion = useDecideAiSuggestion(projectId);
   const suggestionsQuery = usePageAiSuggestions(projectId, page?.id ?? null, open);
   const historyQuery = usePageAiSuggestionHistory(projectId, page?.id ?? null, open);
+  const paidAi = usePaidAiGuard();
 
   const [languageValue, setLanguageValue] = useState("eng");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -273,12 +275,16 @@ export function OcrDialog({
 
   const requestAiCleanup = async (block: OcrBlock) => {
     if (!page || !run || run.stale || !aiConfigured) return;
+    const textProfile = settingsQuery.data?.ai.text;
+    // A paid profile is approved per action, before anything is sent.
+    const approved = await paidAi.requestApproval(textProfile);
+    if (!approved) return;
     // The proposal must describe the text that is actually stored, so pending
     // local corrections are saved before the request.
     const saved = await saveCorrections(true);
     if (!saved) return;
     createSuggestion.mutate(
-      { pageId: page.id, blockId: block.id },
+      { pageId: page.id, blockId: block.id, payload: { confirm_paid: true } },
       { onError: (error) => toast.error(errorMessage(error)) },
     );
   };
@@ -946,6 +952,7 @@ export function OcrDialog({
         onOpenChange={setTablesOpen}
         onInserted={onInserted}
       />
+      {paidAi.paidDialog}
     </Dialog>
   );
 }

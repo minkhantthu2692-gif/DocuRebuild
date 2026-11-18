@@ -187,6 +187,22 @@ def _is_loopback(hostname: str | None) -> bool:
         return False
 
 
+def is_loopback_base_url(provider: AiProviderKind, value: str) -> bool:
+    """Report whether a configured base URL resolves to local inference.
+
+    Inference happens on the loopback interface only, so a remote URL can never
+    be classified as local. An empty value uses the provider's local default.
+    """
+    cleaned = (value or "").strip().rstrip("/")
+    if not cleaned:
+        cleaned = default_base_url(provider)
+    try:
+        hostname = urlparse(cleaned).hostname
+    except ValueError:
+        return False
+    return _is_loopback(hostname)
+
+
 def _decode_json(raw: bytes) -> Any:
     try:
         return json.loads(raw)

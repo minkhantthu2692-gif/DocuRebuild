@@ -74,6 +74,8 @@ class AiSuggestionCreate(BaseModel):
     provider: AiProviderKind | None = None
     base_url: str | None = None
     model: str | None = None
+    # Must be true before a paid profile is allowed to generate anything.
+    confirm_paid: bool = False
 
 
 class AiSuggestionOut(BaseModel):
@@ -171,6 +173,8 @@ class AiRegionProposalsRequest(BaseModel):
     provider: AiProviderKind | None = None
     base_url: str | None = None
     model: str | None = None
+    # Must be true before a paid profile is allowed to analyse an image.
+    confirm_paid: bool = False
 
 
 class AiRegionProposalsOut(BaseModel):
@@ -190,6 +194,8 @@ class AiEquationRequest(BaseModel):
     provider: AiProviderKind | None = None
     base_url: str | None = None
     model: str | None = None
+    # Must be true before a paid profile is allowed to transcribe a crop.
+    confirm_paid: bool = False
 
 
 class AiEquationOut(BaseModel):

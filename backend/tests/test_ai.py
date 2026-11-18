@@ -438,6 +438,7 @@ def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> N
         "base_url": "",
         "model": "",
         "allow_remote": False,
+        "cost_class": "local",
         "has_api_key": False,
     }
     # Image analysis has its own provider, URL, model and consent.
@@ -453,6 +454,7 @@ def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> N
         "base_url": "",
         "model": "local-model",
         "allow_remote": False,
+        "cost_class": "local",
         "has_api_key": False,
     }
 
@@ -466,6 +468,8 @@ def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> N
         "base_url": "http://192.0.2.10:1234",
         "model": "local-model",
         "allow_remote": True,
+        # A remote URL cannot stay classified as local inference.
+        "cost_class": "paid",
         "has_api_key": False,
     }
 
@@ -484,6 +488,7 @@ def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> N
         "base_url": "",
         "model": "llava:7b",
         "allow_remote": False,
+        "cost_class": "local",
         "has_api_key": False,
     }
     # Saving the vision profile never changes the text profile.
@@ -1205,6 +1210,7 @@ def test_legacy_vision_model_migrates_to_a_vision_profile(client: TestClient) ->
         "base_url": "http://127.0.0.1:1234/v1",
         "model": "llava:7b",
         "allow_remote": False,
+        "cost_class": "local",
         "has_api_key": False,
     }
     assert "vision_model" not in migrated
@@ -1669,3 +1675,194 @@ def test_ai_usage_history_pages_filters_and_names_projects(
         client.get("/api/ai/usage/history", params={"task": "unknown"}).status_code
         == 422
     )
+
+
+def test_cost_guard_classifies_the_effective_server() -> None:
+    from types import SimpleNamespace
+
+    from app.api.routes.ai import _effective_cost_class
+    from app.schemas.settings import AiProfileSettings
+
+    saved = SimpleNamespace(provider=None, base_url=None)
+    paid = AiProfileSettings(
+        provider="openai_compatible",
+        base_url="http://192.0.2.10:1234/v1",
+        model="remote-model",
+        allow_remote=True,
+        cost_class="paid",
+    )
+    free = paid.model_copy(update={"cost_class": "free"})
+    # A stale local class next to a remote URL is never trusted.
+    stale = paid.model_copy(update={"cost_class": "local"})
+    loopback = AiProfileSettings(
+        provider="openai_compatible",
+        base_url="http://localhost:1234/v1",
+        model="local-model",
+        cost_class="paid",
+        allow_remote=True,
+    )
+
+    assert _effective_cost_class(paid, saved) == "paid"
+    assert _effective_cost_class(free, saved) == "free"
+    assert _effective_cost_class(stale, saved) == "paid"
+    # Loopback inference is local no matter what the saved class says.
+    assert _effective_cost_class(loopback, saved) == "local"
+
+    override = SimpleNamespace(
+        provider=None, base_url="http://192.0.2.10:1234/v1"
+    )
+    assert _effective_cost_class(loopback, override) == "paid"
+    empty_override = SimpleNamespace(provider="ollama", base_url="")
+    assert _effective_cost_class(paid, empty_override) == "local"
+
+
+def test_paid_profile_requires_explicit_confirmation(
+    client: TestClient, project: dict, monkeypatch, stub_ai
+) -> None:
+    from app.services import ai as ai_service
+
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="llava:7b")
+    saved = client.patch(
+        "/api/settings",
+        json={
+            "ai": {
+                "text": {
+                    "base_url": "http://192.0.2.10:11434",
+                    "allow_remote": True,
+                    "cost_class": "paid",
+                },
+                "vision": {
+                    "base_url": "http://192.0.2.10:1234/v1",
+                    "allow_remote": True,
+                    "cost_class": "paid",
+                },
+            }
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["ai"]["text"]["cost_class"] == "paid"
+
+    def no_network(*_args, **_kwargs):
+        raise AssertionError("A paid request must not reach the network.")
+
+    monkeypatch.setattr(ai_service.urllib_request, "urlopen", no_network)
+
+    page, run = _ocr_page(client, project, monkeypatch, "ai-paid-cleanup.png")
+    cleanup = _suggest(client, project["id"], page["id"], run["blocks"][0]["id"])
+    assert cleanup.status_code == 409, cleanup.text
+    assert cleanup.json()["detail"]["code"] == "ai_paid_confirmation_required"
+
+    vision = _vision(client, project["id"], page["id"])
+    assert vision.status_code == 409, vision.text
+    assert vision.json()["detail"]["code"] == "ai_paid_confirmation_required"
+
+    element = _equation_region(client, project["id"], page["id"])
+    equation = _equation(client, project["id"], element["id"])
+    assert equation.status_code == 409, equation.text
+    assert equation.json()["detail"]["code"] == "ai_paid_confirmation_required"
+
+    # A refused request is never sent and never counts against the limit.
+    assert _usage(client)["used"] == 0
+
+
+def test_remote_free_profile_needs_no_confirmation(
+    client: TestClient, project: dict, monkeypatch, stub_ai
+) -> None:
+    from urllib.error import URLError
+
+    from app.services import ai as ai_service
+
+    _configure_ai(client, base_url=stub_ai.base_url)
+    saved = client.patch(
+        "/api/settings",
+        json={
+            "ai": {
+                "text": {
+                    "base_url": "http://192.0.2.10:11434",
+                    "allow_remote": True,
+                    "cost_class": "free",
+                }
+            }
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["ai"]["text"]["cost_class"] == "free"
+
+    def unreachable(*_args, **_kwargs):
+        raise URLError(ConnectionRefusedError(111, "Connection refused"))
+
+    monkeypatch.setattr(ai_service.urllib_request, "urlopen", unreachable)
+
+    page, run = _ocr_page(client, project, monkeypatch, "ai-free-cleanup.png")
+    response = _suggest(client, project["id"], page["id"], run["blocks"][0]["id"])
+    # The request was allowed through; only the server itself was unreachable.
+    assert response.status_code == 502, response.text
+    assert response.json()["detail"]["code"] == "ai_unreachable"
+    assert _usage(client)["used"] == 1
+
+
+def test_local_profile_accepts_confirm_paid_flag(
+    client: TestClient, project: dict, monkeypatch, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url)
+    page, run = _ocr_page(client, project, monkeypatch, "ai-local-confirmed.png")
+    response = _suggest(
+        client,
+        project["id"],
+        page["id"],
+        run["blocks"][0]["id"],
+        {"confirm_paid": True},
+    )
+    assert response.status_code == 201, response.text
+    assert ("POST", "/api/chat") in stub_ai.state.requests
+
+
+def test_remote_profile_cannot_stay_marked_local(client: TestClient) -> None:
+    saved = client.patch(
+        "/api/settings",
+        json={
+            "ai": {
+                "text": {
+                    "provider": "openai_compatible",
+                    "base_url": "http://192.0.2.10:1234",
+                    "allow_remote": True,
+                    "cost_class": "local",
+                }
+            }
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["ai"]["text"]["cost_class"] == "paid"
+
+
+def test_legacy_remote_profile_without_a_cost_class_is_paid(
+    client: TestClient,
+) -> None:
+    from app.db.models import AppSetting
+    from app.db.session import get_session_factory
+
+    session = get_session_factory()()
+    try:
+        session.add(
+            AppSetting(
+                key="app",
+                value={
+                    "ai": {
+                        "text": {
+                            "provider": "openai_compatible",
+                            "base_url": "http://192.0.2.10:1234/v1",
+                            "model": "remote-model",
+                            "allow_remote": True,
+                        }
+                    }
+                },
+            )
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    ai_settings = client.get("/api/settings").json()["ai"]
+    assert ai_settings["text"]["cost_class"] == "paid"
+    # Vision was never saved remotely, so it keeps the local default.
+    assert ai_settings["vision"]["cost_class"] == "local"

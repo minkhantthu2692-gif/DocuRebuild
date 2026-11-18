@@ -12,11 +12,21 @@ import { api } from "@/lib/api";
 
 const mocks = vi.hoisted(() => ({
   visionModel: "llava:7b",
+  visionBaseUrl: "",
+  visionCostClass: "local" as "local" | "free" | "paid",
 }));
 
 vi.mock("@/hooks/use-app", () => ({
   useAppSettings: () => ({
-    data: { ai: { vision: { model: mocks.visionModel } } },
+    data: {
+      ai: {
+        vision: {
+          model: mocks.visionModel,
+          base_url: mocks.visionBaseUrl,
+          cost_class: mocks.visionCostClass,
+        },
+      },
+    },
     isLoading: false,
   }),
 }));
@@ -28,6 +38,8 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mocks.visionModel = "llava:7b";
+  mocks.visionBaseUrl = "";
+  mocks.visionCostClass = "local";
   vi.restoreAllMocks();
 });
 
@@ -185,8 +197,45 @@ describe("region formula dialog", () => {
     await waitFor(() =>
       expect(screen.getByLabelText("LaTeX source")).toHaveValue("E = mc^{2}"),
     );
-    expect(transcribe).toHaveBeenCalledWith("project-1", "element-1");
+    expect(transcribe).toHaveBeenCalledWith("project-1", "element-1", {
+      confirm_paid: true,
+    });
     expect(screen.getByText(/Proposed by llava:7b/)).toBeInTheDocument();
+  });
+
+  it("asks before sending a paid transcription", async () => {
+    mocks.visionBaseUrl = "https://api.example.com/v1";
+    mocks.visionCostClass = "paid";
+    const transcribe = propose();
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Transcribe with AI" }));
+
+    const confirm = await screen.findByRole("button", {
+      name: "Send paid request",
+    });
+    expect(transcribe).not.toHaveBeenCalled();
+
+    fireEvent.click(confirm);
+    await waitFor(() =>
+      expect(transcribe).toHaveBeenCalledWith("project-1", "element-1", {
+        confirm_paid: true,
+      }),
+    );
+  });
+
+  it("sends a declared free tier without asking", async () => {
+    mocks.visionBaseUrl = "https://api.example.com/v1";
+    mocks.visionCostClass = "free";
+    const transcribe = propose();
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Transcribe with AI" }));
+
+    await waitFor(() => expect(transcribe).toHaveBeenCalled());
+    expect(
+      screen.queryByRole("button", { name: "Send paid request" }),
+    ).not.toBeInTheDocument();
   });
 
   it("credits the model only while its proposal is unchanged", async () => {

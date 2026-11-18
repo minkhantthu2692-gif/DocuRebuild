@@ -38,6 +38,7 @@ vi.mock("sonner", () => ({ toast: mocks.toast }));
 
 vi.mock("@/hooks/use-app", () => ({
   useAppMeta: () => ({ data: meta }),
+  useAppSettings: () => ({ data: undefined }),
 }));
 
 vi.mock("@/hooks/use-projects", () => ({

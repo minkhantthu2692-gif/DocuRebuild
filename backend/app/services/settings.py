@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Any
 
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import AppError
 from app.db.models import AppSetting, utcnow
 from app.schemas.settings import AppSettings, SettingsUpdate
+from app.services import ai as ai_service
 from app.services import ai_secrets
 
 logger = logging.getLogger(__name__)
@@ -62,6 +64,53 @@ def _overlay_api_keys(settings: AppSettings) -> AppSettings:
     return settings
 
 
+def _infer_cost_classes(stored: dict[str, Any]) -> dict[str, Any]:
+    """Classify profiles saved before cost classes existed.
+
+    A profile on loopback is local inference. Anything else is treated as paid,
+    because a remote server may bill the user and must not be assumed free.
+    Explicitly saved cost classes are left untouched.
+    """
+    ai = stored.get("ai")
+    if not isinstance(ai, dict):
+        return stored
+    for task in ai_secrets.TASKS:
+        profile = ai.get(task)
+        if not isinstance(profile, dict) or "cost_class" in profile:
+            continue
+        provider = profile.get("provider", "ollama")
+        base_url = profile.get("base_url", "")
+        local = (
+            isinstance(provider, str)
+            and provider in ai_service.DEFAULT_BASE_URLS
+            and ai_service.is_loopback_base_url(provider, str(base_url or ""))
+        )
+        profile["cost_class"] = "local" if local else "paid"
+    return stored
+
+
+def _normalize_cost_classes(merged: dict[str, Any]) -> dict[str, Any]:
+    """Never keep "local" next to a remote server URL.
+
+    Local means loopback inference. Saving a remote URL without reclassifying it
+    would let the stored value contradict what the request actually reaches, so
+    an unclassified remote server is stored as paid and needs approval.
+    """
+    ai = merged.get("ai")
+    if not isinstance(ai, dict):
+        return merged
+    for task in ai_secrets.TASKS:
+        profile = ai.get(task)
+        if not isinstance(profile, dict) or profile.get("cost_class") != "local":
+            continue
+        provider = profile.get("provider", "ollama")
+        if not isinstance(provider, str) or provider not in ai_service.DEFAULT_BASE_URLS:
+            continue
+        if not ai_service.is_loopback_base_url(provider, str(profile.get("base_url") or "")):
+            profile["cost_class"] = "paid"
+    return merged
+
+
 def _take_key_actions(patch_values: dict[str, Any]) -> list[tuple[str, str | None]]:
     """Remove write-only key fields from the settings patch.
 
@@ -89,9 +138,10 @@ def get_app_settings(session: Session) -> AppSettings:
     row = session.get(AppSetting, SETTINGS_KEY)
     if row is None:
         return _overlay_api_keys(AppSettings())
-    merged = _migrate_legacy_ai(
-        _deep_merge(AppSettings().model_dump(), row.value or {})
+    stored = _infer_cost_classes(
+        _migrate_legacy_ai(copy.deepcopy(row.value or {}))
     )
+    merged = _deep_merge(AppSettings().model_dump(), stored)
     try:
         settings = AppSettings.model_validate(merged)
     except ValidationError:
@@ -105,6 +155,7 @@ def update_app_settings(session: Session, patch: SettingsUpdate) -> AppSettings:
     patch_values = patch.model_dump(exclude_none=True, exclude_unset=True)
     key_actions = _take_key_actions(patch_values)
     merged = _deep_merge(current.model_dump(), patch_values)
+    merged = _normalize_cost_classes(merged)
     try:
         validated = AppSettings.model_validate(merged)
     except ValidationError as exc:

@@ -23,6 +23,7 @@ import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAppSettings } from "@/hooks/use-app";
 import { api } from "@/lib/api";
 import { renderEquationPreview } from "@/lib/editor-equation";
+import { usePaidAiGuard } from "./paid-ai-confirm-dialog";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
 interface RegionFormulaDialogProps {
@@ -58,6 +59,7 @@ export function RegionFormulaDialog({
   const queryClient = useQueryClient();
   const settingsQuery = useAppSettings();
   const visionModel = settingsQuery.data?.ai.vision.model?.trim() ?? "";
+  const paidAi = usePaidAiGuard();
 
   const [latex, setLatex] = useState("");
   const [numbered, setNumbered] = useState(false);
@@ -68,8 +70,16 @@ export function RegionFormulaDialog({
   } | null>(null);
 
   const transcribe = useMutation({
-    mutationFn: (elementId: string) =>
-      api.createAiEquationProposal(projectId, elementId),
+    mutationFn: ({
+      elementId,
+      confirmPaid,
+    }: {
+      elementId: string;
+      confirmPaid: boolean;
+    }) =>
+      api.createAiEquationProposal(projectId, elementId, {
+        confirm_paid: confirmPaid,
+      }),
     onSuccess: (response) => {
       setLatex(response.latex);
       setAiProposal({ latex: response.latex, model: response.model });
@@ -106,9 +116,12 @@ export function RegionFormulaDialog({
     ? api.assetUrl(projectId, element.asset_id, element.updated_at)
     : null;
 
-  const handleTranscribe = () => {
+  const handleTranscribe = async () => {
     if (!element || !canTranscribe) return;
-    transcribe.mutate(element.id);
+    // A paid vision profile must be approved for this transcription only.
+    const approved = await paidAi.requestApproval(settingsQuery.data?.ai.vision);
+    if (!approved) return;
+    transcribe.mutate({ elementId: element.id, confirmPaid: true });
   };
 
   const handleInsert = () => {
@@ -169,7 +182,7 @@ export function RegionFormulaDialog({
                   variant="outline"
                   size="sm"
                   className="gap-1.5"
-                  onClick={handleTranscribe}
+                  onClick={() => void handleTranscribe()}
                   disabled={!canTranscribe}
                 >
                   {transcribe.isPending ? (
@@ -273,6 +286,7 @@ export function RegionFormulaDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      {paidAi.paidDialog}
     </Dialog>
   );
 }

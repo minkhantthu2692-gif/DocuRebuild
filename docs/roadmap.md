@@ -14,7 +14,7 @@ presented in the UI until it actually works.
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates), deterministic figure suggestions from embedded PDF images and vector drawings, and a local CER/WER benchmark harness done; measured real-document accuracy pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, OCR-layout, embedded-PDF-image, vector-drawing and raster-page ink region suggestions with a named source in the extraction dialog, library, verification and figure/text insertion, reviewed equation crops inserted as real equations, and on-demand AI transcription of one equation crop into reviewable LaTeX done; structured table reconstruction pending |
-| 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings with independent text and vision task profiles, encrypted per-task API keys, remote-consent boundary, request limits, usage-history browser, bulk AI proposal review, reviewable persisted OCR text cleanup, optional vision region proposals and optional equation-crop transcription done; free-tier/paid adapters and cost controls pending |
+| 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings with independent text and vision task profiles, encrypted per-task API keys, remote-consent boundary, user-declared local/free/paid cost classes with per-action approval, request limits, usage-history browser, bulk AI proposal review, reviewable persisted OCR text cleanup, optional vision region proposals and optional equation-crop transcription done; verified pricing/quotas and spending caps pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, merged cells from a PDF's drawn rules, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, inserting a reviewed equation crop as a real numbered equation, optional vision-model transcription of one saved equation crop into reviewable LaTeX, and faithful Markdown/TXT/Word/PDF export; vision tables, merged-cell detection for text-only tables and automatic page-wide equation recognition pending |
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, multi-line Word equations, footnotes, per-project page headers/footers, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
@@ -334,15 +334,28 @@ described as universally free or universally accurate.
   separately with the same stale/run checks and reports per-item failures, so a stale
   proposal is skipped while the rest still change; the list refreshes afterwards and
   skipped proposals stay pending.
+- User-declared cost classes with per-action paid approval. Each profile is stored as
+  `local`, `free` or `paid`. Loopback inference is always local and a remote URL can
+  never stay marked local: saving one turns a `local` or unspecified class into paid,
+  and a profile saved by an older build is classified on read (loopback local,
+  anything else paid). Cleanup, region proposals and equation transcription on a paid
+  profile require `confirm_paid: true` and otherwise return
+  `409 ai_paid_confirmation_required` before the usage limit is checked and before any
+  network request, so a refused action costs nothing and leaves the ledger untouched.
+  A declared free tier is not asked again; connection tests never need approval. The
+  dialog names the model and server URL, states that DocuRebuild does not estimate
+  provider pricing, and sends nothing until the user confirms that one action.
 - SSRF guards for the configured URL: `http`/`https` only, no embedded credentials,
   and the well-known cloud metadata addresses are rejected. Requests use short
   connect/probe timeouts, bounded response size and no automatic paid fallback.
 - Capability reporting: `ai` is `true` because the adapter and review workflow
   exist, while Settings still requires a working local server and model before any
   action can run. Backend tests use a loopback stub server and cover discovery,
-  timeouts, unreachable servers, invalid responses, remote consent, usage recording,
-  rolling-limit enforcement, stale runs, stale text, rejection and validation.
-  Frontend tests cover i18n key parity.
+  timeouts, unreachable servers, invalid responses, remote consent, cost-class
+  inference and normalization, paid refusal without network access, free-tier
+  passthrough, usage recording, rolling-limit enforcement, stale runs, stale text,
+  rejection and validation. Frontend tests cover the cost-class settings, the paid
+  confirmation dialog, free-tier passthrough, URL escalation and i18n key parity.
 
 **Remaining**
 
@@ -350,9 +363,12 @@ described as universally free or universally accurate.
   and verification guarantees.
 - Text/reasoning profile separation beyond OCR cleanup, plus task routing.
 - Optional free-tier and paid providers behind the same adapter, with dynamic
-  model metadata, verified pricing/quotas and clearly marked costs.
-- Spending limits, cost estimation and rate-limit handling for future paid
-  providers, plus provider fallbacks. No paid call may run without approval.
+  model metadata, verified pricing/quotas and clearly marked costs. Remote profiles
+  can be classified today, but the app neither verifies a provider's current pricing
+  nor detects quota exhaustion beyond the provider's own error reply.
+- Spending limits, cost estimation, per-provider rate-limit handling and provider
+  fallbacks. The per-action paid approval exists; a monetary cap needs verified
+  pricing data that the app does not collect yet.
 - Account sign-in, server-side key validation against a provider account and
   per-provider spending caps. The encrypted key store and write-only API are in
   place, but a key is not verified against billing or quota.
@@ -362,10 +378,13 @@ described as universally free or universally accurate.
 **Current limitation** — only an Ollama or OpenAI-compatible server that the user
 configures is supported; loopback is the default and a non-loopback endpoint requires
 explicit remote consent. Model quality, availability, memory use and licence terms
-come from the user's installation; "free" is never assumed to be permanent. A saved
-API key is protected by local file permissions and encryption, not by a remote
-account: anyone who can read the data folder can use it, and the app does not verify
-its quota or billing status. AI text
+come from the user's installation; "free" is never assumed to be permanent, and a
+free tier declared by the user is not verified against the provider's current terms.
+The cost class is a local gate, not a billing system: the app never estimates a price,
+never knows what the provider actually charges and cannot stop a provider from billing
+outside the application. A saved API key is protected by local file permissions and
+encryption, not by a remote account: anyone who can read the data folder can use it,
+and the app does not verify its quota or billing status. AI text
 can be wrong, so accepting a proposal does not mark it verified and manual review
 remains the source of truth. Vision proposals are rectangles with no extracted
 content and low confidence by design; their coordinates may still be imprecise, and

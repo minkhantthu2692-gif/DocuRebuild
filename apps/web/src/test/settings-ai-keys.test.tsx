@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
@@ -29,6 +29,7 @@ const settings = {
       base_url: "http://127.0.0.1:1234/v1",
       model: "local-model",
       allow_remote: false,
+      cost_class: "local" as const,
       has_api_key: true,
     },
     vision: {
@@ -36,6 +37,7 @@ const settings = {
       base_url: "",
       model: "",
       allow_remote: false,
+      cost_class: "local" as const,
       has_api_key: false,
     },
     request_limit: 0,
@@ -141,5 +143,47 @@ describe("AI API keys", () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it("saves the cost class chosen for a profile", () => {
+    renderPage();
+
+    const costClass = screen.getByLabelText("Text cleanup server: Cost class");
+    fireEvent.click(within(costClass).getByText("Paid"));
+    fireEvent.click(screen.getByRole("button", { name: "Save AI settings" }));
+
+    const payload = mocks.update.mock.calls[0][0] as {
+      ai: { text: Record<string, unknown> };
+    };
+    expect(payload.ai.text.cost_class).toBe("paid");
+  });
+
+  it("marks a remote URL as paid but keeps a declared free tier", () => {
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText("Text cleanup server: Server URL"), {
+      target: { value: "https://api.example.com/v1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save AI settings" }));
+
+    const escalated = mocks.update.mock.calls[0][0] as {
+      ai: { text: Record<string, unknown> };
+    };
+    expect(escalated.ai.text.base_url).toBe("https://api.example.com/v1");
+    expect(escalated.ai.text.cost_class).toBe("paid");
+
+    const visionCostClass = screen.getByLabelText(
+      "Image analysis server: Cost class",
+    );
+    fireEvent.click(within(visionCostClass).getByText("Free"));
+    fireEvent.change(screen.getByLabelText("Image analysis server: Server URL"), {
+      target: { value: "https://free.example.com/v1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save AI settings" }));
+
+    const kept = mocks.update.mock.calls[1][0] as {
+      ai: { vision: Record<string, unknown> };
+    };
+    expect(kept.ai.vision.cost_class).toBe("free");
   });
 });

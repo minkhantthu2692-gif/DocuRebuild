@@ -68,6 +68,7 @@ function mergeSettings(current: AppSettings | undefined, patch: SettingsPatch): 
         base_url: "",
         model: "",
         allow_remote: false,
+        cost_class: "local",
         has_api_key: false,
       },
       vision: {
@@ -75,6 +76,7 @@ function mergeSettings(current: AppSettings | undefined, patch: SettingsPatch): 
         base_url: "",
         model: "",
         allow_remote: false,
+        cost_class: "local",
         has_api_key: false,
       },
       request_limit: 0,

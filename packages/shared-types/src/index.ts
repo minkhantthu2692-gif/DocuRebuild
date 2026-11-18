@@ -446,6 +446,8 @@ export type AiProbeErrorCode =
 export type AiTask = "ocr_cleanup";
 export type AiSuggestionStatus = "pending" | "accepted" | "rejected";
 export type AiUsageOutcome = "success" | "error";
+/** User-declared cost class; only "paid" requests need per-action approval. */
+export type AiCostClass = "local" | "free" | "paid";
 
 export interface AiProvider {
   id: AiProviderKind;
@@ -486,6 +488,8 @@ export interface AiSuggestionCreate {
   provider?: AiProviderKind;
   base_url?: string;
   model?: string;
+  /** Required before a profile marked as paid may generate a proposal. */
+  confirm_paid?: boolean;
 }
 
 export interface AiSuggestion {
@@ -585,6 +589,11 @@ export interface AiProfileSettings {
   base_url: string;
   model: string;
   allow_remote: boolean;
+  /**
+   * "local" is loopback inference, "free" is a remote free tier and "paid" is
+   * gated by an explicit confirmation for each AI action.
+   */
+  cost_class: AiCostClass;
   /** True when an encrypted key is stored for this task; the key is never sent. */
   has_api_key: boolean;
 }
@@ -595,6 +604,7 @@ export interface AiProfilePatch {
   base_url?: string;
   model?: string;
   allow_remote?: boolean;
+  cost_class?: AiCostClass;
   api_key?: string;
   clear_api_key?: boolean;
 }
@@ -698,6 +708,8 @@ export interface AiRegionProposalsRequest {
   provider?: AiProviderKind;
   base_url?: string;
   model?: string;
+  /** Required before a profile marked as paid may analyse the page. */
+  confirm_paid?: boolean;
 }
 
 /** Vision output is always a proposal: nothing is saved until the user accepts it. */
@@ -715,6 +727,8 @@ export interface AiEquationRequest {
   provider?: AiProviderKind;
   base_url?: string;
   model?: string;
+  /** Required before a profile marked as paid may transcribe the crop. */
+  confirm_paid?: boolean;
 }
 
 /**

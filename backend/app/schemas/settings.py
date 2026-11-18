@@ -15,6 +15,7 @@ Density = Literal["comfortable", "compact"]
 FontSizePreset = Literal["sm", "md", "lg"]
 MotionPreference = Literal["full", "reduced"]
 LanguageCode = Literal["en", "my", "system"]
+AiCostClass = Literal["local", "free", "paid"]
 DocumentFont = Literal["serif", "sans"]
 PdfPageSize = Literal["a4", "letter"]
 PdfMargin = Literal["narrow", "normal", "wide"]
@@ -119,6 +120,10 @@ class AiProfileSettings(BaseModel):
     model: str = Field(default="", max_length=200)
     # Explicit consent for a non-loopback server. Loopback needs no consent.
     allow_remote: bool = False
+    # User-declared cost class of the server. "local" is loopback inference,
+    # "free" is a remote free tier and "paid" needs per-request approval. The
+    # application never guesses a price; it only gates paid requests.
+    cost_class: AiCostClass = "local"
     # Derived from the encrypted secret store on read; never persisted with the
     # rest of the settings and never returned as the key itself.
     has_api_key: bool = False
@@ -156,6 +161,7 @@ class AiProfilePatch(BaseModel):
     base_url: str | None = None
     model: str | None = Field(default=None, max_length=200)
     allow_remote: bool | None = None
+    cost_class: AiCostClass | None = None
     # Write-only: stored encrypted, never echoed back in any response.
     api_key: str | None = None
     # Explicitly remove the stored key for this task profile.

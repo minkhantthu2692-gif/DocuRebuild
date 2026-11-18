@@ -1194,11 +1194,13 @@ src/
   `ollama` and `openai_compatible` share the same request, validation and review
   path. `GET /api/ai/providers` returns the catalog and default URLs; the frontend
   never hardcodes a provider list.
-- `app_settings.ai.text` stores `{ provider, base_url, model, allow_remote }` in
-  `app.db`. An empty `base_url` uses the provider default; an empty `model` keeps
+- `app_settings.ai.text` stores `{ provider, base_url, model, allow_remote, cost_class }`
+  in `app.db`. An empty `base_url` uses the provider default; an empty `model` keeps
   every AI action disabled. `allow_remote` defaults to `false` and is the user's
-  explicit consent for a non-loopback endpoint. The Settings page edits a local draft
-  and saves explicitly, so typing a URL does not trigger a PATCH or a network request.
+  explicit consent for a non-loopback endpoint. `cost_class` defaults to `local` and
+  is the user's declaration that the server is local inference, a verified free tier
+  or paid. The Settings page edits a local draft and saves explicitly, so typing a URL
+  does not trigger a PATCH or a network request.
 - Provider credentials are optional and separate from `app.db`. `services.ai_secrets`
   keeps one key per task profile (`text`, `vision`) in
   `<data_dir>/secrets/ai_keys.enc`, encrypted with Fernet and a generated 32-byte
@@ -1237,6 +1239,21 @@ src/
   runs for probes, cleanup requests and per-request overrides, after the metadata
   block. The backend calls only the configured URL, using Python's standard library;
   no new runtime dependency is introduced.
+- Paid approval is a second, independent gate. `services.ai.is_loopback_base_url`
+  classifies the URL that a request would actually reach; loopback and an empty
+  (provider default) URL are local, and a per-request override is treated as paid
+  because it has no saved declaration. `services.settings` classifies profiles written
+  before cost classes existed (loopback local, anything else paid) and coerces a
+  stored `local` next to a remote URL to `paid` on save, so the stored class never
+  contradicts the target. The three generating routes call
+  `_require_paid_approval` after model/config validation and after URL/consent
+  validation but before `ai_usage.ensure_within_limit` and the network call; a paid
+  profile without `confirm_paid: true` gets `409 ai_paid_confirmation_required`.
+  Probes deliberately stay allowed so a user can test a server before saving it. The
+  frontend mirrors the rule with `lib/ai-cost.ts` and a per-action
+  `usePaidAiGuard` dialog, and sends `confirm_paid: true` afterward for all three
+  actions; the flag is harmless for local and free profiles, and the backend remains
+  the authority.
 - `ai_usage` records one row for each cleanup request that actually leaves the app,
   including provider failures. Validation failures that never contact the server are
   not counted, and connection tests are excluded. The row stores provider, model,
@@ -1355,7 +1372,17 @@ src/
   component state until the user saves it, and the draft is cleared afterwards.
   Provider keys are optional, stored only encrypted in the local
   data folder, exposed as `has_api_key`, and sent as a bearer token only to the saved
-  server. The AI profile itself stores only a URL, model names and the consent flag.
+  server. The AI profile itself stores only a URL, model names, the consent flag and a
+  user-declared cost class (`local`, `free` or `paid`).
+- The cost class is a request gate, not a billing engine. Loopback inference is always
+  local; a remote URL cannot stay marked local, so an unspecified class next to a
+  remote URL is stored as paid and a profile written before cost classes existed is
+  classified on read. A paid
+  profile needs `confirm_paid: true` on cleanup, region proposals and equation
+  transcription, checked after URL/consent validation but before the usage limit and
+  before any network call, so a refused action sends nothing and records nothing. The
+  app never estimates provider prices, verifies a declared free tier or enforces a
+  monetary cap; it only makes sure a potentially billable request is explicit.
 - The encrypted key files live under the user data folder, not in a project or in
   Git. `.gitignore` excludes local data folders, databases and `*.key`/`*.enc`
   files; the repository contains no sample key and no default master key.
@@ -1401,8 +1428,9 @@ src/
   cleanup sends one OCR text block; a region request sends the current page image
   only. The backend rejects non-HTTP(S) URLs, embedded credentials and well-known
   metadata hosts; it never switches to a remote or paid provider on failure, and
-  responses are bounded. Cleanup replies are stored as reviewable proposals; region
-  proposals are not persisted.
+  responses are bounded. A profile classified as paid additionally needs a
+  per-action confirmation in the UI before the request is sent. Cleanup replies are
+  stored as reviewable proposals; region proposals are not persisted.
 - Uploaded file names are validated and generated asset names are independent of
   user input.
 - The source repository URL is configuration (`DOCUREBUILD_REPOSITORY_URL`),

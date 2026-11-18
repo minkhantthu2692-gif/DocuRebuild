@@ -394,6 +394,15 @@
     "compareHint": "Read-only comparison with the text on screen, including unsaved changes. Nothing is replaced until you restore.",
     "note": "Up to 100 versions are kept. Automatic versions are saved at most every five minutes, and restoring or saving a version always keeps the current state first. Versions stay on this device."
   },
+  "paidAi": {
+    "title": "Confirm paid AI request",
+    "badge": "Paid profile",
+    "description": "The saved AI profile for this action is marked as paid. Continuing sends the request to the provider and may incur charges.",
+    "costNote": "DocuRebuild does not estimate or cap provider pricing. Check the provider's current pricing before continuing. Nothing is sent until you confirm.",
+    "unknownModel": "Model not named",
+    "defaultServer": "Provider default URL",
+    "confirm": "Send paid request"
+  },
   "ocr": {
     "open": "Extract text",
     "title": "Extract text from page {{page}}",
