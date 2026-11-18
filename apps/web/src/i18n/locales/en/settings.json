@@ -224,6 +224,10 @@
     "testConnection": "Test connection",
     "modelsFound": "{{count}} model(s) found",
     "noModels": "The server responded but reported no models. Pull or load a model first.",
+    "modelListed": "Listed by the server",
+    "modelFamily": "Family: {{family}}",
+    "modelParameters": "Parameters: {{size}}",
+    "modelUnlisted": "The server did not list this model. Check the name or test the connection again; you can still save it if you know the server accepts it.",
     "testHint": "A connection test only lists models. It does not download, load, or generate anything.",
     "errorReasons": {
       "ai_unreachable": "Nothing is listening at this URL. Start the local server and check the port.",

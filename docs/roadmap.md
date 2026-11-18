@@ -264,7 +264,10 @@ described as universally free or universally accurate.
   consent. Consent is stored with the profile and is never inferred from the URL.
 - User-triggered connection test and model discovery through Ollama `/api/tags` and
   `/api/version`, or OpenAI-compatible `/models`. Discovered models populate a
-  manual-entry datalist; a typed model name always remains possible.
+  manual-entry datalist, and the model's family and parameter size are shown when the
+  server reports them. A typed name that the last test did not list gets a
+  non-blocking warning instead of being silently treated as valid; a typed model name
+  always remains possible.
 - Reviewable OCR text cleanup. `POST .../ocr/blocks/{block_id}/ai-suggestions` sends
   only that block's text to the configured server and stores an unverified
   `ai_suggestion` with original text, proposed text, provider, model and base URL.
@@ -367,7 +370,8 @@ described as universally free or universally accurate.
   usage recording, rolling-limit enforcement, stale runs, stale text, rejection and
   validation. Frontend tests cover the cost-class settings, the paid confirmation
   dialog, free-tier passthrough, the rate-limit hint, the inline proposal diff,
-  URL escalation and i18n key parity.
+  discovered model details and the unlisted-model warning, URL escalation and i18n
+  key parity.
 
 **Remaining**
 

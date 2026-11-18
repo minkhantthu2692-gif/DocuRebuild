@@ -1230,7 +1230,12 @@ src/
   `/api/version`, or OpenAI-compatible `/models`, with a short timeout and a
   1 MB response cap. Expected failures (`unreachable`, `timeout`, `http_error`,
   `invalid_response`) are returned as status plus a stable error code so Settings
-  can explain them without pretending the server is ready.
+  can explain them without pretending the server is ready. Model entries keep only
+  `id` plus the optional `family` and `parameter_size` that Ollama reports;
+  OpenAI-compatible servers usually report only `id`. Settings shows those details
+  for the typed model and marks a model that the last successful test did not list as
+  unlisted. That is a warning, not a validation: the app still saves and uses a typed
+  name because a server may serve models it omits from its listing.
 - Provider HTTP errors are classified from the status code only: 429 becomes
   `ai_rate_limited`, 401 and 403 become `ai_auth_failed`, and anything else stays
   `ai_http_error`. An integer `Retry-After` header is capped at 24 hours and returned

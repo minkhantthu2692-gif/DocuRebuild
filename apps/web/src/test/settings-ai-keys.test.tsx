@@ -217,4 +217,53 @@ describe("AI API keys", () => {
     expect(screen.getByText(/wait 30 seconds/)).toBeInTheDocument();
     expect(screen.getByText(/does not retry on its own/)).toBeInTheDocument();
   });
+
+  it("describes a discovered model and warns about an unlisted one", () => {
+    mocks.probe.mockImplementation(
+      (
+        _payload: unknown,
+        options?: { onSuccess?: (result: unknown) => void },
+      ) => {
+        options?.onSuccess?.({
+          status: "ready",
+          provider: "openai_compatible",
+          base_url: "http://127.0.0.1:1234/v1",
+          models: [
+            { id: "local-model", family: "qwen2", parameter_size: "7.6B" },
+            { id: "small-model", family: "llama", parameter_size: "1.2B" },
+          ],
+          version: null,
+          error_code: null,
+          http_status: null,
+          retry_after_seconds: null,
+        });
+      },
+    );
+    renderPage();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Text cleanup server: Test connection",
+      }),
+    );
+
+    expect(screen.getByText(/Listed by the server/)).toBeInTheDocument();
+    expect(screen.getByText(/Family: qwen2/)).toBeInTheDocument();
+    expect(screen.getByText(/Parameters: 7.6B/)).toBeInTheDocument();
+    expect(screen.queryByText(/did not list this model/)).not.toBeInTheDocument();
+
+    const option = document.querySelector('option[value="small-model"]');
+    expect(option?.getAttribute("label")).toBe("llama · 1.2B");
+
+    fireEvent.change(screen.getByLabelText("Text model"), {
+      target: { value: "missing-model" },
+    });
+    expect(screen.getByText(/did not list this model/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Text model"), {
+      target: { value: "small-model" },
+    });
+    expect(screen.getByText(/Family: llama/)).toBeInTheDocument();
+    expect(screen.queryByText(/did not list this model/)).not.toBeInTheDocument();
+  });
 });

@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import type {
   AccentName,
   AiCostClass,
+  AiModel,
   AiProfilePatch,
   AiProfileSettings,
   AiProbeResponse,
@@ -129,6 +130,62 @@ function aiProfilePatch(
     ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
     ...(clearKey ? { clear_api_key: true } : {}),
   };
+}
+
+/**
+ * Find the typed model among the models the server listed. The id must match
+ * exactly (after trimming), because the label claims the server listed it.
+ */
+function findDiscoveredModel(models: AiModel[], value: string): AiModel | undefined {
+  const wanted = value.trim();
+  if (!wanted) return undefined;
+  return models.find((model) => model.id === wanted);
+}
+
+/** Secondary datalist label; providers may report no metadata at all. */
+function modelOptionLabel(model: AiModel): string | undefined {
+  const parts = [model.family, model.parameter_size].filter(
+    (part): part is string => Boolean(part),
+  );
+  return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
+interface ModelListingHintProps {
+  models: AiModel[];
+  value: string;
+}
+
+/**
+ * Describe the chosen model using only what the connection test returned.
+ *
+ * "Listed" means the server reported this exact id during the last test; it is
+ * not a promise that the model can load or that it fits the task. An unlisted
+ * value is a non-blocking warning because some servers serve models they omit
+ * from their listing.
+ */
+function ModelListingHint({ models, value }: ModelListingHintProps) {
+  const { t } = useTranslation("settings");
+  if (models.length === 0 || !value.trim()) return null;
+
+  const model = findDiscoveredModel(models, value);
+  if (!model) {
+    return (
+      <p className="text-2xs leading-relaxed text-warning">
+        {t("ai.modelUnlisted")}
+      </p>
+    );
+  }
+
+  const details: string[] = [t("ai.modelListed")];
+  if (model.family) details.push(t("ai.modelFamily", { family: model.family }));
+  if (model.parameter_size) {
+    details.push(t("ai.modelParameters", { size: model.parameter_size }));
+  }
+  return (
+    <p className="text-2xs leading-relaxed text-muted-foreground">
+      {details.join(" · ")}
+    </p>
+  );
 }
 
 const DEFAULT_BACKUPS: BackupSettings = {
@@ -909,10 +966,15 @@ export function SettingsPage() {
                   {discoveredModels.length > 0 ? (
                     <datalist id="ai-model-options">
                       {discoveredModels.map((model) => (
-                        <option key={model.id} value={model.id} />
+                        <option
+                          key={model.id}
+                          value={model.id}
+                          label={modelOptionLabel(model)}
+                        />
                       ))}
                     </datalist>
                   ) : null}
+                  <ModelListingHint models={discoveredModels} value={aiDraft.model} />
                 </SettingRow>
 
                 <SettingRow title={t("ai.apiKey")} description={t("ai.apiKeyDescription")}>
@@ -1152,10 +1214,18 @@ export function SettingsPage() {
                   {visionDiscoveredModels.length > 0 ? (
                     <datalist id="ai-vision-model-options">
                       {visionDiscoveredModels.map((model) => (
-                        <option key={model.id} value={model.id} />
+                        <option
+                          key={model.id}
+                          value={model.id}
+                          label={modelOptionLabel(model)}
+                        />
                       ))}
                     </datalist>
                   ) : null}
+                  <ModelListingHint
+                    models={visionDiscoveredModels}
+                    value={aiVisionDraft.model}
+                  />
                   <p className="text-2xs leading-relaxed text-muted-foreground">
                     {aiVisionDraft.model.trim()
                       ? t("ai.visionModelEnabled")
