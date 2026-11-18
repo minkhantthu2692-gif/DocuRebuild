@@ -19,7 +19,9 @@ data on your device, and treats every AI result as a reviewable proposal.
 > only advertised when their local dependencies actually work. The AI workflow only
 > talks to an Ollama or OpenAI-compatible server that the user configures and tests;
 > loopback addresses are the default, and any other host needs explicit remote
-> consent. Every result is a proposal that must be accepted or rejected. Cloud
+> consent. An optional bearer token can be saved for a provider that requires one; it
+> is encrypted on this device and never returned by the API. Every result is a
+> proposal that must be accepted or rejected. Cloud
 > providers, free-tier adapters, paid usage, image generation and automatic
 > equation/figure reconstruction are **not implemented yet** and are clearly marked
 > as unavailable in the UI. Table cells can be proposed from stored OCR word boxes,
@@ -80,7 +82,10 @@ data on your device, and treats every AI result as a reviewable proposal.
   stores the reply as an `ai_suggestion` with provider, model, base URL and original
   text. The proposal is shown beside the current OCR text and can be accepted or
   rejected. Accepting is refused when the block changed after the proposal was
-  created, and OCR text changes are refused if the run is stale. No cloud provider
+  created, and OCR text changes are refused if the run is stale. If the chosen
+  provider requires authentication, an optional **API key** can be saved per task;
+  it is encrypted at rest, write-only in the API, and sent only as a bearer token to
+  the saved server. No cloud provider
   or paid API is used, and AI output never becomes document content automatically.
 - **Region extraction (manual + suggestions)** — drag a rectangle on the source page
   or type its source-pixel coordinates, then crop a figure, table or equation
@@ -308,7 +313,9 @@ Local runtime data is **never** stored in this repository. See
 - Python **3.11 or newer** (3.12 tested)
 - Optional: Tesseract 5+ for local OCR, with `eng` and/or `mya` traineddata
 - Optional: Ollama or an OpenAI-compatible local server (for example LM Studio)
-  for reviewable AI text cleanup. No API key or account is required.
+  for reviewable AI text cleanup. No account or paid subscription is required; a
+  subscription API key is optional and only needed when your server enforces bearer
+  authentication.
 
 PDF import needs no separate system package: PyMuPDF is installed with the
 backend requirements and runs entirely on the local machine.
@@ -460,14 +467,17 @@ application, and OCR review works without it.
 3. Choose a text model and select **Save AI settings**. Localhost and loopback URLs
    need no extra approval. If the server is on another host or IP that you control,
    enable **Remote endpoint consent** first; until you do, the backend refuses to
-   contact that URL for either a connection test or a cleanup.
+   contact that URL for either a connection test or a cleanup. If that server requires
+   a bearer token, paste it into **API key**; the value is encrypted on this device,
+   never returned by the API, and is only attached to requests that keep the saved
+   provider and URL. **Remove key** deletes it on the next save.
 4. Optionally set a rolling 24-hour **Request limit**. Zero means unlimited.
    Connection tests are not counted.
-5. Optionally configure **Image analysis server** (provider, URL, consent and a
-   **Vision model** such as `llava:7b`) if you want AI region proposals or
-   equation-crop transcription. It is a separate task profile, so it can use a
-   different server or device than text cleanup. Leave the model empty to keep
-   image AI disabled.
+5. Optionally configure **Image analysis server** (provider, URL, consent, an
+   optional **API key** and a **Vision model** such as `llava:7b`) if you want AI
+   region proposals or equation-crop transcription. It is a separate task profile,
+   so it can use a different server, key or device than text cleanup. Leave the
+   model empty to keep image AI disabled.
 6. Open **Extract text** on a page and select **Ask local AI** on one text block.
    For region proposals, use **Ask AI for regions** in the source viewer.
 
@@ -503,8 +513,12 @@ is deleted (without a name).
 
 The URL is only contacted when you press **Test connection**, **Ask local AI** or
 **Ask AI for regions**; nothing is downloaded, loaded or generated in the background.
-There is no cloud provider, API key or paid call in this phase. A model name can also
-be typed manually when discovery is unsupported by the server.
+A saved key is reused for a connection test only when the task, provider and
+normalized URL still match the saved profile, so you can retest a protected server
+without retyping it while a different server never receives it. There is still no
+cloud provider, paid call,
+automatic fallback or cost estimation in this phase. A model name can also be typed
+manually when discovery is unsupported by the server.
 
 ### Document tables
 
@@ -911,6 +925,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 ```text
 <data dir>/
   app.db                 application database (project registry, settings)
+  secrets/               encrypted AI provider keys and their local master key
   projects/<project-id>/
     project.db           project database (document, pages, assets, history, jobs)
     manifest.json        portable project manifest
@@ -925,14 +940,17 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   tmp/                   short-lived backup archives and restore staging
 ```
 
-- API keys and user documents are never committed or uploaded by the application.
+- API keys and user documents are never committed or uploaded by the application;
+  a saved key stays in the local data folder, encrypted at rest.
 - Source images and PDFs are immutable; transformations write new display assets.
   Deleting a PDF page keeps the shared original until its last page is removed.
 - Asset paths stored in databases are relative and validated against traversal.
 - The local API binds to loopback by default and sends no telemetry.
-- The AI settings profile (provider, local base URL and remote consent) is stored
-  per task in `app.db`: text cleanup and image analysis each keep their own server,
-  model and consent decision. No API keys exist in this phase.
+- AI settings are stored per task in `app.db`: text cleanup and image analysis each
+  keep their own server, model, key state and consent decision. An optional API key is
+  stored only in `secrets/ai_keys.enc` inside the local data folder, encrypted with a
+  Fernet master key in `secrets/ai_keys.key`; the plain value is never stored, logged,
+  returned by the API or committed. The frontend only learns whether a key exists.
   Project text sent for cleanup and the current page image sent for region
   proposals go only to the configured server URL; a non-loopback URL is refused
   unless remote consent is explicitly enabled. Cleanup responses are stored in the
@@ -1072,8 +1090,11 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   the user configures are supported; loopback is the default, and any other host
   requires explicit remote consent before a request. Cleanup attempts are counted
   against an optional rolling 24-hour limit; connection tests are not. Cloud free
-  tiers, paid providers, API keys, cost estimation, rate-limit handling
-  and provider fallbacks are not implemented yet. A local server's "free" status
+  tiers, paid providers, cost estimation, rate-limit handling and provider fallbacks
+  are not implemented yet. An API key can be stored for a provider that requires
+  bearer authentication, but there is no account sign-in, key validation against a
+  billing account or per-provider spending cap; a paid provider is never contacted
+  automatically. A local server's "free" status
   depends on the user's own installation and hardware, so nothing is advertised as
   universally free.
 - The bounding-box overlay only draws the latest successful run and is hidden
@@ -1110,7 +1131,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 3. Import and image processing | Complete |
 | 4. Local OCR and layout detection | In progress: OCR, layout hints, reviewable table proposals and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
-| 6. AI integration and free usage first | In progress: local AI providers, separate text and vision task profiles, remote-consent boundary, request limits, usage-history browser, bulk AI proposal review, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
+| 6. AI integration and free usage first | In progress: local AI providers, separate text and vision task profiles, optional encrypted per-task API keys, remote-consent boundary, request limits, usage-history browser, bulk AI proposal review, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, reviewable automatic table proposals from OCR word boxes, merged-cell spans read from PDF vector rules, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; vision tables, nested tables and automatic equation extraction pending |
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
 | 9. History, backup and recovery | **Complete**: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |

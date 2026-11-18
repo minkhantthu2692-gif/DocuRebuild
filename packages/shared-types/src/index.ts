@@ -460,6 +460,10 @@ export interface AiProbeRequest {
   provider: AiProviderKind;
   base_url?: string;
   allow_remote?: boolean;
+  /** Write-only key for testing an unsaved value. */
+  api_key?: string;
+  /** Reuse the stored key for this task when `api_key` is omitted. */
+  task?: "text" | "vision";
 }
 
 export interface AiModel {
@@ -581,6 +585,24 @@ export interface AiProfileSettings {
   base_url: string;
   model: string;
   allow_remote: boolean;
+  /** True when an encrypted key is stored for this task; the key is never sent. */
+  has_api_key: boolean;
+}
+
+/** Patch shape for one task profile; `api_key` is write-only. */
+export interface AiProfilePatch {
+  provider?: AiProviderKind;
+  base_url?: string;
+  model?: string;
+  allow_remote?: boolean;
+  api_key?: string;
+  clear_api_key?: boolean;
+}
+
+export interface AiSettingsPatch {
+  text?: AiProfilePatch;
+  vision?: AiProfilePatch;
+  request_limit?: number;
 }
 
 export interface AiSettings {

@@ -29,6 +29,7 @@ from app.schemas.ai import (
     AiUsageTask,
 )
 from app.services import ai as ai_service
+from app.services import ai_secrets
 from app.services import ai_usage
 from app.services import ai_vision
 from app.services import projects as project_service
@@ -47,6 +48,42 @@ def _commit_usage(session: Session) -> None:
     except Exception:
         logger.exception("Could not persist local AI usage metadata.")
         session.rollback()
+
+
+def _probe_api_key(payload: AiProbeRequest, session: Session) -> str | None:
+    if payload.api_key:
+        return ai_secrets.clean_api_key(payload.api_key)
+    if not payload.task:
+        return None
+    saved = getattr(get_app_settings(session).ai, payload.task)
+    if saved.provider != payload.provider:
+        return None
+    try:
+        # Normalization is only used for comparison here; nothing is requested.
+        saved_url = ai_service.normalize_base_url(
+            saved.provider, saved.base_url, allow_remote=True
+        )
+        requested_url = ai_service.normalize_base_url(
+            payload.provider, payload.base_url, allow_remote=True
+        )
+    except AppError:
+        return None
+    if saved_url != requested_url:
+        return None
+    return ai_secrets.get_api_key(payload.task)
+
+
+def _stored_api_key(task: str, payload: Any) -> str | None:
+    """Use the saved key only when the request keeps the saved server.
+
+    A per-request provider or base URL override must never receive a key that was
+    stored for a different server.
+    """
+    if getattr(payload, "provider", None) is not None:
+        return None
+    if getattr(payload, "base_url", None) is not None:
+        return None
+    return ai_secrets.get_api_key(task)
 
 
 @router.get("/ai/providers", response_model=AiProvidersOut)
@@ -79,11 +116,12 @@ def read_ai_usage_history(
 
 
 @router.post("/ai/probe", response_model=AiProbeOut)
-def probe_ai_provider(payload: AiProbeRequest) -> dict[str, Any]:
+def probe_ai_provider(payload: AiProbeRequest, session: DbSession) -> dict[str, Any]:
     return ai_service.probe_provider(
         payload.provider,
         payload.base_url,
         allow_remote=payload.allow_remote,
+        api_key=_probe_api_key(payload, session),
     )
 
 
@@ -129,6 +167,7 @@ def create_ai_region_proposals(
             provider=payload.provider,
             base_url=payload.base_url,
             model=payload.model,
+            api_key=_stored_api_key("vision", payload),
             on_attempt=record_attempt,
         )
     except Exception:
@@ -189,6 +228,7 @@ def create_ai_equation_proposal(
             provider=payload.provider,
             base_url=payload.base_url,
             model=payload.model,
+            api_key=_stored_api_key("vision", payload),
             on_attempt=record_attempt,
         )
     except Exception:
@@ -276,6 +316,7 @@ def create_ai_cleanup_suggestion(
             provider=payload.provider,
             base_url=payload.base_url,
             model=payload.model,
+            api_key=_stored_api_key("text", payload),
             on_attempt=record_attempt,
         )
     except Exception:

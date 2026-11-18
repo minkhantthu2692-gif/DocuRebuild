@@ -52,6 +52,7 @@ def propose_regions(
     provider: AiProviderKind | None = None,
     base_url: str | None = None,
     model: str | None = None,
+    api_key: str | None = None,
     on_attempt: Callable[[ai_service.RequestAttempt], None] | None = None,
 ) -> dict[str, Any]:
     """Ask the configured vision model for reviewable region proposals.
@@ -108,6 +109,7 @@ def propose_regions(
         provider=provider,
         base_url=base_url,
         model=model,
+        api_key=api_key,
         on_attempt=on_attempt,
     )
 
@@ -178,6 +180,7 @@ def transcribe_equation(
     provider: AiProviderKind | None = None,
     base_url: str | None = None,
     model: str | None = None,
+    api_key: str | None = None,
     on_attempt: Callable[[ai_service.RequestAttempt], None] | None = None,
 ) -> dict[str, Any]:
     """Ask the configured vision model for the LaTeX of one equation crop.
@@ -224,6 +227,7 @@ def transcribe_equation(
         provider=provider,
         base_url=base_url,
         model=model,
+        api_key=api_key,
         on_attempt=on_attempt,
     )
     return {

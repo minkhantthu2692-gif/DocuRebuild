@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.ai import AiProviderKind
 
@@ -108,7 +108,7 @@ def _validate_base_url(value: str) -> str:
 
 
 class AiProfileSettings(BaseModel):
-    """One local AI server profile for a task profile (text for now)."""
+    """One AI server profile for a task (text cleanup or image analysis)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -119,6 +119,9 @@ class AiProfileSettings(BaseModel):
     model: str = Field(default="", max_length=200)
     # Explicit consent for a non-loopback server. Loopback needs no consent.
     allow_remote: bool = False
+    # Derived from the encrypted secret store on read; never persisted with the
+    # rest of the settings and never returned as the key itself.
+    has_api_key: bool = False
 
     @field_validator("base_url")
     @classmethod
@@ -131,6 +134,21 @@ class AiProfileSettings(BaseModel):
         return value.strip()
 
 
+def _validate_api_key(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("An API key cannot be empty; omit it or clear the saved key.")
+    if len(cleaned) > 1024:
+        raise ValueError("The API key is too long.")
+    if any(character.isspace() for character in cleaned) or "\x00" in cleaned:
+        raise ValueError("An API key must be one line without spaces.")
+    if not cleaned.isascii() or not cleaned.isprintable():
+        raise ValueError("An API key must use printable ASCII characters.")
+    return cleaned
+
+
 class AiProfilePatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -138,6 +156,10 @@ class AiProfilePatch(BaseModel):
     base_url: str | None = None
     model: str | None = Field(default=None, max_length=200)
     allow_remote: bool | None = None
+    # Write-only: stored encrypted, never echoed back in any response.
+    api_key: str | None = None
+    # Explicitly remove the stored key for this task profile.
+    clear_api_key: bool | None = None
 
     @field_validator("base_url")
     @classmethod
@@ -148,6 +170,17 @@ class AiProfilePatch(BaseModel):
     @classmethod
     def _check_model(cls, value: str | None) -> str | None:
         return None if value is None else value.strip()
+
+    @field_validator("api_key")
+    @classmethod
+    def _check_api_key(cls, value: str | None) -> str | None:
+        return _validate_api_key(value)
+
+    @model_validator(mode="after")
+    def _check_key_action(self) -> "AiProfilePatch":
+        if self.api_key is not None and self.clear_api_key:
+            raise ValueError("Set an API key or clear it, not both.")
+        return self
 
 
 class AiSettings(BaseModel):

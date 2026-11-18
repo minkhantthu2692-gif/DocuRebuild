@@ -1,0 +1,145 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
+
+import { SettingsPage } from "@/pages/settings-page";
+import { i18n, initI18n } from "@/i18n";
+
+const mocks = vi.hoisted(() => ({
+  update: vi.fn(),
+  probe: vi.fn(),
+}));
+
+const settings = {
+  language: "en" as const,
+  appearance: {
+    theme: "system" as const,
+    accent: "indigo" as const,
+    radius: "soft" as const,
+    blur: "subtle" as const,
+    density: "comfortable" as const,
+    font_size: "md" as const,
+    motion: "full" as const,
+  },
+  editor: { document_font: "serif" as const },
+  export: { pdf_page_size: "a4" as const, pdf_margin: "normal" as const },
+  ai: {
+    text: {
+      provider: "openai_compatible" as const,
+      base_url: "http://127.0.0.1:1234/v1",
+      model: "local-model",
+      allow_remote: false,
+      has_api_key: true,
+    },
+    vision: {
+      provider: "ollama" as const,
+      base_url: "",
+      model: "",
+      allow_remote: false,
+      has_api_key: false,
+    },
+    request_limit: 0,
+  },
+  backups: { auto_on_open: false, interval_hours: 24, keep_copies: 5 },
+};
+
+vi.mock("@/hooks/use-app", () => ({
+  useAppMeta: () => ({ data: undefined }),
+  useAppSettings: () => ({ data: settings, isLoading: false }),
+  useHealth: () => ({ data: undefined }),
+  useUpdateSettings: () => ({ mutate: mocks.update, isPending: false }),
+}));
+
+vi.mock("@/hooks/use-ai", () => ({
+  useAiProviders: () => ({ data: undefined }),
+  useAiUsage: () => ({ data: undefined, isError: false }),
+  useAiUsageHistory: () => ({ data: undefined, isLoading: false, isError: false }),
+  useProbeAiProvider: () => ({ mutate: mocks.probe, isPending: false }),
+}));
+
+vi.mock("@/hooks/use-ocr", () => ({
+  useOcrCapabilities: () => ({ data: undefined, isLoading: false, isFetching: false }),
+}));
+
+function renderPage() {
+  render(
+    <MemoryRouter>
+      <SettingsPage />
+    </MemoryRouter>,
+  );
+}
+
+beforeAll(async () => {
+  initI18n();
+  await i18n.changeLanguage("en");
+});
+
+beforeEach(() => {
+  mocks.update.mockReset();
+  mocks.probe.mockReset();
+});
+
+describe("AI API keys", () => {
+  it("shows that a key is saved and sends a replacement only on save", () => {
+    renderPage();
+
+    expect(screen.getByText("Key saved")).toBeInTheDocument();
+    const input = screen.getByLabelText("Text cleanup server: API key");
+    fireEvent.change(input, { target: { value: "  sk-new-key  " } });
+
+    expect(mocks.update).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save AI settings" }));
+
+    expect(mocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ai: expect.objectContaining({
+          text: expect.objectContaining({ api_key: "sk-new-key" }),
+        }),
+      }),
+      expect.any(Object),
+    );
+    const payload = mocks.update.mock.calls[0][0] as {
+      ai: { text: Record<string, unknown> };
+    };
+    expect(payload.ai.text).not.toHaveProperty("clear_api_key");
+  });
+
+  it("asks to remove the saved key on the next save", () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove key" }));
+    expect(
+      screen.getByText("The saved key will be removed when you save."),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save AI settings" }));
+
+    const payload = mocks.update.mock.calls[0][0] as {
+      ai: { text: Record<string, unknown> };
+    };
+    expect(payload.ai.text.clear_api_key).toBe(true);
+    expect(payload.ai.text).not.toHaveProperty("api_key");
+  });
+
+  it("tests an unsaved key with the text task profile", () => {
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText("Text cleanup server: API key"), {
+      target: { value: "sk-probe" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Text cleanup server: Test connection",
+      }),
+    );
+
+    expect(mocks.probe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task: "text",
+        api_key: "sk-probe",
+        provider: "openai_compatible",
+      }),
+      expect.any(Object),
+    );
+  });
+});

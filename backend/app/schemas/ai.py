@@ -23,6 +23,7 @@ AiProbeErrorCode = Literal[
 ]
 AiTask = Literal["ocr_cleanup"]
 AiUsageTask = Literal["ocr_cleanup", "region_proposals", "equation_transcription"]
+AiTaskProfile = Literal["text", "vision"]
 AiSuggestionStatus = Literal["pending", "accepted", "rejected"]
 AiUsageOutcome = Literal["success", "error"]
 
@@ -40,9 +41,13 @@ class AiProbeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: AiProviderKind
-    base_url: str = ""
+    base_url: str = Field(default="", max_length=500)
     # Required before any request leaves the loopback interface.
     allow_remote: bool = False
+    # Write-only override for testing an unsaved key. When omitted, the stored key
+    # for `task` is used, so a saved remote profile can be tested again.
+    api_key: str | None = Field(default=None, max_length=1024)
+    task: AiTaskProfile | None = None
 
 
 class AiModelOut(BaseModel):

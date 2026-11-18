@@ -20,6 +20,8 @@ out/
 !.env.example
 *.pem
 *.key
+# Encrypted AI provider key store (normally inside the data folder).
+*.enc
 
 # Python
 __pycache__/

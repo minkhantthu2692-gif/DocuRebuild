@@ -6,7 +6,7 @@ import type {
   AiProvidersResponse,
   AiRegionProposalsRequest,
   AiRegionProposalsResponse,
-  AiSettings,
+  AiSettingsPatch,
   AiSuggestionBulkInput,
   AiSuggestionBulkResponse,
   AiSuggestionCreate,
@@ -139,7 +139,7 @@ export interface SettingsPatch {
   appearance?: Partial<AppearanceSettings>;
   editor?: Partial<EditorSettings>;
   export?: Partial<ExportSettings>;
-  ai?: Partial<AiSettings>;
+  ai?: AiSettingsPatch;
   backups?: Partial<BackupSettings>;
 }
 

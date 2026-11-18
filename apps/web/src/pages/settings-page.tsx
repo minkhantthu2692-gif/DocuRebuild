@@ -25,6 +25,7 @@ import { toast } from "sonner";
 
 import type {
   AccentName,
+  AiProfilePatch,
   AiProfileSettings,
   AiProbeResponse,
   AiProviderKind,
@@ -98,7 +99,23 @@ const DEFAULT_AI_PROFILE: AiProfileSettings = {
   base_url: "",
   model: "",
   allow_remote: false,
+  has_api_key: false,
 };
+
+function aiProfilePatch(
+  draft: AiProfileSettings,
+  apiKey: string,
+  clearKey: boolean,
+): AiProfilePatch {
+  return {
+    provider: draft.provider,
+    base_url: draft.base_url,
+    model: draft.model,
+    allow_remote: draft.allow_remote,
+    ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
+    ...(clearKey ? { clear_api_key: true } : {}),
+  };
+}
 
 const DEFAULT_BACKUPS: BackupSettings = {
   auto_on_open: false,
@@ -190,6 +207,10 @@ export function SettingsPage() {
   const [aiVisionDraftOverride, setAiVisionDraftOverride] =
     useState<AiProfileSettings | null>(null);
   const [aiLimitDraft, setAiLimitDraft] = useState<string | null>(null);
+  const [textApiKeyDraft, setTextApiKeyDraft] = useState("");
+  const [visionApiKeyDraft, setVisionApiKeyDraft] = useState("");
+  const [clearTextApiKey, setClearTextApiKey] = useState(false);
+  const [clearVisionApiKey, setClearVisionApiKey] = useState(false);
   const [probeResult, setProbeResult] = useState<AiProbeResponse | null>(null);
   const [visionProbeResult, setVisionProbeResult] = useState<AiProbeResponse | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -227,6 +248,10 @@ export function SettingsPage() {
     aiVisionDraft.base_url !== aiVisionSaved.base_url ||
     aiVisionDraft.model !== aiVisionSaved.model ||
     aiVisionDraft.allow_remote !== aiVisionSaved.allow_remote ||
+    textApiKeyDraft.trim() !== "" ||
+    visionApiKeyDraft.trim() !== "" ||
+    clearTextApiKey ||
+    clearVisionApiKey ||
     (aiLimitValid && parsedAiLimit !== aiLimitSaved);
   const aiUsage = aiUsageQuery.data;
   const providerDefault =
@@ -267,6 +292,8 @@ export function SettingsPage() {
         provider: aiDraft.provider,
         base_url: aiDraft.base_url,
         allow_remote: aiDraft.allow_remote,
+        task: "text",
+        ...(textApiKeyDraft.trim() ? { api_key: textApiKeyDraft.trim() } : {}),
       },
       {
         onSuccess: (result) => setProbeResult(result),
@@ -281,6 +308,8 @@ export function SettingsPage() {
         provider: aiVisionDraft.provider,
         base_url: aiVisionDraft.base_url,
         allow_remote: aiVisionDraft.allow_remote,
+        task: "vision",
+        ...(visionApiKeyDraft.trim() ? { api_key: visionApiKeyDraft.trim() } : {}),
       },
       {
         onSuccess: (result) => setVisionProbeResult(result),
@@ -294,8 +323,8 @@ export function SettingsPage() {
     updateSettings.mutate(
       {
         ai: {
-          text: aiDraft,
-          vision: aiVisionDraft,
+          text: aiProfilePatch(aiDraft, textApiKeyDraft, clearTextApiKey),
+          vision: aiProfilePatch(aiVisionDraft, visionApiKeyDraft, clearVisionApiKey),
           request_limit: parsedAiLimit,
         },
       },
@@ -304,6 +333,10 @@ export function SettingsPage() {
           setAiDraftOverride(null);
           setAiVisionDraftOverride(null);
           setAiLimitDraft(null);
+          setTextApiKeyDraft("");
+          setVisionApiKeyDraft("");
+          setClearTextApiKey(false);
+          setClearVisionApiKey(false);
           toast.success(t("ai.saved"));
         },
         onError: (error) => toast.error(errorMessage(error)),
@@ -754,66 +787,190 @@ export function SettingsPage() {
                 </p>
               </div>
 
-              <SettingRow title={t("ai.provider")} description={t("ai.providerDescription")}>
-                <SegmentedControl
-                  label={t("ai.provider")}
-                  value={aiDraft.provider}
-                  onValueChange={(value) => {
-                    setProbeResult(null);
-                    updateAiDraft({ provider: value as AiProviderKind });
-                  }}
-                  options={[
-                    { value: "ollama", label: t("ai.providerOllama") },
-                    { value: "openai_compatible", label: t("ai.providerOpenAI") },
-                  ]}
-                />
-              </SettingRow>
+              <div className="space-y-4 rounded-lg border border-border/60 bg-background/40 p-3">
+                <div className="space-y-1">
+                  <h4 className="text-xs font-semibold">{t("ai.textTitle")}</h4>
+                  <p className="text-2xs leading-relaxed text-muted-foreground">
+                    {t("ai.textDescription")}
+                  </p>
+                </div>
 
-              <SettingRow title={t("ai.baseUrl")} description={t("ai.baseUrlDescription")}>
-                <Input
-                  value={aiDraft.base_url}
-                  placeholder={providerDefault}
-                  spellCheck={false}
-                  aria-label={t("ai.baseUrl")}
-                  onChange={(event) => {
-                    setProbeResult(null);
-                    updateAiDraft({ base_url: event.target.value });
-                  }}
-                />
-              </SettingRow>
+                <SettingRow
+                  title={t("ai.provider")}
+                  description={t("ai.providerDescription")}
+                >
+                  <SegmentedControl
+                    label={`${t("ai.textTitle")}: ${t("ai.provider")}`}
+                    value={aiDraft.provider}
+                    onValueChange={(value) => {
+                      setProbeResult(null);
+                      updateAiDraft({ provider: value as AiProviderKind });
+                    }}
+                    options={[
+                      { value: "ollama", label: t("ai.providerOllama") },
+                      { value: "openai_compatible", label: t("ai.providerOpenAI") },
+                    ]}
+                  />
+                </SettingRow>
 
-              <SettingRow title={t("ai.allowRemote")} description={t("ai.allowRemoteDescription")}>
-                <label className="flex items-start gap-2 text-xs leading-relaxed">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 size-3.5 shrink-0 accent-primary"
-                    checked={aiDraft.allow_remote}
+                <SettingRow title={t("ai.baseUrl")} description={t("ai.baseUrlDescription")}>
+                  <Input
+                    value={aiDraft.base_url}
+                    placeholder={providerDefault}
+                    spellCheck={false}
+                    aria-label={`${t("ai.textTitle")}: ${t("ai.baseUrl")}`}
                     onChange={(event) => {
                       setProbeResult(null);
-                      updateAiDraft({ allow_remote: event.target.checked });
+                      updateAiDraft({ base_url: event.target.value });
                     }}
                   />
-                  <span>{t("ai.allowRemoteLabel")}</span>
-                </label>
-              </SettingRow>
+                </SettingRow>
 
-              <SettingRow title={t("ai.model")} description={t("ai.modelDescription")}>
-                <Input
-                  value={aiDraft.model}
-                  placeholder={t("ai.modelPlaceholder")}
-                  spellCheck={false}
-                  aria-label={t("ai.model")}
-                  list={discoveredModels.length > 0 ? "ai-model-options" : undefined}
-                  onChange={(event) => updateAiDraft({ model: event.target.value })}
-                />
-                {discoveredModels.length > 0 ? (
-                  <datalist id="ai-model-options">
-                    {discoveredModels.map((model) => (
-                      <option key={model.id} value={model.id} />
-                    ))}
-                  </datalist>
-                ) : null}
-              </SettingRow>
+                <SettingRow
+                  title={t("ai.allowRemote")}
+                  description={t("ai.allowRemoteDescription")}
+                >
+                  <label className="flex items-start gap-2 text-xs leading-relaxed">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 size-3.5 shrink-0 accent-primary"
+                      checked={aiDraft.allow_remote}
+                      onChange={(event) => {
+                        setProbeResult(null);
+                        updateAiDraft({ allow_remote: event.target.checked });
+                      }}
+                    />
+                    <span>{t("ai.allowRemoteLabel")}</span>
+                  </label>
+                </SettingRow>
+
+                <SettingRow title={t("ai.model")} description={t("ai.modelDescription")}>
+                  <Input
+                    value={aiDraft.model}
+                    placeholder={t("ai.modelPlaceholder")}
+                    spellCheck={false}
+                    aria-label={t("ai.model")}
+                    list={discoveredModels.length > 0 ? "ai-model-options" : undefined}
+                    onChange={(event) => updateAiDraft({ model: event.target.value })}
+                  />
+                  {discoveredModels.length > 0 ? (
+                    <datalist id="ai-model-options">
+                      {discoveredModels.map((model) => (
+                        <option key={model.id} value={model.id} />
+                      ))}
+                    </datalist>
+                  ) : null}
+                </SettingRow>
+
+                <SettingRow title={t("ai.apiKey")} description={t("ai.apiKeyDescription")}>
+                  <div className="space-y-1.5">
+                    <Input
+                      type="password"
+                      value={textApiKeyDraft}
+                      placeholder={
+                        aiSaved.has_api_key && !clearTextApiKey
+                          ? t("ai.apiKeySavedPlaceholder")
+                          : t("ai.apiKeyPlaceholder")
+                      }
+                      autoComplete="off"
+                      spellCheck={false}
+                      aria-label={`${t("ai.textTitle")}: ${t("ai.apiKey")}`}
+                      onChange={(event) => {
+                        setTextApiKeyDraft(event.target.value);
+                        setProbeResult(null);
+                      }}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant={
+                          aiSaved.has_api_key && !clearTextApiKey ? "success" : "outline"
+                        }
+                      >
+                        {aiSaved.has_api_key && !clearTextApiKey
+                          ? t("ai.apiKeySaved")
+                          : t("ai.apiKeyNotSet")}
+                      </Badge>
+                      {aiSaved.has_api_key && !clearTextApiKey ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setClearTextApiKey(true);
+                            setTextApiKeyDraft("");
+                            setProbeResult(null);
+                          }}
+                        >
+                          {t("ai.apiKeyClear")}
+                        </Button>
+                      ) : null}
+                      {clearTextApiKey ? (
+                        <span className="text-2xs text-warning">
+                          {t("ai.apiKeyWillClear")}
+                        </span>
+                      ) : textApiKeyDraft.trim() && aiSaved.has_api_key ? (
+                        <span className="text-2xs text-muted-foreground">
+                          {t("ai.apiKeyWillReplace")}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </SettingRow>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium">{t("ai.status")}</span>
+                    <Badge
+                      variant={
+                        probeAi.isPending
+                          ? "outline"
+                          : probeResult?.status === "ready"
+                            ? "success"
+                            : probeResult
+                              ? "warning"
+                              : "outline"
+                      }
+                    >
+                      {probeAi.isPending
+                        ? t("ai.testing")
+                        : probeResult?.status === "ready"
+                          ? t("ai.connected")
+                          : probeResult
+                            ? t("ai.disconnected")
+                            : t("ai.notTested")}
+                    </Badge>
+                    {probeResult?.version ? (
+                      <span className="text-2xs text-muted-foreground">
+                        v{probeResult.version}
+                      </span>
+                    ) : null}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 self-start sm:self-auto"
+                    disabled={probeAi.isPending}
+                    aria-label={`${t("ai.textTitle")}: ${t("ai.testConnection")}`}
+                    onClick={testAiConnection}
+                  >
+                    <RefreshCw className={probeAi.isPending ? "animate-spin" : undefined} />
+                    {t("ai.testConnection")}
+                  </Button>
+                </div>
+
+                {probeResult?.status === "ready" ? (
+                  <p className="text-2xs text-muted-foreground">
+                    {discoveredModels.length > 0
+                      ? t("ai.modelsFound", { count: discoveredModels.length })
+                      : t("ai.noModels")}
+                  </p>
+                ) : probeResult ? (
+                  <p className="text-2xs text-warning">
+                    {t(`ai.errorReasons.${probeResult.error_code ?? "ai_unreachable"}`)}
+                  </p>
+                ) : (
+                  <p className="text-2xs text-muted-foreground">{t("ai.testHint")}</p>
+                )}
+              </div>
 
               <div className="space-y-4 rounded-lg border border-border/60 bg-background/40 p-3">
                 <div className="space-y-1">
@@ -907,6 +1064,65 @@ export function SettingsPage() {
                   </p>
                 </SettingRow>
 
+                <SettingRow
+                  title={t("ai.apiKey")}
+                  description={t("ai.visionApiKeyDescription")}
+                >
+                  <div className="space-y-1.5">
+                    <Input
+                      type="password"
+                      value={visionApiKeyDraft}
+                      placeholder={
+                        aiVisionSaved.has_api_key && !clearVisionApiKey
+                          ? t("ai.apiKeySavedPlaceholder")
+                          : t("ai.apiKeyPlaceholder")
+                      }
+                      autoComplete="off"
+                      spellCheck={false}
+                      aria-label={`${t("ai.visionTitle")}: ${t("ai.apiKey")}`}
+                      onChange={(event) => {
+                        setVisionApiKeyDraft(event.target.value);
+                        setVisionProbeResult(null);
+                      }}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant={
+                          aiVisionSaved.has_api_key && !clearVisionApiKey
+                            ? "success"
+                            : "outline"
+                        }
+                      >
+                        {aiVisionSaved.has_api_key && !clearVisionApiKey
+                          ? t("ai.apiKeySaved")
+                          : t("ai.apiKeyNotSet")}
+                      </Badge>
+                      {aiVisionSaved.has_api_key && !clearVisionApiKey ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setClearVisionApiKey(true);
+                            setVisionApiKeyDraft("");
+                            setVisionProbeResult(null);
+                          }}
+                        >
+                          {t("ai.apiKeyClear")}
+                        </Button>
+                      ) : null}
+                      {clearVisionApiKey ? (
+                        <span className="text-2xs text-warning">
+                          {t("ai.apiKeyWillClear")}
+                        </span>
+                      ) : visionApiKeyDraft.trim() && aiVisionSaved.has_api_key ? (
+                        <span className="text-2xs text-muted-foreground">
+                          {t("ai.apiKeyWillReplace")}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </SettingRow>
+
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-medium">{t("ai.status")}</span>
@@ -940,6 +1156,7 @@ export function SettingsPage() {
                     size="sm"
                     className="gap-1.5 self-start sm:self-auto"
                     disabled={probeVisionAi.isPending}
+                    aria-label={`${t("ai.visionTitle")}: ${t("ai.testConnection")}`}
                     onClick={testVisionConnection}
                   >
                     <RefreshCw
@@ -1005,62 +1222,6 @@ export function SettingsPage() {
                   </p>
                 </div>
               </SettingRow>
-
-              <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-background/40 p-3">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-medium">{t("ai.status")}</span>
-                    <Badge
-                      variant={
-                        probeAi.isPending
-                          ? "outline"
-                          : probeResult?.status === "ready"
-                            ? "success"
-                            : probeResult
-                              ? "warning"
-                              : "outline"
-                      }
-                    >
-                      {probeAi.isPending
-                        ? t("ai.testing")
-                        : probeResult?.status === "ready"
-                          ? t("ai.connected")
-                          : probeResult
-                            ? t("ai.disconnected")
-                            : t("ai.notTested")}
-                    </Badge>
-                    {probeResult?.version ? (
-                      <span className="text-2xs text-muted-foreground">
-                        v{probeResult.version}
-                      </span>
-                    ) : null}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 self-start sm:self-auto"
-                    disabled={probeAi.isPending}
-                    onClick={testAiConnection}
-                  >
-                    <RefreshCw className={probeAi.isPending ? "animate-spin" : undefined} />
-                    {t("ai.testConnection")}
-                  </Button>
-                </div>
-
-                {probeResult?.status === "ready" ? (
-                  <p className="text-2xs text-muted-foreground">
-                    {discoveredModels.length > 0
-                      ? t("ai.modelsFound", { count: discoveredModels.length })
-                      : t("ai.noModels")}
-                  </p>
-                ) : probeResult ? (
-                  <p className="text-2xs text-warning">
-                    {t(`ai.errorReasons.${probeResult.error_code ?? "ai_unreachable"}`)}
-                  </p>
-                ) : (
-                  <p className="text-2xs text-muted-foreground">{t("ai.testHint")}</p>
-                )}
-              </div>
 
               {aiUsage && aiUsage.recent.length > 0 ? (
                 <SettingRow

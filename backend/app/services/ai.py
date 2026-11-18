@@ -198,9 +198,13 @@ def _read_json(
     url: str,
     timeout: float,
     payload: dict[str, Any] | None = None,
+    *,
+    api_key: str | None = None,
 ) -> tuple[int, Any]:
     data = None
     headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -236,8 +240,12 @@ def _model_entry(
     return {"id": model_id, "family": family, "parameter_size": parameter_size}
 
 
-def _ollama_models(base_url: str) -> tuple[list[dict[str, Any]], str | None]:
-    _status, body = _read_json(f"{base_url}/api/tags", PROBE_TIMEOUT)
+def _ollama_models(
+    base_url: str, api_key: str | None = None
+) -> tuple[list[dict[str, Any]], str | None]:
+    _status, body = _read_json(
+        f"{base_url}/api/tags", PROBE_TIMEOUT, api_key=api_key
+    )
     if not isinstance(body, dict) or not isinstance(body.get("models"), list):
         raise _FetchFailure("invalid_response", "ai_invalid_response")
     models: list[dict[str, Any]] = []
@@ -260,7 +268,9 @@ def _ollama_models(base_url: str) -> tuple[list[dict[str, Any]], str | None]:
     models.sort(key=lambda entry: entry["id"].lower())
     version = None
     try:
-        _version_status, version_body = _read_json(f"{base_url}/api/version", PROBE_TIMEOUT)
+        _version_status, version_body = _read_json(
+            f"{base_url}/api/version", PROBE_TIMEOUT, api_key=api_key
+        )
         if isinstance(version_body, dict) and isinstance(version_body.get("version"), str):
             version = version_body["version"]
     except _FetchFailure:
@@ -269,8 +279,10 @@ def _ollama_models(base_url: str) -> tuple[list[dict[str, Any]], str | None]:
     return models, version
 
 
-def _openai_models(base_url: str) -> list[dict[str, Any]]:
-    _status, body = _read_json(f"{base_url}/models", PROBE_TIMEOUT)
+def _openai_models(base_url: str, api_key: str | None = None) -> list[dict[str, Any]]:
+    _status, body = _read_json(
+        f"{base_url}/models", PROBE_TIMEOUT, api_key=api_key
+    )
     if not isinstance(body, dict) or not isinstance(body.get("data"), list):
         raise _FetchFailure("invalid_response", "ai_invalid_response")
     models: list[dict[str, Any]] = []
@@ -290,6 +302,7 @@ def probe_provider(
     base_url: str = "",
     *,
     allow_remote: bool = False,
+    api_key: str | None = None,
 ) -> dict[str, Any]:
     """Inspect a local server only when the user asks for a connection test.
 
@@ -299,9 +312,9 @@ def probe_provider(
     resolved = normalize_base_url(provider, base_url, allow_remote=allow_remote)
     try:
         if provider == "ollama":
-            models, version = _ollama_models(resolved)
+            models, version = _ollama_models(resolved, api_key)
         else:
-            models = _openai_models(resolved)
+            models = _openai_models(resolved, api_key)
             version = None
     except _FetchFailure as exc:
         return {
@@ -364,6 +377,7 @@ def _chat_completion(
     base_url: str,
     model: str,
     text: str,
+    api_key: str | None = None,
 ) -> str:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -380,6 +394,7 @@ def _chat_completion(
                     "stream": False,
                     "options": {"temperature": 0},
                 },
+                api_key=api_key,
             )
         else:
             _status, body = _read_json(
@@ -391,6 +406,7 @@ def _chat_completion(
                     "temperature": 0,
                     "stream": False,
                 },
+                api_key=api_key,
             )
     except _FetchFailure as exc:
         raise AppError(
@@ -441,6 +457,7 @@ def _vision_completion(
     prompt: str = VISION_PROMPT,
     user_text: str = "Analyse the attached document page image.",
     json_mode: bool = True,
+    api_key: str | None = None,
 ) -> str:
     # The data URL keeps the image in the same request body as the prompt, so
     # the server never has to fetch anything on its own.
@@ -466,6 +483,7 @@ def _vision_completion(
                 f"{base_url}/api/chat",
                 GENERATE_TIMEOUT,
                 ollama_payload,
+                api_key=api_key,
             )
         else:
             _status, body = _read_json(
@@ -486,6 +504,7 @@ def _vision_completion(
                     "temperature": 0,
                     "stream": False,
                 },
+                api_key=api_key,
             )
     except _FetchFailure as exc:
         raise AppError(
@@ -582,6 +601,7 @@ def request_region_proposals(
     provider: AiProviderKind | None = None,
     base_url: str | None = None,
     model: str | None = None,
+    api_key: str | None = None,
     on_attempt: Callable[[RequestAttempt], None] | None = None,
 ) -> VisionCompletion:
     resolved_provider, resolved_url, resolved_model = resolve_profile(
@@ -596,6 +616,7 @@ def request_region_proposals(
             resolved_url,
             resolved_model,
             image_b64,
+            api_key=api_key,
         )
     except AppError as exc:
         report_attempt(
@@ -660,6 +681,7 @@ def request_equation_latex(
     provider: AiProviderKind | None = None,
     base_url: str | None = None,
     model: str | None = None,
+    api_key: str | None = None,
     on_attempt: Callable[[RequestAttempt], None] | None = None,
 ) -> EquationCompletion:
     resolved_provider, resolved_url, resolved_model = resolve_profile(
@@ -677,6 +699,7 @@ def request_equation_latex(
             prompt=EQUATION_PROMPT,
             user_text="Transcribe the equation in the attached crop.",
             json_mode=False,
+            api_key=api_key,
         )
     except AppError as exc:
         report_attempt(
@@ -706,6 +729,7 @@ def request_cleanup(
     provider: AiProviderKind | None = None,
     base_url: str | None = None,
     model: str | None = None,
+    api_key: str | None = None,
     on_attempt: Callable[[RequestAttempt], None] | None = None,
 ) -> Completion:
     if not text.strip():
@@ -719,7 +743,13 @@ def request_cleanup(
         model=model,
     )
     try:
-        cleaned = _chat_completion(resolved_provider, resolved_url, resolved_model, text)
+        cleaned = _chat_completion(
+            resolved_provider,
+            resolved_url,
+            resolved_model,
+            text,
+            api_key=api_key,
+        )
     except AppError as exc:
         report_attempt(
             on_attempt,
@@ -867,6 +897,7 @@ def create_cleanup_suggestion(
     provider: AiProviderKind | None = None,
     base_url: str | None = None,
     model: str | None = None,
+    api_key: str | None = None,
     on_attempt: Callable[[RequestAttempt], None] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     with project_db(project_dir) as conn:
@@ -881,6 +912,7 @@ def create_cleanup_suggestion(
         provider=provider,
         base_url=base_url,
         model=model,
+        api_key=api_key,
         on_attempt=on_attempt,
     )
 

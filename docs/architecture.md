@@ -58,6 +58,7 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, vision region and equation-crop requests, LaTeX reply reduction, listing and review decisions |
 | `services.ai_vision` | Page and region image encoding, normalized-to-source rectangle mapping and filtering for optional vision region proposals, and one-crop equation transcription |
 | `services.ai_usage` | Local AI request metadata, rolling-window request counting and usage summaries |
+| `services.ai_secrets` | Encrypted, write-only per-task provider keys in the local data folder, with a generated master key; never returns the plain value |
 | `app.scheduled_backup` | Optional one-pass CLI entry point for external schedulers: creates due automatic copies, respects saved preferences and reports failures |
 | `api.routes.*` | HTTP surface (`/api/...`) |
 
@@ -101,7 +102,8 @@ projects/<project-id>/
   trash/        per-project runtime trash
 ```
 
-The data directory also holds `app.db`, a shared `trash/` for deleted projects, a
+The data directory also holds `app.db`, a `secrets/` folder for encrypted provider
+keys, a shared `trash/` for deleted projects, a
 shared `backups/<project_id>/` vault for verified copies and a short-lived `tmp/`
 folder used only while building or restoring a backup. Relative asset references are
 stored in SQLite so a project folder can be moved without rewriting paths.
@@ -1197,6 +1199,23 @@ src/
   every AI action disabled. `allow_remote` defaults to `false` and is the user's
   explicit consent for a non-loopback endpoint. The Settings page edits a local draft
   and saves explicitly, so typing a URL does not trigger a PATCH or a network request.
+- Provider credentials are optional and separate from `app.db`. `services.ai_secrets`
+  keeps one key per task profile (`text`, `vision`) in
+  `<data_dir>/secrets/ai_keys.enc`, encrypted with Fernet and a generated 32-byte
+  master key in `<data_dir>/secrets/ai_keys.key`; the directory is created with
+  user-only permissions where the platform supports it. The API exposes only
+  `has_api_key`; `PATCH /api/settings` accepts `api_key` (trimmed, opaque, 1–1024
+  characters) or `clear_api_key: true`, never both. A key is write-only: it is never
+  returned, logged, copied into `app.db`, usage rows, suggestions or exports. An
+  unreadable or missing secret store degrades to "no key" with a warning instead of
+  breaking the Settings page.
+- When a key exists, the adapter sends `Authorization: Bearer <key>` for both
+  provider kinds. This is harmless for a local Ollama server that ignores it and
+  supports an authenticated gateway. A stored key is attached only when the request
+  keeps the saved provider and base URL; any per-request `provider`/`base_url`
+  override is sent without it, so a key is never leaked to a different server.
+  `POST /api/ai/probe` accepts a write-only `api_key` for testing an unsaved value and
+  an optional `task` to reuse that task's saved key for the same server.
 - `app_settings.ai.vision` is a separate task profile with its own provider, base
   URL, model and remote-consent decision, so image analysis can run on a different
   local server or device than text cleanup. An empty model keeps image AI disabled
@@ -1332,8 +1351,14 @@ src/
   configured.
 - Security headers (`nosniff`, `DENY`, `no-referrer`, `same-origin`) are applied
   to every response.
-- No secrets are stored in the frontend. No AI provider keys exist in this phase;
-  local providers require none. The AI profile stores only a local URL and model names.
+- No secret is persisted or logged by the frontend: a typed key lives only in
+  component state until the user saves it, and the draft is cleared afterwards.
+  Provider keys are optional, stored only encrypted in the local
+  data folder, exposed as `has_api_key`, and sent as a bearer token only to the saved
+  server. The AI profile itself stores only a URL, model names and the consent flag.
+- The encrypted key files live under the user data folder, not in a project or in
+  Git. `.gitignore` excludes local data folders, databases and `*.key`/`*.enc`
+  files; the repository contains no sample key and no default master key.
 - AI usage history is metadata only: provider, model, task, outcome, error code,
   project/page/block ids and timestamps. It never stores sent text, page images or
   model output, and a request limit is enforced before a provider is contacted.

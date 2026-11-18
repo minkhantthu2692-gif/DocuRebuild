@@ -34,6 +34,7 @@ class _StubState:
         )
         self.invalid_tags = False
         self.requests: list[tuple[str, str]] = []
+        self.authorization: list[str | None] = []
         self.last_payload: dict | None = None
 
 
@@ -57,6 +58,7 @@ def stub_ai():
 
         def do_GET(self) -> None:  # noqa: N802 - http.server API
             state.requests.append(("GET", self.path))
+            state.authorization.append(self.headers.get("Authorization"))
             if self.path == "/api/tags":
                 if state.invalid_tags:
                     _stub_response(self, 200, {"unexpected": []})
@@ -98,6 +100,7 @@ def stub_ai():
                 _stub_response(self, 400, {"error": "invalid json"})
                 return
             state.requests.append(("POST", self.path))
+            state.authorization.append(self.headers.get("Authorization"))
             state.last_payload = payload
             assert payload["messages"][0]["role"] == "system"
             user_message = payload["messages"][-1]
@@ -435,6 +438,7 @@ def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> N
         "base_url": "",
         "model": "",
         "allow_remote": False,
+        "has_api_key": False,
     }
     # Image analysis has its own provider, URL, model and consent.
     assert ai_settings["vision"] == defaults
@@ -449,6 +453,7 @@ def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> N
         "base_url": "",
         "model": "local-model",
         "allow_remote": False,
+        "has_api_key": False,
     }
 
     consented = client.patch(
@@ -461,6 +466,7 @@ def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> N
         "base_url": "http://192.0.2.10:1234",
         "model": "local-model",
         "allow_remote": True,
+        "has_api_key": False,
     }
 
     limited = client.patch("/api/settings", json={"ai": {"request_limit": 25}})
@@ -478,6 +484,7 @@ def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> N
         "base_url": "",
         "model": "llava:7b",
         "allow_remote": False,
+        "has_api_key": False,
     }
     # Saving the vision profile never changes the text profile.
     assert vision_saved.json()["ai"]["text"]["provider"] == "openai_compatible"
@@ -496,6 +503,147 @@ def test_ai_profile_settings_validation_and_persistence(client: TestClient) -> N
     for bad_limit in (-1, 10_001):
         response = client.patch("/api/settings", json={"ai": {"request_limit": bad_limit}})
         assert response.status_code == 422, bad_limit
+
+
+def test_api_keys_are_write_only_and_encrypted(client: TestClient) -> None:
+    from app.core.config import get_settings
+
+    saved = client.patch(
+        "/api/settings",
+        json={
+            "ai": {
+                "text": {
+                    "provider": "openai_compatible",
+                    "api_key": "  sk-text-secret  ",
+                }
+            }
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    profile = saved.json()["ai"]["text"]
+    assert profile["has_api_key"] is True
+    assert "api_key" not in profile
+    assert "sk-text-secret" not in saved.text
+    assert client.get("/api/settings").json()["ai"]["text"]["has_api_key"] is True
+
+    # The key is encrypted at rest; neither file contains the plain value.
+    secrets_dir = get_settings().data_dir / "secrets"
+    store = (secrets_dir / "ai_keys.enc").read_bytes()
+    master = (secrets_dir / "ai_keys.key").read_bytes()
+    assert b"sk-text-secret" not in store
+    assert b"sk-text-secret" not in master
+
+    vision = client.patch(
+        "/api/settings",
+        json={"ai": {"vision": {"api_key": "vk-vision-secret"}}},
+    )
+    assert vision.status_code == 200, vision.text
+    assert vision.json()["ai"]["vision"]["has_api_key"] is True
+    # Each task profile keeps its own key.
+    assert vision.json()["ai"]["text"]["has_api_key"] is True
+
+    cleared = client.patch(
+        "/api/settings", json={"ai": {"text": {"clear_api_key": True}}}
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["ai"]["text"]["has_api_key"] is False
+    assert cleared.json()["ai"]["vision"]["has_api_key"] is True
+    assert client.get("/api/settings").json()["ai"]["text"]["has_api_key"] is False
+
+    for bad in ("", "   ", "two words", "x" * 1025, "ключ", "sk-\t1"):
+        response = client.patch("/api/settings", json={"ai": {"text": {"api_key": bad}}})
+        assert response.status_code == 422, bad
+
+    both = client.patch(
+        "/api/settings",
+        json={"ai": {"vision": {"api_key": "vk-next", "clear_api_key": True}}},
+    )
+    assert both.status_code == 422, both.text
+
+
+def test_corrupt_key_store_degrades_to_no_key(client: TestClient) -> None:
+    from app.core.config import get_settings
+
+    secrets_dir = get_settings().data_dir / "secrets"
+    secrets_dir.mkdir(parents=True, exist_ok=True)
+    (secrets_dir / "ai_keys.enc").write_bytes(b"not-a-fernet-token")
+
+    response = client.get("/api/settings")
+    assert response.status_code == 200, response.text
+    assert response.json()["ai"]["text"]["has_api_key"] is False
+    assert response.json()["ai"]["vision"]["has_api_key"] is False
+
+    # Saving a new key rewrites the store instead of staying blocked.
+    saved = client.patch(
+        "/api/settings", json={"ai": {"text": {"api_key": "sk-recovered"}}}
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["ai"]["text"]["has_api_key"] is True
+
+
+def test_saved_key_reaches_only_the_saved_server(
+    client: TestClient, project: dict, monkeypatch, stub_ai
+) -> None:
+    _configure_ai(
+        client,
+        provider="openai_compatible",
+        base_url=stub_ai.base_url_v1,
+        model="local-model",
+    )
+    saved = client.patch(
+        "/api/settings", json={"ai": {"text": {"api_key": "sk-live"}}}
+    )
+    assert saved.status_code == 200, saved.text
+
+    page, run = _ocr_page(client, project, monkeypatch, "ai-key-header.png")
+    cleanup = _suggest(client, project["id"], page["id"], run["blocks"][0]["id"])
+    assert cleanup.status_code == 201, cleanup.text
+    assert stub_ai.state.authorization[-1] == "Bearer sk-live"
+
+    # A probe can reuse the saved key for the same task profile.
+    probe = client.post(
+        "/api/ai/probe",
+        json={
+            "provider": "openai_compatible",
+            "base_url": stub_ai.base_url_v1,
+            "task": "text",
+        },
+    )
+    assert probe.status_code == 200, probe.text
+    assert probe.json()["status"] == "ready"
+    assert stub_ai.state.authorization[-1] == "Bearer sk-live"
+
+    # Reusing the saved key requires the same saved server. A different host
+    # string, even pointing at the same machine, must not receive it.
+    other_host = client.post(
+        "/api/ai/probe",
+        json={
+            "provider": "openai_compatible",
+            "base_url": stub_ai.base_url_v1.replace("127.0.0.1", "localhost"),
+            "task": "text",
+        },
+    )
+    assert other_host.status_code == 200, other_host.text
+    assert other_host.json()["status"] == "ready"
+    assert stub_ai.state.authorization[-1] is None
+
+    # A per-request server override must never receive the stored key.
+    override = _suggest(
+        client,
+        project["id"],
+        page["id"],
+        run["blocks"][0]["id"],
+        {
+            "provider": "openai_compatible",
+            "base_url": stub_ai.base_url_v1,
+            "model": "local-model",
+        },
+    )
+    assert override.status_code == 201, override.text
+    assert stub_ai.state.authorization[-1] is None
+
+    # The usage ledger records metadata only, never the credential.
+    assert "sk-live" not in client.get("/api/ai/usage/history").text
 
 
 def test_cleanup_requires_a_configured_model(
@@ -1057,6 +1205,7 @@ def test_legacy_vision_model_migrates_to_a_vision_profile(client: TestClient) ->
         "base_url": "http://127.0.0.1:1234/v1",
         "model": "llava:7b",
         "allow_remote": False,
+        "has_api_key": False,
     }
     assert "vision_model" not in migrated
 
