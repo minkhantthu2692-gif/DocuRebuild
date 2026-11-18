@@ -709,6 +709,7 @@ def test_cleanup_records_usage_and_enforces_rolling_limit(
     empty = _usage(client)
     assert empty["used"] == 0
     assert empty["recent"] == []
+    assert empty["by_task"] == []
     assert empty["request_limit"] == 0
     assert empty["remaining"] is None
 
@@ -718,6 +719,7 @@ def test_cleanup_records_usage_and_enforces_rolling_limit(
     assert after_success["used"] == 1
     assert after_success["successful"] == 1
     assert after_success["failed"] == 0
+    assert after_success["by_task"] == [{"task": "ocr_cleanup", "used": 1}]
     entry = after_success["recent"][0]
     assert entry["outcome"] == "success"
     assert entry["provider"] == "ollama"
@@ -756,6 +758,41 @@ def test_cleanup_records_usage_and_enforces_rolling_limit(
     allowed = _suggest(client, project["id"], page["id"], run["blocks"][0]["id"])
     assert allowed.status_code == 201, allowed.text
     assert _usage(client)["used"] == 3
+
+
+def test_usage_breakdown_counts_tasks_in_a_stable_order(
+    client: TestClient, project: dict
+) -> None:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for task in ("equation_transcription", "ocr_cleanup", "ocr_cleanup"):
+        _insert_usage(
+            model="qwen2.5:7b",
+            task=task,
+            outcome="success",
+            created_at=now,
+            project_id=project["id"],
+        )
+    # A stored name this build does not know must still be counted and shown
+    # instead of disappearing from the budget it consumed.
+    _insert_usage(
+        model="qwen2.5:7b",
+        task="legacy_task",
+        outcome="error",
+        error_code="ai_unreachable",
+        created_at=now,
+        project_id=project["id"],
+    )
+
+    body = _usage(client)
+    assert body["used"] == 4
+    # Errors consume the budget, so the failed attempt is included.
+    assert body["by_task"] == [
+        {"task": "ocr_cleanup", "used": 2},
+        {"task": "equation_transcription", "used": 1},
+        {"task": "legacy_task", "used": 1},
+    ]
 
 
 def test_page_suggestions_can_be_listed_and_filtered(

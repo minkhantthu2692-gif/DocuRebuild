@@ -184,6 +184,8 @@
     "usageFailed": "မအောင်မြင်ပါ",
     "usageHistoryOpen": "မှတ်တမ်းအပြည့်အစုံ ကြည့်ရန်",
     "usageHistoryEmpty": "လွန်ခဲ့သော ၂၄ နာရီအတွင်း AI တောင်းဆိုမှု မရှိပါ။",
+    "usageByTask": "လွန်ခဲ့သော ၂၄ နာရီအတွင်း လုပ်ငန်းအလိုက်",
+    "usageTaskCount": "{{task}} — {{requests}}",
     "tasks": {
       "ocr_cleanup": "OCR စာသား ပြုပြင်ခြင်း",
       "region_proposals": "နေရာ အဆိုပြုချက်များ",

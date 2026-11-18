@@ -16,6 +16,11 @@ RECENT_LIMIT = 20
 HISTORY_LIMIT = 25
 HISTORY_MAX_LIMIT = 100
 
+# Stable display order for the known tasks. Any other stored task name (older
+# rows or a future task) is listed afterwards, alphabetically, instead of being
+# dropped or folded into a catch-all bucket.
+TASK_ORDER = ("ocr_cleanup", "region_proposals", "equation_transcription")
+
 
 def _utc_naive_now() -> datetime:
     """Match SQLAlchemy's SQLite storage, which drops the timezone offset."""
@@ -91,6 +96,20 @@ def record_attempt(
     )
 
 
+def _task_counts(rows: list[AiUsage]) -> list[dict[str, Any]]:
+    """Count attempts per task in the window, errors included.
+
+    Errors consume the rolling budget just as successes do, so the breakdown
+    counts every attempt and never estimates cost or token usage.
+    """
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row.task] = counts.get(row.task, 0) + 1
+    known = [task for task in TASK_ORDER if task in counts]
+    unknown = sorted(task for task in counts if task not in TASK_ORDER)
+    return [{"task": task, "used": counts[task]} for task in (*known, *unknown)]
+
+
 def usage_summary(session: Session, request_limit: int) -> dict[str, Any]:
     rows = _window_rows(session)
     used = len(rows)
@@ -104,6 +123,7 @@ def usage_summary(session: Session, request_limit: int) -> dict[str, Any]:
         "remaining": remaining,
         "successful": successful,
         "failed": failed,
+        "by_task": _task_counts(rows),
         "recent": [_entry(row) for row in rows[:RECENT_LIMIT]],
     }
 

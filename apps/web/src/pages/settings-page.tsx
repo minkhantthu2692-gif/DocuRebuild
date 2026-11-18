@@ -63,6 +63,7 @@ import { useAiProviders, useAiUsage, useProbeAiProvider } from "@/hooks/use-ai";
 import { useAppMeta, useAppSettings, useHealth, useUpdateSettings } from "@/hooks/use-app";
 import { useOcrCapabilities } from "@/hooks/use-ocr";
 import { isLoopbackUrl } from "@/lib/ai-cost";
+import { aiTaskLabelKey } from "@/lib/ai-task";
 import { formatDateTime, formatNumber, resolveLocale } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -1401,6 +1402,23 @@ export function SettingsPage() {
                           ? t("ai.usageUnavailable")
                           : t("ai.usageLoading")}
                   </p>
+                  {aiUsage && aiUsage.by_task.length > 0 ? (
+                    <div className="space-y-1">
+                      <p className="text-2xs font-medium text-muted-foreground">
+                        {t("ai.usageByTask")}
+                      </p>
+                      <ul className="flex flex-wrap gap-x-3 gap-y-1 text-2xs text-muted-foreground">
+                        {aiUsage.by_task.map((row) => (
+                          <li key={row.task}>
+                            {t("ai.usageTaskCount", {
+                              task: t(aiTaskLabelKey(row.task)),
+                              requests: formatNumber(row.used, locale),
+                            })}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </div>
               </SettingRow>
 

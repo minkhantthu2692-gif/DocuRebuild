@@ -115,6 +115,13 @@ class AiUsageEntryOut(BaseModel):
     created_at: str
 
 
+class AiUsageTaskCountOut(BaseModel):
+    """Attempts for one task inside the rolling window, including errors."""
+
+    task: str
+    used: int
+
+
 class AiUsageOut(BaseModel):
     window_hours: int
     request_limit: int
@@ -122,6 +129,8 @@ class AiUsageOut(BaseModel):
     remaining: int | None = None
     successful: int
     failed: int
+    # Canonical task order first, then any other task name alphabetically.
+    by_task: list[AiUsageTaskCountOut]
     recent: list[AiUsageEntryOut]
 
 

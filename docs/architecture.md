@@ -1272,7 +1272,9 @@ src/
   not counted, and connection tests are excluded. The row stores provider, model,
   task, outcome, error code, project/page/block ids and a timestamp — never document
   text or the model reply. `GET /api/ai/usage` returns the rolling 24-hour count,
-  success/failure split and the 20 most recent entries.
+  success/failure split, attempts per task and the 20 most recent entries. The task
+  breakdown uses a stable order for known tasks and lists any other stored name
+  alphabetically, so rows from another build still add up to the same total.
 - `GET /api/ai/usage/history` pages the same ledger newest first for the Settings
   history dialog. `limit` defaults to 25 (maximum 100), `offset` is zero-based and
   the optional `outcome` and `task` filters are validated against the same literal

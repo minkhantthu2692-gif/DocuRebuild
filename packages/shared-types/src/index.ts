@@ -559,6 +559,16 @@ export interface AiUsageEntry {
   created_at: string;
 }
 
+export interface AiUsageTaskCount {
+  /**
+   * Task name as stored in the local ledger. Known tasks are listed in a stable
+   * order; any other stored name follows alphabetically.
+   */
+  task: string;
+  /** Attempts in the rolling window, including failed attempts. */
+  used: number;
+}
+
 export interface AiUsageResponse {
   window_hours: number;
   request_limit: number;
@@ -566,6 +576,8 @@ export interface AiUsageResponse {
   remaining: number | null;
   successful: number;
   failed: number;
+  /** Attempts per task in the rolling window. Empty before the first attempt. */
+  by_task: AiUsageTaskCount[];
   recent: AiUsageEntry[];
 }
 

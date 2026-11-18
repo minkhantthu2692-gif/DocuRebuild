@@ -184,6 +184,8 @@
     "usageFailed": "Failed",
     "usageHistoryOpen": "View full history",
     "usageHistoryEmpty": "No AI requests in the last 24 hours.",
+    "usageByTask": "By task, last 24 hours",
+    "usageTaskCount": "{{task}}: {{requests}}",
     "tasks": {
       "ocr_cleanup": "OCR text cleanup",
       "region_proposals": "Region proposals",

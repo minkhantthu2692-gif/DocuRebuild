@@ -22,16 +22,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CenteredSpinner } from "@/components/ui/spinner";
 import { useAiUsageHistory, type AiUsageHistoryParams } from "@/hooks/use-ai";
+import { AI_TASKS, aiTaskLabelKey } from "@/lib/ai-task";
 import { formatDateTime, formatNumber, resolveLocale } from "@/lib/format";
 
 const PAGE_SIZE = 25;
 
 const OUTCOMES: readonly AiUsageOutcome[] = ["success", "error"];
-const TASKS: readonly AiUsageTask[] = [
-  "ocr_cleanup",
-  "region_proposals",
-  "equation_transcription",
-];
 
 interface AiUsageHistoryDialogProps {
   open: boolean;
@@ -85,10 +81,7 @@ export function AiUsageHistoryDialog({
     setOffset(0);
   };
 
-  const taskLabel = (value: string) =>
-    TASKS.includes(value as AiUsageTask)
-      ? t(`ai.tasks.${value}`)
-      : t("ai.history.unknownTask");
+  const taskLabel = (value: string) => t(aiTaskLabelKey(value));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -130,7 +123,7 @@ export function AiUsageHistoryDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("ai.history.allTasks")}</SelectItem>
-                {TASKS.map((value) => (
+                {AI_TASKS.map((value) => (
                   <SelectItem key={value} value={value}>
                     {t(`ai.tasks.${value}`)}
                   </SelectItem>

@@ -8,6 +8,18 @@ import { i18n, initI18n } from "@/i18n";
 const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   probe: vi.fn(),
+  usage: {
+    current: null as null | {
+      window_hours: number;
+      request_limit: number;
+      used: number;
+      remaining: number | null;
+      successful: number;
+      failed: number;
+      by_task: Array<{ task: string; used: number }>;
+      recent: unknown[];
+    },
+  },
 }));
 
 const settings = {
@@ -54,7 +66,7 @@ vi.mock("@/hooks/use-app", () => ({
 
 vi.mock("@/hooks/use-ai", () => ({
   useAiProviders: () => ({ data: undefined }),
-  useAiUsage: () => ({ data: undefined, isError: false }),
+  useAiUsage: () => ({ data: mocks.usage.current, isError: false }),
   useAiUsageHistory: () => ({ data: undefined, isLoading: false, isError: false }),
   useProbeAiProvider: () => ({ mutate: mocks.probe, isPending: false }),
 }));
@@ -79,6 +91,7 @@ beforeAll(async () => {
 beforeEach(() => {
   mocks.update.mockReset();
   mocks.probe.mockReset();
+  mocks.usage.current = null;
 });
 
 describe("AI API keys", () => {
@@ -265,5 +278,47 @@ describe("AI API keys", () => {
     });
     expect(screen.getByText(/Family: llama/)).toBeInTheDocument();
     expect(screen.queryByText(/did not list this model/)).not.toBeInTheDocument();
+  });
+
+  it("breaks the rolling request budget down by task", () => {
+    mocks.usage.current = {
+      window_hours: 24,
+      request_limit: 10,
+      used: 4,
+      remaining: 6,
+      successful: 3,
+      failed: 1,
+      by_task: [
+        { task: "ocr_cleanup", used: 2 },
+        { task: "equation_transcription", used: 1 },
+        { task: "legacy_task", used: 1 },
+      ],
+      recent: [],
+    };
+    renderPage();
+
+    expect(screen.getByText("By task, last 24 hours")).toBeInTheDocument();
+    expect(screen.getByText("OCR text cleanup: 2")).toBeInTheDocument();
+    expect(screen.getByText("Equation transcription: 1")).toBeInTheDocument();
+    // A task name this build does not know is counted, not hidden.
+    expect(screen.getByText("Other task: 1")).toBeInTheDocument();
+  });
+
+  it("hides the breakdown before the first request", () => {
+    mocks.usage.current = {
+      window_hours: 24,
+      request_limit: 10,
+      used: 0,
+      remaining: 10,
+      successful: 0,
+      failed: 0,
+      by_task: [],
+      recent: [],
+    };
+    renderPage();
+
+    expect(
+      screen.queryByText("By task, last 24 hours"),
+    ).not.toBeInTheDocument();
   });
 });
