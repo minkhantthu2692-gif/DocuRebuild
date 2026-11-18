@@ -1308,7 +1308,12 @@ src/
   project-wide review dialog shows pending proposals with the current and proposed
   text and calls the existing decision endpoint, so per-block stale/run checks still
   apply. The queue reads from the project database and never changes OCR text on its
-  own.
+  own. Both review surfaces mark the exact changed characters with a local inline
+  diff: common prefixes and suffixes are trimmed, the remaining grapheme clusters are
+  aligned, and a changed middle beyond a fixed budget becomes one coarse change so a
+  large rewrite cannot stall the dialog. Removed text uses `<del>` and added text uses
+  `<ins>`, so the comparison does not depend on colour. The diff is computed in the
+  browser, is read-only and never contacts a provider.
 - `POST /api/projects/{project_id}/ai-suggestions/bulk` decides 1–100 proposals in
   one request. It runs each id through the same single-decision path in request order,
   so an acceptance still re-checks the run and current text and every refusal is

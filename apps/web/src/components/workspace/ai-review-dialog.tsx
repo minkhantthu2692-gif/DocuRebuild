@@ -24,6 +24,7 @@ import {
   useProjectAiSuggestions,
 } from "@/hooks/use-ai";
 import { formatDateTime, resolveLocale } from "@/lib/format";
+import { ProposalDiff } from "./proposal-diff";
 
 interface AiReviewDialogProps {
   projectId: string;
@@ -79,23 +80,13 @@ function SuggestionCard({
         </Badge>
       </div>
 
-      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        <div className="min-w-0 rounded-md border border-border/60 bg-background/50 p-2">
-          <p className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {t("aiReview.original")}
-          </p>
-          <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed">
-            {suggestion.original_text}
-          </p>
-        </div>
-        <div className="min-w-0 rounded-md border border-primary/25 bg-primary/5 p-2">
-          <p className="text-2xs font-semibold uppercase tracking-wider text-primary">
-            {t("aiReview.proposed")}
-          </p>
-          <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed">
-            {suggestion.proposed_text}
-          </p>
-        </div>
+      <div className="mt-2">
+        <ProposalDiff
+          original={suggestion.original_text}
+          proposed={suggestion.proposed_text}
+          originalLabel={t("aiReview.original")}
+          proposedLabel={t("aiReview.proposed")}
+        />
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">

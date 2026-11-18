@@ -200,4 +200,39 @@ describe("AI proposal bulk review", () => {
       "Proposal accepted. Review the block against the source page.",
     );
   });
+
+  it("marks the characters a proposal changed", () => {
+    mocks.suggestions = [
+      suggestion({
+        id: "suggestion-1",
+        original_text: "tbe fox",
+        proposed_text: "the fox",
+      }),
+    ];
+    const { baseElement } = render(
+      <AiReviewDialog projectId="project-1" open onOpenChange={vi.fn()} />,
+    );
+
+    expect(baseElement.querySelector("del")?.textContent).toBe("b");
+    expect(baseElement.querySelector("ins")?.textContent).toBe("h");
+    expect(
+      screen.getByText(
+        "Struck-through text is only in the current OCR text; underlined text is only in the proposal.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps both panels readable when the proposal is unchanged", () => {
+    mocks.suggestions = [
+      suggestion({
+        id: "suggestion-1",
+        original_text: "Same text",
+        proposed_text: "Same text",
+      }),
+    ];
+    renderDialog();
+
+    expect(screen.getAllByText("Same text")).toHaveLength(2);
+    expect(screen.queryByText(/Struck-through text/)).not.toBeInTheDocument();
+  });
 });

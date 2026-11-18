@@ -327,7 +327,11 @@ described as universally free or universally accurate.
   model badges, explicit accept/reject actions, a stale-proposal warning and a link
   to Settings when no model is configured. The source viewer shows the vision
   proposal count, provider/model and a review warning, and clears the overlay when
-  the page changes or rotates.
+  the page changes or rotates. Both review surfaces highlight the exact characters
+  the proposal changed: removed text is struck through in the current OCR text and
+  added text is underlined in the proposal. The comparison is computed locally,
+  works with unspaced scripts such as Burmese, falls back to a coarse whole-change
+  notice for a very large rewrite, and never alters either text.
 - Multi-select batch review in the project-wide queue. Checkboxes and a select-all
   control choose pending proposals, and **Accept selected** / **Reject selected**
   require a confirmation that names the count. The backend decides each proposal
@@ -362,8 +366,8 @@ described as universally free or universally accurate.
   passthrough, provider rate-limit/auth classification and Retry-After parsing,
   usage recording, rolling-limit enforcement, stale runs, stale text, rejection and
   validation. Frontend tests cover the cost-class settings, the paid confirmation
-  dialog, free-tier passthrough, the rate-limit hint, URL escalation and i18n key
-  parity.
+  dialog, free-tier passthrough, the rate-limit hint, the inline proposal diff,
+  URL escalation and i18n key parity.
 
 **Remaining**
 

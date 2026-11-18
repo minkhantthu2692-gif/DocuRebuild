@@ -551,6 +551,8 @@
       "historyAccepted": "Accepted",
       "historyRejected": "Rejected",
       "historyCompare": "Compare original and proposal",
+      "diffLegend": "Struck-through text is only in the current OCR text; underlined text is only in the proposal.",
+      "diffCoarse": "This change is too large to highlight character by character. Compare both versions before deciding.",
       "providers": {
         "ollama": "Ollama",
         "openai_compatible": "OpenAI-compatible"

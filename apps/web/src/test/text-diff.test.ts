@@ -1,8 +1,82 @@
 import { describe, expect, it } from "vitest";
 
-import { diffText } from "@/lib/text-diff";
+import { diffInlineText, diffText, type InlineDiff } from "@/lib/text-diff";
 
 const longPrefix = Array.from({ length: 20 }, (_, index) => `line ${index + 1}`).join("\n");
+
+function joined(diff: InlineDiff, kinds: Array<"same" | "removed" | "added">): string {
+  return diff.segments
+    .filter((segment) => kinds.includes(segment.kind))
+    .map((segment) => segment.text)
+    .join("");
+}
+
+describe("diffInlineText", () => {
+  it("returns identical text as one unchanged run", () => {
+    expect(diffInlineText("same text", "same text")).toEqual({
+      identical: true,
+      coarse: false,
+      removed: 0,
+      added: 0,
+      segments: [{ kind: "same", text: "same text" }],
+    });
+    expect(diffInlineText("", "")).toMatchObject({
+      identical: true,
+      removed: 0,
+      added: 0,
+      segments: [],
+    });
+  });
+
+  it("marks a replacement inside a word", () => {
+    const result = diffInlineText("tbe fox", "the fox");
+
+    expect(result).toMatchObject({ identical: false, coarse: false, added: 1, removed: 1 });
+    expect(result.segments).toEqual([
+      { kind: "same", text: "t" },
+      { kind: "removed", text: "b" },
+      { kind: "added", text: "h" },
+      { kind: "same", text: "e fox" },
+    ]);
+  });
+
+  it("keeps both sides reconstructable after a multi-character insertion", () => {
+    const result = diffInlineText("alpha beta", "alpha middle beta");
+
+    expect(joined(result, ["same", "removed"])).toBe("alpha beta");
+    expect(joined(result, ["same", "added"])).toBe("alpha middle beta");
+    expect(result.segments.filter((segment) => segment.kind === "added")).toHaveLength(1);
+  });
+
+  it("preserves line breaks and Burmese text", () => {
+    const before = "ပထမ စာကြောင်း\nဒုတိယ";
+    const after = "ပထမ စာကြောင်း\nဒုတိယ စာကြောင်း";
+    const result = diffInlineText(before, after);
+
+    expect(result.identical).toBe(false);
+    expect(joined(result, ["same", "removed"])).toBe(before);
+    expect(joined(result, ["same", "added"])).toBe(after);
+    expect(joined(result, ["same", "added"])).toContain("\n");
+  });
+
+  it("falls back to one coarse change for a very large rewrite", () => {
+    const result = diffInlineText("a".repeat(500), "b".repeat(500));
+
+    expect(result.identical).toBe(false);
+    expect(result.coarse).toBe(true);
+    expect(result.segments.map((segment) => segment.kind)).toEqual([
+      "removed",
+      "added",
+    ]);
+  });
+
+  it("treats an empty original as a single addition", () => {
+    const result = diffInlineText("", "hello");
+
+    expect(result).toMatchObject({ identical: false, coarse: false, added: 5, removed: 0 });
+    expect(result.segments).toEqual([{ kind: "added", text: "hello" }]);
+  });
+});
 
 describe("diffText", () => {
   it("reports identical text without diff rows", () => {

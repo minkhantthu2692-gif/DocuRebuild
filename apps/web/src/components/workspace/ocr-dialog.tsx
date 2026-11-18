@@ -49,6 +49,7 @@ import {
 import { cn } from "@/lib/utils";
 import { PageTablesDialog } from "./page-tables-dialog";
 import { usePaidAiGuard } from "./paid-ai-confirm-dialog";
+import { ProposalDiff } from "./proposal-diff";
 import { TableProposalDialog } from "./table-proposal-dialog";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
@@ -61,59 +62,6 @@ interface OcrDialogProps {
 }
 
 const TESSERACT_GUIDE = "https://tesseract-ocr.github.io/tessdoc/Installation.html";
-
-interface ProposalComparisonProps {
-  original: string;
-  proposed: string;
-  originalLabel: string;
-  proposedLabel: string;
-  mutedProposed?: boolean;
-}
-
-function ProposalComparison({
-  original,
-  proposed,
-  originalLabel,
-  proposedLabel,
-  mutedProposed = false,
-}: ProposalComparisonProps) {
-  return (
-    <div className="grid gap-2 sm:grid-cols-2">
-      <div className="rounded-md border border-border/60 bg-background/60 p-2">
-        <p className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {originalLabel}
-        </p>
-        <p
-          dir="auto"
-          className="mt-1 whitespace-pre-wrap break-words font-document text-xs leading-relaxed"
-        >
-          {original}
-        </p>
-      </div>
-      <div
-        className={cn(
-          "rounded-md border bg-background/60 p-2",
-          mutedProposed ? "border-border/60" : "border-primary/30",
-        )}
-      >
-        <p
-          className={cn(
-            "text-2xs font-semibold uppercase tracking-wider",
-            mutedProposed ? "text-muted-foreground" : "text-primary",
-          )}
-        >
-          {proposedLabel}
-        </p>
-        <p
-          dir="auto"
-          className="mt-1 whitespace-pre-wrap break-words font-document text-xs leading-relaxed"
-        >
-          {proposed}
-        </p>
-      </div>
-    </div>
-  );
-}
 
 export function OcrDialog({
   projectId,
@@ -743,11 +691,12 @@ export function OcrDialog({
                                       </Badge>
                                     </div>
                                     <div className="mt-2">
-                                      <ProposalComparison
+                                      <ProposalDiff
                                         original={suggestion.original_text}
                                         proposed={suggestion.proposed_text}
                                         originalLabel={t("ocr.ai.original")}
                                         proposedLabel={t("ocr.ai.proposed")}
+                                        documentFont
                                       />
                                     </div>
                                     <p
@@ -849,12 +798,13 @@ export function OcrDialog({
                                               {t("ocr.ai.historyCompare")}
                                             </summary>
                                             <div className="mt-2">
-                                              <ProposalComparison
+                                              <ProposalDiff
                                                 original={entry.original_text}
                                                 proposed={entry.proposed_text}
                                                 originalLabel={t("ocr.ai.original")}
                                                 proposedLabel={t("ocr.ai.proposed")}
                                                 mutedProposed
+                                                documentFont
                                               />
                                             </div>
                                           </details>
