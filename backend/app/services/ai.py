@@ -33,6 +33,11 @@ MAX_TEXT_LENGTH = 20_000
 PROBE_TIMEOUT = 5.0
 GENERATE_TIMEOUT = 60.0
 USER_AGENT = "DocuRebuild/0.1"
+# A provider's Retry-After header is advisory only. Cap it so a nonsensical value
+# cannot be shown as an absurd wait, and never sleep or retry automatically.
+MAX_RETRY_AFTER_SECONDS = 86_400
+RATE_LIMIT_STATUS = 429
+AUTH_FAILURE_STATUSES = frozenset({401, 403})
 
 logger = logging.getLogger(__name__)
 
@@ -79,11 +84,13 @@ class _FetchFailure(Exception):
         status: str,
         error_code: str,
         http_status: int | None = None,
+        retry_after: int | None = None,
     ) -> None:
         super().__init__(status)
         self.status = status
         self.error_code = error_code
         self.http_status = http_status
+        self.retry_after = retry_after
 
 
 class Completion(NamedTuple):
@@ -210,6 +217,36 @@ def _decode_json(raw: bytes) -> Any:
         raise _FetchFailure("invalid_response", "ai_invalid_response") from exc
 
 
+def _http_error_code(status: int | None) -> str:
+    """Classify a provider HTTP error without guessing beyond the status code."""
+    if status == RATE_LIMIT_STATUS:
+        return "ai_rate_limited"
+    if status in AUTH_FAILURE_STATUSES:
+        return "ai_auth_failed"
+    return "ai_http_error"
+
+
+def _retry_after_seconds(headers: Any) -> int | None:
+    """Read an advisory integer Retry-After value; HTTP dates are ignored.
+
+    The value is shown to the user, never slept on: DocuRebuild does not retry a
+    provider request on its own, so a rate-limited action still costs nothing
+    more than the request that was already sent.
+    """
+    if headers is None:
+        return None
+    raw = headers.get("Retry-After")
+    if raw is None:
+        return None
+    try:
+        seconds = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    if seconds < 0:
+        return None
+    return min(seconds, MAX_RETRY_AFTER_SECONDS)
+
+
 def _read_json(
     url: str,
     timeout: float,
@@ -237,7 +274,12 @@ def _read_json(
                 raise _FetchFailure("invalid_response", "ai_invalid_response")
             return response.status, _decode_json(raw)
     except urllib_error.HTTPError as exc:
-        raise _FetchFailure("http_error", "ai_http_error", exc.code) from exc
+        raise _FetchFailure(
+            "http_error",
+            _http_error_code(exc.code),
+            exc.code,
+            _retry_after_seconds(exc.headers),
+        ) from exc
     except (TimeoutError, socket.timeout) as exc:
         raise _FetchFailure("timeout", "ai_timeout") from exc
     except urllib_error.URLError as exc:
@@ -341,6 +383,7 @@ def probe_provider(
             "version": None,
             "error_code": exc.error_code,
             "http_status": exc.http_status,
+            "retry_after_seconds": exc.retry_after,
         }
     return {
         "status": "ready",
@@ -350,6 +393,7 @@ def probe_provider(
         "version": version,
         "error_code": None,
         "http_status": None,
+        "retry_after_seconds": None,
     }
 
 

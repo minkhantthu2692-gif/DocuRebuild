@@ -229,8 +229,11 @@
       "ai_unreachable": "Nothing is listening at this URL. Start the local server and check the port.",
       "ai_timeout": "The server did not answer in time. It may still be loading the model.",
       "ai_http_error": "The server answered with an error. Check the URL and the server log.",
-      "ai_invalid_response": "The response did not look like an Ollama or OpenAI-compatible API."
+      "ai_invalid_response": "The response did not look like an Ollama or OpenAI-compatible API.",
+      "ai_rate_limited": "The provider is rate limiting requests. Wait and test again; nothing is retried automatically.",
+      "ai_auth_failed": "The provider refused the request. Check the API key and the model access."
     },
+    "retryAfter": "The provider asked to wait {{seconds}} seconds before another request. DocuRebuild does not retry on its own.",
     "saveProfile": "Save AI settings",
     "saved": "Local AI settings saved",
     "unsaved": "Unsaved changes. Save these settings before using them.",

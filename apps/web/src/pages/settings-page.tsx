@@ -1017,9 +1017,18 @@ export function SettingsPage() {
                       : t("ai.noModels")}
                   </p>
                 ) : probeResult ? (
-                  <p className="text-2xs text-warning">
-                    {t(`ai.errorReasons.${probeResult.error_code ?? "ai_unreachable"}`)}
-                  </p>
+                  <div className="space-y-0.5">
+                    <p className="text-2xs text-warning">
+                      {t(`ai.errorReasons.${probeResult.error_code ?? "ai_unreachable"}`)}
+                    </p>
+                    {probeResult.retry_after_seconds ? (
+                      <p className="text-2xs text-muted-foreground">
+                        {t("ai.retryAfter", {
+                          seconds: formatNumber(probeResult.retry_after_seconds, locale),
+                        })}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : (
                   <p className="text-2xs text-muted-foreground">{t("ai.testHint")}</p>
                 )}
@@ -1263,11 +1272,23 @@ export function SettingsPage() {
                       : t("ai.noModels")}
                   </p>
                 ) : visionProbeResult ? (
-                  <p className="text-2xs text-warning">
-                    {t(
-                      `ai.errorReasons.${visionProbeResult.error_code ?? "ai_unreachable"}`,
-                    )}
-                  </p>
+                  <div className="space-y-0.5">
+                    <p className="text-2xs text-warning">
+                      {t(
+                        `ai.errorReasons.${visionProbeResult.error_code ?? "ai_unreachable"}`,
+                      )}
+                    </p>
+                    {visionProbeResult.retry_after_seconds ? (
+                      <p className="text-2xs text-muted-foreground">
+                        {t("ai.retryAfter", {
+                          seconds: formatNumber(
+                            visionProbeResult.retry_after_seconds,
+                            locale,
+                          ),
+                        })}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : (
                   <p className="text-2xs text-muted-foreground">{t("ai.testHint")}</p>
                 )}

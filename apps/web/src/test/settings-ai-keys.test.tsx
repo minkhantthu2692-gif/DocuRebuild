@@ -186,4 +186,35 @@ describe("AI API keys", () => {
     };
     expect(kept.ai.vision.cost_class).toBe("free");
   });
+
+  it("explains a provider rate limit and its advisory wait", () => {
+    mocks.probe.mockImplementation(
+      (
+        _payload: unknown,
+        options?: { onSuccess?: (result: unknown) => void },
+      ) => {
+        options?.onSuccess?.({
+          status: "http_error",
+          provider: "openai_compatible",
+          base_url: "http://127.0.0.1:1234/v1",
+          models: [],
+          version: null,
+          error_code: "ai_rate_limited",
+          http_status: 429,
+          retry_after_seconds: 30,
+        });
+      },
+    );
+    renderPage();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Text cleanup server: Test connection",
+      }),
+    );
+
+    expect(screen.getByText(/rate limiting requests/)).toBeInTheDocument();
+    expect(screen.getByText(/wait 30 seconds/)).toBeInTheDocument();
+    expect(screen.getByText(/does not retry on its own/)).toBeInTheDocument();
+  });
 });

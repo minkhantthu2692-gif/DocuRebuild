@@ -36,13 +36,24 @@ class _StubState:
         self.requests: list[tuple[str, str]] = []
         self.authorization: list[str | None] = []
         self.last_payload: dict | None = None
+        # When set, every stub request fails with this status so provider
+        # error handling can be tested without a real rate limit.
+        self.fail_status: int | None = None
+        self.retry_after: str | None = None
 
 
-def _stub_response(handler: BaseHTTPRequestHandler, status: int, payload: dict) -> None:
+def _stub_response(
+    handler: BaseHTTPRequestHandler,
+    status: int,
+    payload: dict,
+    retry_after: str | None = None,
+) -> None:
     raw = json.dumps(payload).encode("utf-8")
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json")
     handler.send_header("Content-Length", str(len(raw)))
+    if retry_after is not None:
+        handler.send_header("Retry-After", retry_after)
     handler.end_headers()
     handler.wfile.write(raw)
 
@@ -59,6 +70,11 @@ def stub_ai():
         def do_GET(self) -> None:  # noqa: N802 - http.server API
             state.requests.append(("GET", self.path))
             state.authorization.append(self.headers.get("Authorization"))
+            if state.fail_status is not None:
+                _stub_response(
+                    self, state.fail_status, {"error": "stub failure"}, state.retry_after
+                )
+                return
             if self.path == "/api/tags":
                 if state.invalid_tags:
                     _stub_response(self, 200, {"unexpected": []})
@@ -102,6 +118,11 @@ def stub_ai():
             state.requests.append(("POST", self.path))
             state.authorization.append(self.headers.get("Authorization"))
             state.last_payload = payload
+            if state.fail_status is not None:
+                _stub_response(
+                    self, state.fail_status, {"error": "stub failure"}, state.retry_after
+                )
+                return
             assert payload["messages"][0]["role"] == "system"
             user_message = payload["messages"][-1]
             is_vision = bool(user_message.get("images")) or isinstance(
@@ -1866,3 +1887,71 @@ def test_legacy_remote_profile_without_a_cost_class_is_paid(
     assert ai_settings["text"]["cost_class"] == "paid"
     # Vision was never saved remotely, so it keeps the local default.
     assert ai_settings["vision"]["cost_class"] == "local"
+
+
+def test_probe_reports_rate_limit_and_retry_after(
+    client: TestClient, stub_ai
+) -> None:
+    stub_ai.state.fail_status = 429
+    stub_ai.state.retry_after = "30"
+
+    response = client.post(
+        "/api/ai/probe",
+        json={"provider": "ollama", "base_url": stub_ai.base_url},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "http_error"
+    assert body["error_code"] == "ai_rate_limited"
+    assert body["http_status"] == 429
+    assert body["retry_after_seconds"] == 30
+
+
+def test_probe_reports_auth_failure_without_a_retry_hint(
+    client: TestClient, stub_ai
+) -> None:
+    stub_ai.state.fail_status = 401
+
+    body = client.post(
+        "/api/ai/probe",
+        json={"provider": "openai_compatible", "base_url": stub_ai.base_url_v1},
+    ).json()
+    assert body["status"] == "http_error"
+    assert body["error_code"] == "ai_auth_failed"
+    assert body["http_status"] == 401
+    assert body["retry_after_seconds"] is None
+
+
+def test_cleanup_surfaces_a_rate_limit_without_retrying(
+    client: TestClient, project: dict, monkeypatch, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url)
+    stub_ai.state.fail_status = 429
+    stub_ai.state.retry_after = "12"
+
+    page, run = _ocr_page(client, project, monkeypatch, "ai-rate-limited.png")
+    response = _suggest(client, project["id"], page["id"], run["blocks"][0]["id"])
+
+    assert response.status_code == 502, response.text
+    assert response.json()["detail"]["code"] == "ai_rate_limited"
+    # Exactly one provider call: nothing is retried or switched silently.
+    assert stub_ai.state.requests.count(("POST", "/api/chat")) == 1
+    usage = _usage(client)
+    assert usage["used"] == 1
+    assert usage["recent"][0]["outcome"] == "error"
+    assert usage["recent"][0]["error_code"] == "ai_rate_limited"
+
+
+def test_retry_after_parser_is_defensive() -> None:
+    from app.services.ai import MAX_RETRY_AFTER_SECONDS, _retry_after_seconds
+
+    assert _retry_after_seconds({"Retry-After": "45"}) == 45
+    assert _retry_after_seconds({"Retry-After": "  7 "}) == 7
+    assert (
+        _retry_after_seconds({"Retry-After": "999999999"})
+        == MAX_RETRY_AFTER_SECONDS
+    )
+    assert _retry_after_seconds({"Retry-After": "-5"}) is None
+    assert _retry_after_seconds({"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}) is None
+    assert _retry_after_seconds(None) is None
+    assert _retry_after_seconds({}) is None

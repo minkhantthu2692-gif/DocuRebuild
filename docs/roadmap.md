@@ -348,14 +348,22 @@ described as universally free or universally accurate.
 - SSRF guards for the configured URL: `http`/`https` only, no embedded credentials,
   and the well-known cloud metadata addresses are rejected. Requests use short
   connect/probe timeouts, bounded response size and no automatic paid fallback.
+- Provider error clarity without automatic retry. An HTTP 429 becomes
+  `ai_rate_limited`, 401/403 become `ai_auth_failed`, and any other status stays
+  `ai_http_error`. An integer `Retry-After` header is capped at 24 hours and shown as
+  an advisory wait on the connection test; HTTP-date values are ignored. A failed
+  generation is recorded in the usage ledger with the same code, still returns `502`,
+  and is never re-sent, slept on or rerouted to another provider.
 - Capability reporting: `ai` is `true` because the adapter and review workflow
   exist, while Settings still requires a working local server and model before any
   action can run. Backend tests use a loopback stub server and cover discovery,
   timeouts, unreachable servers, invalid responses, remote consent, cost-class
   inference and normalization, paid refusal without network access, free-tier
-  passthrough, usage recording, rolling-limit enforcement, stale runs, stale text,
-  rejection and validation. Frontend tests cover the cost-class settings, the paid
-  confirmation dialog, free-tier passthrough, URL escalation and i18n key parity.
+  passthrough, provider rate-limit/auth classification and Retry-After parsing,
+  usage recording, rolling-limit enforcement, stale runs, stale text, rejection and
+  validation. Frontend tests cover the cost-class settings, the paid confirmation
+  dialog, free-tier passthrough, the rate-limit hint, URL escalation and i18n key
+  parity.
 
 **Remaining**
 
@@ -366,9 +374,10 @@ described as universally free or universally accurate.
   model metadata, verified pricing/quotas and clearly marked costs. Remote profiles
   can be classified today, but the app neither verifies a provider's current pricing
   nor detects quota exhaustion beyond the provider's own error reply.
-- Spending limits, cost estimation, per-provider rate-limit handling and provider
-  fallbacks. The per-action paid approval exists; a monetary cap needs verified
-  pricing data that the app does not collect yet.
+- Spending limits, cost estimation, proactive quota tracking and provider
+  fallbacks. A provider 429 or 401/403 is classified and explained today, but the app
+  does not track quota over time, retry or switch providers, and a monetary cap needs
+  verified pricing data that it does not collect yet.
 - Account sign-in, server-side key validation against a provider account and
   per-provider spending caps. The encrypted key store and write-only API are in
   place, but a key is not verified against billing or quota.

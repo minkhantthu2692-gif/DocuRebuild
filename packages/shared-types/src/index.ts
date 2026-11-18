@@ -441,7 +441,9 @@ export type AiProbeErrorCode =
   | "ai_unreachable"
   | "ai_timeout"
   | "ai_http_error"
-  | "ai_invalid_response";
+  | "ai_invalid_response"
+  | "ai_rate_limited"
+  | "ai_auth_failed";
 
 export type AiTask = "ocr_cleanup";
 export type AiSuggestionStatus = "pending" | "accepted" | "rejected";
@@ -482,6 +484,8 @@ export interface AiProbeResponse {
   version: string | null;
   error_code: AiProbeErrorCode | null;
   http_status: number | null;
+  /** Advisory Retry-After seconds from the provider, capped for display. */
+  retry_after_seconds: number | null;
 }
 
 export interface AiSuggestionCreate {

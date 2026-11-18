@@ -20,6 +20,8 @@ AiProbeErrorCode = Literal[
     "ai_timeout",
     "ai_http_error",
     "ai_invalid_response",
+    "ai_rate_limited",
+    "ai_auth_failed",
 ]
 AiTask = Literal["ocr_cleanup"]
 AiUsageTask = Literal["ocr_cleanup", "region_proposals", "equation_transcription"]
@@ -64,6 +66,8 @@ class AiProbeOut(BaseModel):
     version: str | None = None
     error_code: AiProbeErrorCode | None = None
     http_status: int | None = None
+    # Advisory value from the provider's Retry-After header, capped for display.
+    retry_after_seconds: int | None = None
 
 
 class AiSuggestionCreate(BaseModel):

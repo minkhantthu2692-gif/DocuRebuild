@@ -1231,6 +1231,14 @@ src/
   1 MB response cap. Expected failures (`unreachable`, `timeout`, `http_error`,
   `invalid_response`) are returned as status plus a stable error code so Settings
   can explain them without pretending the server is ready.
+- Provider HTTP errors are classified from the status code only: 429 becomes
+  `ai_rate_limited`, 401 and 403 become `ai_auth_failed`, and anything else stays
+  `ai_http_error`. An integer `Retry-After` header is capped at 24 hours and returned
+  as `retry_after_seconds` on the probe, so Settings can show the advisory wait. The
+  backend never sleeps, retries, falls back to another provider or re-sends a failed
+  generation: a failed generation is recorded in the usage ledger with the same code,
+  and the route answers `502` rather than claiming success. No response body or
+  provider message is stored or shown verbatim.
 - `normalize_base_url` accepts only `http`/`https`, rejects embedded credentials and
   the well-known cloud metadata hosts, and appends `/v1` for OpenAI-compatible
   servers when missing. It also enforces the consent boundary: `localhost`,
