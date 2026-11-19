@@ -7,7 +7,7 @@ pydantic-settings==2.7.0
 platformdirs==4.3.6
 python-multipart==0.0.20
 pillow==11.1.0
-pymupdf==1.28.2
+pymupdf==2.1
 python-docx==1.2.0
 latex2mathml==3.81.1
 mathml2omml==0.0.2
