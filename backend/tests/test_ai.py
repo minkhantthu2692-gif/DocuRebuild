@@ -1607,6 +1607,148 @@ def test_equation_latex_parser_strips_only_wrappers() -> None:
     assert parse_equation_latex("  E = mc^2  ") == "E = mc^2"
 
 
+def test_table_grid_parser_accepts_only_a_complete_rectangle() -> None:
+    from app.core.errors import AppError
+    from app.services.ai import parse_table_grid
+
+    assert parse_table_grid('{"rows": [["Item", "Qty"], ["Apples", "3"]]}') == [
+        ["Item", "Qty"],
+        ["Apples", "3"],
+    ]
+    assert parse_table_grid('```json\n{"rows": [["1", "2"], ["3", 4]]}\n```') == [
+        ["1", "2"],
+        ["3", "4"],
+    ]
+    # A null cell is text the model did not report, so it stays an empty cell.
+    assert parse_table_grid('{"rows": [["a", null], ["c", "d"]]}') == [
+        ["a", ""],
+        ["c", "d"],
+    ]
+
+    for reply in (
+        "not json",
+        '{"rows": []}',
+        '{"rows": [["a", "b"], ["c"]]}',
+        '{"rows": [["a"], ["b"]]}',
+        '{"rows": [["a", ["b"]], ["c", "d"]]}',
+        '{"rows": [["a", true], ["c", "d"]]}',
+    ):
+        with pytest.raises(AppError) as excinfo:
+            parse_table_grid(reply)
+        assert excinfo.value.status_code == 502
+
+    too_many_rows = json.dumps({"rows": [["a", "b"]] * 61})
+    with pytest.raises(AppError) as excinfo:
+        parse_table_grid(too_many_rows)
+    assert excinfo.value.code == "ai_table_too_large"
+
+
+def _table(
+    client: TestClient, project_id: str, element_id: str, payload: dict | None = None
+):
+    return client.post(
+        f"/api/projects/{project_id}/elements/{element_id}/ai-table",
+        json=payload or {},
+    )
+
+
+def test_ai_table_requires_a_table_region_and_vision_model(
+    client: TestClient, project: dict, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="llava:7b")
+    page = upload_pages(client, project["id"], ["ai-table-kind.png"])[0]
+    figure = _equation_region(client, project["id"], page["id"], kind="figure")
+    refused = _table(client, project["id"], figure["id"])
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["detail"]["code"] == "ai_table_region_required"
+    assert _usage(client)["used"] == 0
+
+    table_region = _equation_region(client, project["id"], page["id"], kind="table")
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="")
+    unconfigured = _table(client, project["id"], table_region["id"])
+    assert unconfigured.status_code == 409, unconfigured.text
+    assert unconfigured.json()["detail"]["code"] == "ai_vision_not_configured"
+    assert _usage(client)["used"] == 0
+
+
+def test_ai_table_returns_a_reviewable_grid(
+    client: TestClient, project: dict, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="llava:7b")
+    stub_ai.state.vision_content = json.dumps(
+        {"rows": [["Item", "Qty"], ["Apples", "3"], ["Pears", ""]]}
+    )
+    page = upload_pages(client, project["id"], ["ai-table.png"])[0]
+    element = _equation_region(client, project["id"], page["id"], kind="table")
+
+    response = _table(client, project["id"], element["id"])
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["element_id"] == element["id"]
+    assert body["page_id"] == page["id"]
+    assert body["provider"] == "ollama"
+    assert body["model"] == "llava:7b"
+    assert body["rows"] == 3
+    assert body["columns"] == 2
+    assert body["page_width"] == 1200
+    assert body["page_height"] == 800
+    assert body["source"] == {"x": 100.0, "y": 120.0, "width": 300.0, "height": 120.0}
+    assert body["warnings"] == ["no_confidence"]
+    # Every cell is unscored model output, and the blank source cell stays blank.
+    assert body["cells"][0] == {
+        "row": 0,
+        "column": 0,
+        "text": "Item",
+        "confidence": None,
+        "uncertain": False,
+        "empty": False,
+        "alignment": None,
+        "rowspan": 1,
+        "colspan": 1,
+    }
+    assert body["empty_cells"] == 1
+    assert body["cells"][-1]["empty"] is True
+
+    payload = stub_ai.state.last_payload
+    assert payload is not None
+    assert payload["model"] == "llava:7b"
+    assert payload["messages"][-1]["images"]
+    assert payload["format"] == "json"
+
+    # Nothing is written to the element: the reply is only a proposal.
+    listed = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/elements"
+    )
+    assert listed.json()[0]["text"] == ""
+
+    usage = _usage(client)
+    assert usage["used"] == 1
+    assert usage["recent"][0]["task"] == "table_structure"
+    assert usage["recent"][0]["page_id"] == page["id"]
+    assert usage["by_task"] == [{"task": "table_structure", "used": 1}]
+
+
+def test_ai_table_refuses_an_incomplete_grid(
+    client: TestClient, project: dict, stub_ai
+) -> None:
+    _configure_ai(client, base_url=stub_ai.base_url, vision_model="llava:7b")
+    stub_ai.state.vision_content = json.dumps(
+        {"rows": [["Item", "Qty"], ["Apples"]]}
+    )
+    page = upload_pages(client, project["id"], ["ai-table-ragged.png"])[0]
+    element = _equation_region(client, project["id"], page["id"], kind="table")
+
+    response = _table(client, project["id"], element["id"])
+    assert response.status_code == 502, response.text
+    assert response.json()["detail"]["code"] == "ai_table_ragged"
+
+    usage = _usage(client)
+    assert usage["used"] == 1
+    assert usage["recent"][0]["outcome"] == "error"
+    assert usage["recent"][0]["error_code"] == "ai_table_ragged"
+    assert usage["recent"][0]["task"] == "table_structure"
+
+
 def _insert_usage(
     *,
     model: str,

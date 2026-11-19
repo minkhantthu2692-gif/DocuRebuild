@@ -9,6 +9,7 @@ export const AI_TASKS: readonly AiUsageTask[] = [
   "ocr_cleanup",
   "region_proposals",
   "equation_transcription",
+  "table_structure",
 ];
 
 export function isKnownAiTask(value: string): value is AiUsageTask {

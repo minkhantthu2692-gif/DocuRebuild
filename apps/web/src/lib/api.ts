@@ -13,6 +13,8 @@ import type {
   AiSuggestionDecisionInput,
   AiSuggestionDecisionResponse,
   AiSuggestionsResponse,
+  AiTableRequest,
+  AiTableResponse,
   AiUsageHistoryResponse,
   AiUsageOutcome,
   AiUsageResponse,
@@ -425,6 +427,15 @@ export const api = {
   ) =>
     request<AiEquationResponse>(
       `/projects/${projectId}/elements/${elementId}/ai-equation`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  createAiTableProposal: (
+    projectId: string,
+    elementId: string,
+    payload: AiTableRequest = {},
+  ) =>
+    request<AiTableResponse>(
+      `/projects/${projectId}/elements/${elementId}/ai-table`,
       { method: "POST", body: JSON.stringify(payload) },
     ),
 

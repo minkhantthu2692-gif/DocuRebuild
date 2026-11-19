@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.ocr import OcrRunOut
 from app.schemas.regions import RegionProposalOut
+from app.schemas.tables import TableCellOut, TableSourceOut, TableWarning
 
 AiProviderKind = Literal["ollama", "openai_compatible"]
 AiProbeStatus = Literal[
@@ -24,7 +25,9 @@ AiProbeErrorCode = Literal[
     "ai_auth_failed",
 ]
 AiTask = Literal["ocr_cleanup"]
-AiUsageTask = Literal["ocr_cleanup", "region_proposals", "equation_transcription"]
+AiUsageTask = Literal[
+    "ocr_cleanup", "region_proposals", "equation_transcription", "table_structure"
+]
 AiTaskProfile = Literal["text", "vision"]
 AiSuggestionStatus = Literal["pending", "accepted", "rejected"]
 AiUsageOutcome = Literal["success", "error"]
@@ -218,3 +221,34 @@ class AiEquationOut(BaseModel):
     provider: AiProviderKind
     model: str
     base_url: str
+
+
+class AiTableRequest(BaseModel):
+    """Optional per-request overrides for the saved vision connection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: AiProviderKind | None = None
+    base_url: str | None = None
+    model: str | None = None
+    # Must be true before a paid profile is allowed to read a table crop.
+    confirm_paid: bool = False
+
+
+class AiTableOut(BaseModel):
+    """A model-read table grid, shaped for the same review dialog as local grids."""
+
+    element_id: str
+    page_id: str
+    provider: AiProviderKind
+    model: str
+    base_url: str
+    page_width: int | None = None
+    page_height: int | None = None
+    rows: int
+    columns: int
+    uncertain_cells: int
+    empty_cells: int
+    warnings: list[TableWarning]
+    source: TableSourceOut
+    cells: list[TableCellOut]

@@ -56,6 +56,7 @@ import { api } from "@/lib/api";
 import { MIN_REGION_SIDE, type SourceRect } from "@/lib/element-region";
 import { buildLanguageOptions, confidenceVariant, languageLabel } from "@/lib/ocr-display";
 import { cn } from "@/lib/utils";
+import { AiTableDialog } from "./ai-table-dialog";
 import { RegionFormulaDialog } from "./region-formula-dialog";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
@@ -192,6 +193,7 @@ export function ElementsDialog({
   const [formulaElement, setFormulaElement] = useState<ElementSummary | null>(
     null,
   );
+  const [tableElement, setTableElement] = useState<ElementSummary | null>(null);
   const [fromProposal, setFromProposal] = useState<RegionProposalReason | null>(
     null,
   );
@@ -228,6 +230,7 @@ export function ElementsDialog({
       setEditingTextId(null);
       setTextDraft("");
       setFormulaElement(null);
+      setTableElement(null);
       setFromProposal(null);
       return;
     }
@@ -959,6 +962,17 @@ export function ElementsDialog({
                             {t("elements.formula.insert")}
                           </Button>
                         ) : null}
+                        {element.kind === "table" ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1"
+                            onClick={() => setTableElement(element)}
+                          >
+                            <Sparkles />
+                            {t("elements.table.aiOpen")}
+                          </Button>
+                        ) : null}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1018,6 +1032,18 @@ export function ElementsDialog({
             {tCommon("actions.close")}
           </Button>
         </DialogFooter>
+
+        <AiTableDialog
+          key={tableElement?.id ?? "none"}
+          projectId={projectId}
+          element={tableElement}
+          page={page}
+          open={tableElement !== null}
+          onOpenChange={(next) => {
+            if (!next) setTableElement(null);
+          }}
+          onInserted={onInserted}
+        />
 
         <RegionFormulaDialog
           projectId={projectId}

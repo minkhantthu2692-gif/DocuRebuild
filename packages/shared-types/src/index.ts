@@ -585,7 +585,8 @@ export interface AiUsageResponse {
 export type AiUsageTask =
   | "ocr_cleanup"
   | "region_proposals"
-  | "equation_transcription";
+  | "equation_transcription"
+  | "table_structure";
 
 export interface AiUsageHistoryEntry extends AiUsageEntry {
   /** Null when the project was deleted or the attempt had no project. */
@@ -758,6 +759,37 @@ export interface AiEquationResponse {
   provider: AiProviderKind;
   model: string;
   base_url: string;
+}
+
+/** Optional per-request overrides for one AI table read. */
+export interface AiTableRequest {
+  provider?: AiProviderKind;
+  base_url?: string;
+  model?: string;
+  /** Required before a profile marked as paid may read the crop. */
+  confirm_paid?: boolean;
+}
+
+/**
+ * A table grid read from one saved crop. It is unverified model output with no
+ * confidence scores, shaped like a local table proposal so the same review grid
+ * can show it and require acknowledgement before insertion.
+ */
+export interface AiTableResponse {
+  element_id: string;
+  page_id: string;
+  provider: AiProviderKind;
+  model: string;
+  base_url: string;
+  page_width: number | null;
+  page_height: number | null;
+  rows: number;
+  columns: number;
+  uncertain_cells: number;
+  empty_cells: number;
+  warnings: TableProposalWarning[];
+  source: TableSourceBox;
+  cells: TableProposalCell[];
 }
 
 /* -------------------------------------------------------------------------- */

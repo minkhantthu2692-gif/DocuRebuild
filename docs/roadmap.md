@@ -327,6 +327,16 @@ described as universally free or universally accurate.
   not persisted as a suggestion and is never inserted automatically; the dialog names
   the proposing model, marks it unverified and keeps the manual typing path available
   without a vision model. Each attempt is recorded with task `equation_transcription`.
+- On-demand AI table reading. A saved table region can be read by the vision
+  profile from the elements dialog, which sends only that crop and shows the reply
+  in the normal table review grid. The request refuses a non-table region, a missing
+  crop and an unconfigured vision model before any request, and a paid profile still
+  needs its one-action approval. Only a complete rectangle is accepted: a ragged,
+  empty, oversized or non-text reply is reported instead of being padded, truncated
+  or guessed at. Every cell is unscored (`no_confidence`), so insertion stays
+  disabled until the user acknowledges the grid, manual corrections are inserted
+  instead of the raw reply, and nothing is written back to the region. Each attempt
+  is recorded with task `table_structure`.
 - Per-block review UI showing the current OCR text beside the proposal, provider and
   model badges, explicit accept/reject actions, a stale-proposal warning and a link
   to Settings when no model is configured. The source viewer shows the vision
@@ -346,8 +356,8 @@ described as universally free or universally accurate.
   `local`, `free` or `paid`. Loopback inference is always local and a remote URL can
   never stay marked local: saving one turns a `local` or unspecified class into paid,
   and a profile saved by an older build is classified on read (loopback local,
-  anything else paid). Cleanup, region proposals and equation transcription on a paid
-  profile require `confirm_paid: true` and otherwise return
+  anything else paid). Cleanup, region proposals, equation transcription and table
+  reading on a paid profile require `confirm_paid: true` and otherwise return
   `409 ai_paid_confirmation_required` before the usage limit is checked and before any
   network request, so a refused action costs nothing and leaves the ledger untouched.
   A declared free tier is not asked again; connection tests never need approval. The
@@ -369,15 +379,14 @@ described as universally free or universally accurate.
   inference and normalization, paid refusal without network access, free-tier
   passthrough, provider rate-limit/auth classification and Retry-After parsing,
   usage recording, the per-task usage breakdown, rolling-limit enforcement, stale
-  runs, stale text, rejection and validation. Frontend tests cover the cost-class
-  settings, the paid confirmation dialog, free-tier passthrough, the rate-limit hint,
-  the inline proposal diff, the usage breakdown, discovered model details and the
-  unlisted-model warning, URL escalation and i18n key parity.
+  runs, stale text, rejection, validation, the table-grid reply parser and the AI
+  table endpoint. Frontend tests cover the cost-class settings, the paid confirmation
+  dialog, free-tier passthrough, the rate-limit hint, the inline proposal diff, the
+  usage breakdown, discovered model details, the unlisted-model warning, the AI table
+  review dialog, URL escalation and i18n key parity.
 
 **Remaining**
 
-- Table structure assistance on top of the region proposals, with the same proposal
-  and verification guarantees.
 - Text/reasoning profile separation beyond OCR cleanup, plus task routing.
 - Optional free-tier and paid providers behind the same adapter, with dynamic
   model metadata, verified pricing/quotas and clearly marked costs. Remote profiles
@@ -493,6 +502,14 @@ the user must review every region before extracting it.
   shows the model and an unverified warning, and still requires the local KaTeX
   preview to pass before insertion. The provenance note credits the model only while
   the field matches its reply; an edited formula falls back to the manual note.
+- A saved table crop can also be read on request when a vision profile is configured.
+  The elements dialog opens a review dialog that sends only the crop, shows it beside
+  the grid, and requires acknowledgement of every unscored cell before insertion.
+  Only a complete rectangle within the same row, column and cell caps as the local
+  proposal is accepted; a ragged, empty, oversized or non-text reply is refused
+  rather than padded or truncated, and empty source cells stay empty. The inserted
+  table credits the model in its source note and says so when cells were corrected by
+  hand; the region itself is never modified.
 - Figure cross-references: a numbered figure gets a stable id, and the toolbar can
   insert an inline citation that stores only that id. The editor resolves the current
   `Figure n` label from document order, so moving or renumbering the figure updates
@@ -515,10 +532,11 @@ the user must review every region before extracting it.
 
 **Pending**
 
-- Automatic table extraction beyond deterministic word-box grouping and drawn PDF
-  rules: vision-based tables and nested tables, always as a reviewable proposal that
-  is never inserted without approval. Cross-block grouping and merged-cell spans
-  from a PDF's vector rules are delivered.
+- Automatic table extraction beyond deterministic word-box grouping, drawn PDF rules
+  and one saved vision-read crop: page-wide vision detection and nested tables remain
+  pending, always as a reviewable proposal that is never inserted without approval.
+  Cross-block grouping, merged-cell spans from a PDF's vector rules and AI reading of
+  a saved region are delivered.
 - Optional structured figure reconstruction with approval. Figure numbering, prose
   cross-references and inline images are delivered.
 - Automatic equation recognition from OCR or vision across a page as a reviewable
@@ -527,8 +545,10 @@ the user must review every region before extracting it.
   transcribed on request; page-wide detection and automatic acceptance remain
   pending.
 - Uncertain table cells are flagged in the proposal and must be acknowledged before
-  insertion, and an empty source cell is never filled in. Equation symbols still
-  have no automatic recognition, so they are never invented.
+  insertion, and an empty source cell is never filled in. An AI-read grid has no
+  confidence score at all, so it needs the same acknowledgement for every cell.
+  Page-wide equation recognition is still pending, so no symbol enters the document
+  without the user's own transcription.
 
 ## Phase 8 — Document editor and export (complete)
 

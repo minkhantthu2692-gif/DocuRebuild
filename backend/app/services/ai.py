@@ -19,6 +19,13 @@ from app.db.project_schema import project_db, utc_iso
 from app.schemas.ai import AiProviderKind, AiSuggestionStatus
 from app.schemas.settings import AiProfileSettings
 from app.services import ocr as ocr_service
+from app.services.table_structure import (
+    MAX_CELLS as MAX_TABLE_CELLS,
+    MAX_COLUMNS as MAX_TABLE_COLUMNS,
+    MAX_ROWS as MAX_TABLE_ROWS,
+    MIN_COLUMNS as MIN_TABLE_COLUMNS,
+    MIN_ROWS as MIN_TABLE_ROWS,
+)
 
 # Only local inference servers are supported in this phase. Both are optional
 # and require an explicit connection test and model choice from the user.
@@ -77,6 +84,22 @@ EQUATION_PROMPT = (
 )
 MAX_EQUATION_LENGTH = 4_000
 
+# A model reply is a proposal, not a source of truth. These caps mirror the
+# deterministic table proposal so a model cannot produce a grid the review dialog
+# and editor reject; an oversized reply is refused rather than truncated.
+TABLE_PROMPT = (
+    "You transcribe one table from a document image crop for a reconstruction tool. "
+    'Return only a JSON object and nothing else, shaped like {"rows": ['
+    '["cell", "cell"], ["cell", "cell"]]}. '
+    "Every row must contain the same number of cells. "
+    "Transcribe only text that is clearly visible, keep the original language and "
+    "punctuation, and use an empty string for a cell with no text. "
+    "Do not merge or split cells, do not add a header, and never invent, guess or "
+    "complete missing text. "
+    'Return {"rows": []} when no table can be read.'
+)
+MAX_TABLE_CELL_LENGTH = 2_000
+
 
 class _FetchFailure(Exception):
     def __init__(
@@ -122,6 +145,15 @@ class EquationCompletion(NamedTuple):
     """LaTeX proposed for one equation crop, still unverified."""
 
     latex: str
+    provider: AiProviderKind
+    model: str
+    base_url: str
+
+
+class TableCompletion(NamedTuple):
+    """A rectangular text grid proposed for one table crop, still unverified."""
+
+    rows: list[list[str]]
     provider: AiProviderKind
     model: str
     base_url: str
@@ -780,6 +812,157 @@ def request_equation_latex(
         RequestAttempt(resolved_provider, resolved_model, resolved_url, None),
     )
     return EquationCompletion(latex, resolved_provider, resolved_model, resolved_url)
+
+
+def parse_table_grid(content: str) -> list[list[str]]:
+    """Validate a model's table reply without filling in missing content.
+
+    Only a complete rectangle of text cells is accepted. A ragged row, an empty
+    reply, a non-text cell or a grid above the review caps is reported instead of
+    being padded, truncated or guessed at, so a missing cell never silently
+    becomes an empty cell in the document.
+    """
+    payload = _strip_code_fence(content.strip())
+    try:
+        body = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise AppError(
+            502,
+            "ai_invalid_response",
+            "The AI table reply was not valid JSON.",
+        ) from exc
+    raw = body.get("rows") if isinstance(body, dict) else body
+    if not isinstance(raw, list):
+        raise AppError(
+            502,
+            "ai_invalid_response",
+            "The AI table reply had an unexpected shape.",
+        )
+    if not raw:
+        raise AppError(
+            502,
+            "ai_table_empty",
+            "The configured local AI server returned no table for this crop.",
+        )
+    if len(raw) > MAX_TABLE_ROWS:
+        raise AppError(
+            502,
+            "ai_table_too_large",
+            "The AI table reply had too many rows to review.",
+        )
+
+    rows: list[list[str]] = []
+    width: int | None = None
+    total_length = 0
+    for raw_row in raw:
+        if not isinstance(raw_row, list) or not raw_row:
+            raise AppError(
+                502,
+                "ai_invalid_response",
+                "The AI table reply had an unexpected row.",
+            )
+        if width is None:
+            width = len(raw_row)
+            if width > MAX_TABLE_COLUMNS:
+                raise AppError(
+                    502,
+                    "ai_table_too_large",
+                    "The AI table reply had too many columns to review.",
+                )
+        elif len(raw_row) != width:
+            raise AppError(
+                502,
+                "ai_table_ragged",
+                "The AI table reply was not a complete grid. Try again or use the "
+                "local table proposal.",
+            )
+
+        row: list[str] = []
+        for value in raw_row:
+            if value is None:
+                text = ""
+            elif isinstance(value, str):
+                text = value.strip()
+            elif isinstance(value, (int, float)) and not isinstance(value, bool):
+                # A number is still text the model read; a bool or a nested value
+                # is not a cell and is refused instead of being stringified.
+                text = str(value)
+            else:
+                raise AppError(
+                    502,
+                    "ai_invalid_response",
+                    "The AI table reply had a cell that was not text.",
+                )
+            if len(text) > MAX_TABLE_CELL_LENGTH:
+                raise AppError(
+                    502,
+                    "ai_table_too_large",
+                    "An AI table cell was too long to review.",
+                )
+            total_length += len(text)
+            row.append(text)
+        rows.append(row)
+
+    if width is None or width < MIN_TABLE_COLUMNS or len(rows) < MIN_TABLE_ROWS:
+        raise AppError(
+            502,
+            "ai_table_empty",
+            "The AI reply did not contain a usable table.",
+        )
+    if len(rows) * width > MAX_TABLE_CELLS or total_length > MAX_TEXT_LENGTH:
+        raise AppError(
+            502,
+            "ai_table_too_large",
+            "The AI table reply was too large to review.",
+        )
+    return rows
+
+
+def request_table_grid(
+    profile: AiProfileSettings,
+    image_b64: str,
+    *,
+    provider: AiProviderKind | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+    on_attempt: Callable[[RequestAttempt], None] | None = None,
+) -> TableCompletion:
+    resolved_provider, resolved_url, resolved_model = resolve_profile(
+        profile,
+        provider=provider,
+        base_url=base_url,
+        model=model,
+    )
+    try:
+        content = _vision_completion(
+            resolved_provider,
+            resolved_url,
+            resolved_model,
+            image_b64,
+            prompt=TABLE_PROMPT,
+            user_text="Transcribe the table in the attached crop.",
+            api_key=api_key,
+        )
+    except AppError as exc:
+        report_attempt(
+            on_attempt,
+            RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
+        )
+        raise
+    try:
+        rows = parse_table_grid(content)
+    except AppError as exc:
+        report_attempt(
+            on_attempt,
+            RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
+        )
+        raise
+    report_attempt(
+        on_attempt,
+        RequestAttempt(resolved_provider, resolved_model, resolved_url, None),
+    )
+    return TableCompletion(rows, resolved_provider, resolved_model, resolved_url)
 
 
 def request_cleanup(

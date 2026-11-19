@@ -55,8 +55,8 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness |
 | `services.table_structure` | Reviewable table proposals: word-box row clustering and whitespace column bands, plus exact merged-cell grids from a PDF's drawn rules; cell text/confidence/flags/alignment, page-level grouping of vertically contiguous row blocks, vector/OCR de-duplication, source pixel box, size caps and typed refusal errors |
 | `app.ocr_benchmark` | Local CER/WER measurement against checked reference transcripts, by running the OCR adapter or scoring a stored transcript; validates fixtures and never uploads |
-| `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, vision region and equation-crop requests, LaTeX reply reduction, listing and review decisions |
-| `services.ai_vision` | Page and region image encoding, normalized-to-source rectangle mapping and filtering for optional vision region proposals, and one-crop equation transcription |
+| `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, vision region and equation-crop requests, LaTeX reply reduction, table-grid replies, listing and review decisions |
+| `services.ai_vision` | Page and region image encoding, normalized-to-source rectangle mapping and filtering for optional vision region proposals, one-crop equation transcription and one-crop table reading |
 | `services.ai_usage` | Local AI request metadata, rolling-window request counting and usage summaries |
 | `services.ai_secrets` | Encrypted, write-only per-task provider keys in the local data folder, with a generated master key; never returns the plain value |
 | `app.scheduled_backup` | Optional one-pass CLI entry point for external schedulers: creates due automatic copies, respects saved preferences and reports failures |
@@ -232,6 +232,7 @@ PATCH  /api/projects/{id}/elements/{element_id}
 POST   /api/projects/{id}/elements/{element_id}/text
 PATCH  /api/projects/{id}/elements/{element_id}/text
 POST   /api/projects/{id}/elements/{element_id}/ai-equation
+POST   /api/projects/{id}/elements/{element_id}/ai-table
 DELETE /api/projects/{id}/elements/{element_id}
 GET    /api/projects/{id}/assets/{asset_id}/file
 ```
@@ -393,9 +394,10 @@ src/
   the anchors with those spans and insertion skips the covered coordinates, so the
   saved Tiptap table uses the same ordinary cell attributes as a manual merge.
 - The proposal dialogs show the grid and its per-cell flags before anything is
-  inserted. A single-block proposal and a page candidate share one `TableReview`
-  component, so a cell is presented identically in both. The API also returns the
-  proposal's `source` pixel box and the page dimensions; the dialog crops the page
+  inserted. A single-block proposal, a page candidate and an AI-read table share one
+  `TableReview` component, so a cell is presented identically in all of them. The API
+  also returns the proposal's `source` pixel box and the page dimensions; the dialog
+  crops the page
   image to that box by positioning it with percentages, so the source can be
   compared side by side without measuring the DOM or loading extra images.
   Insertion uses the same workspace actions context as other document edits and
@@ -507,6 +509,14 @@ src/
   persist an `ai_suggestions` row and never inserts on its own. The provenance note
   credits the model only while the field still matches its reply; any edit falls back
   to the manual note. Each attempt is recorded with task `equation_transcription`.
+- A saved table region can be read the same way from the region library. Its dialog
+  posts to `POST .../elements/{element_id}/ai-table`, which refuses a non-table
+  region (`409 ai_table_region_required`), a missing crop and an unconfigured vision
+  model before any request. Only a complete rectangle within the local table caps is
+  accepted, every cell is unscored, and the reply is shown in the same `TableReview`
+  grid as a local proposal. Nothing is written to the region; insertion writes the
+  reviewed grid (with any manual corrections) and a note that names the model. Each
+  attempt is recorded with task `table_structure`.
 - A selected figure can be edited through the toolbar caption dialog. Editing
   applies only to a real node selection (`selectedFigure` ignores a collapsed
   cursor), writes only the `caption`, `alt` and optional `numbered` attributes, and
@@ -1353,12 +1363,29 @@ src/
   dialog keeps it in memory until the user edits or inserts it. Usage is recorded
   with task `equation_transcription` and the element's page, without the crop, the
   reply or any document text.
+- `POST .../elements/{element_id}/ai-table` reads one saved table region with the
+  same saved vision profile, consent and usage-ledger boundary. It resolves the
+  element first, refuses a non-table region (`409 ai_table_region_required`) and a
+  missing crop, and sends only that crop. The reply must be a complete rectangle:
+  every row has the same cell count, at least 2 rows and 2 columns, at most
+  60 rows, 20 columns, 600 cells, 20,000 characters in total and 2,000 characters per
+  cell, and only text, numbers or null cells (a null becomes an empty cell). A ragged,
+  empty, oversized or non-text reply is refused with a typed error instead of being
+  padded or truncated. The response is shaped like a local table proposal (`cells`, `source`,
+  `warnings`) but every cell has `confidence: null` and the warnings contain
+  `no_confidence`, so the review grid requires an explicit acknowledgement before
+  insertion. Nothing is written to `elements`, `ai_suggestions` or the document; the
+  grid lives in the dialog until the user inserts it, and manual corrections are what
+  get inserted. Usage is recorded with task `table_structure` and the element's page,
+  without the crop or the reply.
 - Tests use a loopback stub HTTP server, not a real model, and cover discovery,
   unreachable/timeout/HTTP/invalid probes, remote-consent refusal, both adapters,
   proposal listing and filtering, usage recording and rolling-limit enforcement,
   stale runs, stale text, rejection, validation, vision coordinate mapping and
   vision output filtering, plus equation-crop transcription, wrapper reduction,
-  empty replies, region-kind refusal and remote consent. This verifies protocol
+  empty replies, region-kind refusal and remote consent, table-grid parsing (ragged,
+  empty, oversized, non-text and null cells), the AI table endpoint's region/config
+  refusals and review-shaped response, and its usage task. This verifies protocol
   handling and review safety, not model quality.
 
 ### Design system

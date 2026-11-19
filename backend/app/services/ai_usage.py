@@ -19,7 +19,12 @@ HISTORY_MAX_LIMIT = 100
 # Stable display order for the known tasks. Any other stored task name (older
 # rows or a future task) is listed afterwards, alphabetically, instead of being
 # dropped or folded into a catch-all bucket.
-TASK_ORDER = ("ocr_cleanup", "region_proposals", "equation_transcription")
+TASK_ORDER = (
+    "ocr_cleanup",
+    "region_proposals",
+    "equation_transcription",
+    "table_structure",
+)
 
 
 def _utc_naive_now() -> datetime:

@@ -189,7 +189,8 @@
     "tasks": {
       "ocr_cleanup": "OCR စာသား ပြုပြင်ခြင်း",
       "region_proposals": "နေရာ အဆိုပြုချက်များ",
-      "equation_transcription": "ညီမျှခြင်း ကူးယူခြင်း"
+      "equation_transcription": "ညီမျှခြင်း ကူးယူခြင်း",
+      "table_structure": "ဇယား ဖတ်ခြင်း"
     },
     "history": {
       "title": "AI အသုံးပြုမှု မှတ်တမ်း",

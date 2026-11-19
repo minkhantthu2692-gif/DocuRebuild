@@ -189,7 +189,8 @@
     "tasks": {
       "ocr_cleanup": "OCR text cleanup",
       "region_proposals": "Region proposals",
-      "equation_transcription": "Equation transcription"
+      "equation_transcription": "Equation transcription",
+      "table_structure": "Table reading"
     },
     "history": {
       "title": "AI usage history",

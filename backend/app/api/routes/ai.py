@@ -23,6 +23,8 @@ from app.schemas.ai import (
     AiSuggestionDecisionOut,
     AiSuggestionStatus,
     AiSuggestionsOut,
+    AiTableOut,
+    AiTableRequest,
     AiUsageHistoryOut,
     AiUsageOut,
     AiUsageOutcome,
@@ -265,6 +267,68 @@ def create_ai_equation_proposal(
 
     try:
         result = ai_vision.transcribe_equation(
+            directory,
+            element_id,
+            vision,
+            provider=payload.provider,
+            base_url=payload.base_url,
+            model=payload.model,
+            api_key=_stored_api_key("vision", payload),
+            on_attempt=record_attempt,
+        )
+    except Exception:
+        _commit_usage(session)
+        raise
+    touch_project(session, project)
+    return result
+
+
+@router.post(
+    "/projects/{project_id}/elements/{element_id}/ai-table",
+    response_model=AiTableOut,
+)
+def create_ai_table_proposal(
+    project: ProjectDep,
+    element_id: str,
+    payload: AiTableRequest,
+    session: DbSession,
+) -> dict[str, Any]:
+    directory = project_service.ensure_project_storage(project)
+    # Resolve the element first so a missing region or a non-table crop is
+    # reported before any provider setting or request limit is involved.
+    element = ai_vision.element_context(directory, element_id)
+    if element["kind"] != "table":
+        raise AppError(
+            409,
+            "ai_table_region_required",
+            "Only a table region can be read as a table.",
+        )
+    ai_settings = get_app_settings(session).ai
+    vision = ai_settings.vision
+    if not vision.model:
+        raise AppError(
+            409,
+            "ai_vision_not_configured",
+            "Choose a vision model in Settings before reading tables.",
+        )
+    _require_paid_approval(vision, payload)
+    ai_usage.ensure_within_limit(session, ai_settings.request_limit)
+
+    def record_attempt(attempt: ai_service.RequestAttempt) -> None:
+        ai_usage.record_attempt(
+            session,
+            provider=attempt.provider,
+            model=attempt.model,
+            task="table_structure",
+            outcome="error" if attempt.error_code else "success",
+            error_code=attempt.error_code,
+            project_id=project.id,
+            page_id=element["page_id"],
+            block_id=None,
+        )
+
+    try:
+        result = ai_vision.transcribe_table(
             directory,
             element_id,
             vision,

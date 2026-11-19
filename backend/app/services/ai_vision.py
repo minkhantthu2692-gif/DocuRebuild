@@ -238,3 +238,112 @@ def transcribe_equation(
         "model": completion.model,
         "base_url": completion.base_url,
     }
+
+
+def transcribe_table(
+    project_dir: Path,
+    element_id: str,
+    profile: AiProfileSettings,
+    *,
+    provider: AiProviderKind | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+    on_attempt: Callable[[ai_service.RequestAttempt], None] | None = None,
+) -> dict[str, Any]:
+    """Ask the vision model to read one saved table crop into a reviewable grid.
+
+    Only the saved crop is sent. Every cell is returned as unverified text with no
+    confidence, and the reply is never written to the element or the document. A
+    reply that is not a complete rectangle is refused by the parser, so a missing
+    cell is never silently turned into an empty one.
+    """
+    with project_db(project_dir) as conn:
+        element = conn.execute(
+            "SELECT * FROM elements WHERE id = ?", (element_id,)
+        ).fetchone()
+        if element is None:
+            raise AppError(404, "element_not_found", "Region not found.")
+        if element["kind"] != "table":
+            raise AppError(
+                409,
+                "ai_table_region_required",
+                "Only a table region can be read as a table.",
+            )
+        asset = (
+            conn.execute(
+                "SELECT * FROM assets WHERE id = ?", (element["asset_id"],)
+            ).fetchone()
+            if element["asset_id"]
+            else None
+        )
+        if asset is None:
+            raise AppError(
+                409,
+                "ai_element_image_missing",
+                "The region crop could not be read for AI analysis.",
+            )
+        try:
+            image_path = resolve_within(project_dir, asset["relative_path"])
+        except ValueError as exc:
+            raise AppError(500, "asset_path_invalid", "Asset path is invalid.") from exc
+        page = conn.execute(
+            "SELECT width, height FROM pages WHERE id = ?", (element["page_id"],)
+        ).fetchone()
+        page_width = int(page["width"] or 0) if page else 0
+        page_height = int(page["height"] or 0) if page else 0
+        page_id = str(element["page_id"])
+        source = {
+            "x": float(element["x"]),
+            "y": float(element["y"]),
+            "width": float(element["width"]),
+            "height": float(element["height"]),
+        }
+
+    image_b64 = _encode_image(image_path)
+    completion = ai_service.request_table_grid(
+        profile,
+        image_b64,
+        provider=provider,
+        base_url=base_url,
+        model=model,
+        api_key=api_key,
+        on_attempt=on_attempt,
+    )
+
+    cells: list[dict[str, Any]] = []
+    empty_cells = 0
+    for row_index, row in enumerate(completion.rows):
+        for column_index, text in enumerate(row):
+            empty = not text
+            empty_cells += 1 if empty else 0
+            cells.append(
+                {
+                    "row": row_index,
+                    "column": column_index,
+                    "text": text,
+                    "confidence": None,
+                    # Model output is unscored as a whole; the no_confidence
+                    # warning already requires the user to check every cell.
+                    "uncertain": False,
+                    "empty": empty,
+                    "alignment": None,
+                }
+            )
+
+    return {
+        "element_id": element_id,
+        "page_id": page_id,
+        "provider": completion.provider,
+        "model": completion.model,
+        "base_url": completion.base_url,
+        "page_width": page_width or None,
+        "page_height": page_height or None,
+        "rows": len(completion.rows),
+        "columns": len(completion.rows[0]),
+        "uncertain_cells": 0,
+        "empty_cells": empty_cells,
+        "warnings": ["no_confidence"],
+        "source": source,
+        "cells": cells,
+    }
