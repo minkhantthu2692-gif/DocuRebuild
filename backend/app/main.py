@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.handlers import install_error_handlers
-from app.db.session import run_migrations
+from app.db.session import get_session_factory, run_migrations
 from app.api.routes import (
     ai,
     elements,
@@ -37,6 +37,12 @@ def create_app() -> FastAPI:
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         app_settings.ensure_layout()
         run_migrations()
+        # One explicit conversion from the legacy AI settings blob. Idempotent,
+        # and a no-op when no legacy configuration exists.
+        from app.services.ai_migrate import run_legacy_ai_migration
+
+        with get_session_factory()() as session:
+            run_legacy_ai_migration(session)
         logger.info("DocuRebuild local API ready (data dir: %s)", app_settings.data_dir)
         yield
         import_service.shutdown_import_executor()

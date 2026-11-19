@@ -1,17 +1,35 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-
+﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  AiProbeRequest,
-  AiProbeResponse,
+  AiConnectionDetail,
+  AiConnectionPatch,
+  AiConnectionTestRequest,
+  AiConnectionTestResponse,
+  AiConnectionCreate,
+  AiConnectionsResponse,
+  AiCostClass,
+  AiKey,
+  AiKeyCreate,
+  AiKeyPatch,
+  AiManualModelCreate,
+  AiMigrationStatus,
+  AiModelFavoriteInput,
+  AiModel,
+  AiOverview,
+  AiPreferences,
+  AiPreferencesPatch,
   AiProvidersResponse,
   AiRegionProposalsRequest,
   AiRegionProposalsResponse,
+  AiRouteTask,
+  AiRouteUpdate,
+  AiRoutesResponse,
   AiSuggestionBulkInput,
   AiSuggestionBulkResponse,
   AiSuggestionCreate,
   AiSuggestionDecisionInput,
   AiSuggestionDecisionResponse,
   AiSuggestionsResponse,
+  AiTasksResponse,
   AiUsageHistoryResponse,
   AiUsageOutcome,
   AiUsageResponse,
@@ -65,6 +83,91 @@ export function useAiProviders() {
   });
 }
 
+export function useAiConnections() {
+  return useQuery<AiConnectionsResponse>({
+    queryKey: ["ai", "connections"],
+    queryFn: api.listAiConnections,
+    staleTime: 5_000,
+    retry: 1,
+  });
+}
+
+export function useAiConnection(connectionId: string | null) {
+  return useQuery<AiConnectionDetail>({
+    queryKey: ["ai", "connections", connectionId],
+    queryFn: () => api.getAiConnection(connectionId as string),
+    enabled: Boolean(connectionId),
+    staleTime: 5_000,
+    retry: 1,
+  });
+}
+
+export function useAiModels(
+  connectionId: string | null,
+  params: {
+    query?: string;
+    capability?: "text" | "vision";
+    favoritesOnly?: boolean;
+    availableOnly?: boolean;
+  } = {},
+  enabled = true,
+) {
+  return useQuery<AiModel[]>({
+    queryKey: ["ai", "models", connectionId, params],
+    queryFn: () => api.listAiModels(connectionId, params),
+    enabled: enabled && Boolean(connectionId),
+    staleTime: 15_000,
+    retry: 1,
+  });
+}
+
+export function useAiRoutes() {
+  return useQuery<AiRoutesResponse>({
+    queryKey: ["ai", "routes"],
+    queryFn: api.listAiRoutes,
+    staleTime: 5_000,
+    retry: 1,
+  });
+}
+
+/** Per-task readiness used by workspace actions to enable or explain AI buttons. */
+export function useAiTasks() {
+  return useQuery<AiTasksResponse>({
+    queryKey: ["ai", "tasks"],
+    queryFn: api.getAiTasks,
+    staleTime: 5_000,
+    retry: 1,
+  });
+}
+
+export function useAiMigration() {
+  return useQuery<AiMigrationStatus>({
+    queryKey: ["ai", "migration"],
+    queryFn: api.getAiMigration,
+    staleTime: 30_000,
+    retry: 1,
+  });
+}
+
+export function useAiPreferences() {
+  return useQuery<AiPreferences>({
+    queryKey: ["ai", "preferences"],
+    queryFn: api.getAiPreferences,
+    staleTime: 15_000,
+    retry: 1,
+  });
+}
+
+export function useAiOverview(enabled = true) {
+  return useQuery<AiOverview>({
+    queryKey: ["ai", "overview"],
+    queryFn: api.getAiOverview,
+    enabled,
+    staleTime: 15_000,
+    retry: 1,
+  });
+}
+
 export function useAiUsage(enabled = true) {
   return useQuery<AiUsageResponse>({
     queryKey: ["ai", "usage"],
@@ -80,6 +183,7 @@ export interface AiUsageHistoryParams {
   offset: number;
   outcome?: AiUsageOutcome;
   task?: AiUsageTask;
+  connectionId?: string;
 }
 
 export function useAiUsageHistory(params: AiUsageHistoryParams, enabled = true) {
@@ -123,15 +227,9 @@ export function usePageAiSuggestionHistory(
   });
 }
 
-export function useProbeAiProvider() {
-  return useMutation<AiProbeResponse, Error, AiProbeRequest>({
-    mutationFn: api.probeAiProvider,
-  });
-}
-
 /**
- * Ask the configured vision model for region proposals. Nothing is saved, so
- * the response only feeds the reviewable overlay on the source page.
+ * Ask the routed vision model for region proposals. Nothing is saved, so the
+ * response only feeds the reviewable overlay on the source page.
  */
 export function useAiRegionProposals(projectId: string, pageId: string | null) {
   const queryClient = useQueryClient();
@@ -272,3 +370,120 @@ export function useBulkDecideAiSuggestions(projectId: string) {
     },
   });
 }
+
+/* -------------------------------------------------------------------------- */
+/*                       Connection and credential actions                    */
+/* -------------------------------------------------------------------------- */
+
+function useInvalidateAi() {
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: ["ai"] });
+  };
+}
+
+export function useCreateAiConnection() {
+  const invalidate = useInvalidateAi();
+  return useMutation<AiConnectionDetail, Error, AiConnectionCreate>({
+    mutationFn: api.createAiConnection,
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateAiConnection(connectionId: string) {
+  const invalidate = useInvalidateAi();
+  return useMutation<AiConnectionDetail, Error, AiConnectionPatch>({
+    mutationFn: (payload) => api.updateAiConnection(connectionId, payload),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteAiConnection() {
+  const invalidate = useInvalidateAi();
+  return useMutation<void, Error, string>({
+    mutationFn: api.deleteAiConnection,
+    onSuccess: invalidate,
+  });
+}
+
+export function useTestAiConnection(connectionId: string) {
+  const invalidate = useInvalidateAi();
+  return useMutation<
+    AiConnectionTestResponse,
+    Error,
+    AiConnectionTestRequest | undefined
+  >({
+    mutationFn: (payload) => api.testAiConnection(connectionId, payload ?? {}),
+    onSuccess: invalidate,
+  });
+}
+
+export function useAddAiKey(connectionId: string) {
+  const invalidate = useInvalidateAi();
+  return useMutation<AiKey, Error, AiKeyCreate>({
+    mutationFn: (payload) => api.addAiKey(connectionId, payload),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateAiKey(connectionId: string) {
+  const invalidate = useInvalidateAi();
+  return useMutation<
+    AiKey,
+    Error,
+    { keyId: string; payload: AiKeyPatch }
+  >({
+    mutationFn: ({ keyId, payload }) => api.updateAiKey(connectionId, keyId, payload),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteAiKey(connectionId: string) {
+  const invalidate = useInvalidateAi();
+  return useMutation<void, Error, string>({
+    mutationFn: (keyId) => api.deleteAiKey(connectionId, keyId),
+    onSuccess: invalidate,
+  });
+}
+
+export function useAddAiModel(connectionId: string) {
+  const invalidate = useInvalidateAi();
+  return useMutation<AiModel, Error, AiManualModelCreate>({
+    mutationFn: (payload) => api.addAiModel(connectionId, payload),
+    onSuccess: invalidate,
+  });
+}
+
+export function useFavoriteAiModel(connectionId: string) {
+  const invalidate = useInvalidateAi();
+  return useMutation<AiModel, Error, AiModelFavoriteInput>({
+    mutationFn: (payload) => api.favoriteAiModel(connectionId, payload),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateAiRoute() {
+  const invalidate = useInvalidateAi();
+  return useMutation<unknown, Error, { task: AiRouteTask; payload: AiRouteUpdate }>({
+    mutationFn: ({ task, payload }) => api.updateAiRoute(task, payload),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateAiPreferences() {
+  const invalidate = useInvalidateAi();
+  return useMutation<AiPreferences, Error, AiPreferencesPatch>({
+    mutationFn: api.updateAiPreferences,
+    onSuccess: invalidate,
+  });
+}
+
+export function useClearAiUsage() {
+  const invalidate = useInvalidateAi();
+  return useMutation<void, Error, void>({
+    mutationFn: api.clearAiUsage,
+    onSuccess: invalidate,
+  });
+}
+
+export type { AiCostClass };

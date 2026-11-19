@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/minkhantthu2692-gif/DocuRebuild/security/advisories/new
+    about: Report a vulnerability privately. Do not open a public issue with secrets or exploit details.
+  - name: Documentation
+    url: https://github.com/minkhantthu2692-gif/DocuRebuild#readme
+    about: Read the setup, AI provider and privacy documentation first.

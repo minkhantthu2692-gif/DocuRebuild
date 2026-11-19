@@ -1,4 +1,4 @@
-import {
+﻿import {
   ArrowLeft,
   ArrowRight,
   ChevronLeft,
@@ -57,8 +57,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
-import { useAiRegionProposals } from "@/hooks/use-ai";
-import { useAppMeta, useAppSettings } from "@/hooks/use-app";
+import { useAiRegionProposals, useAiTasks } from "@/hooks/use-ai";
+import { useAppMeta } from "@/hooks/use-app";
 import { useElements, useRegionProposals } from "@/hooks/use-elements";
 import { useLatestOcr } from "@/hooks/use-ocr";
 import {
@@ -283,7 +283,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   const queryClient = useQueryClient();
   const pagesQuery = usePages(projectId);
   const metaQuery = useAppMeta();
-  const settingsQuery = useAppSettings();
+  const tasksQuery = useAiTasks();
   const paidAi = usePaidAiGuard();
   const pages = useMemo(() => pagesQuery.data ?? [], [pagesQuery.data]);
   const meta = metaQuery.data;
@@ -461,7 +461,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   const requestAiRegions = async () => {
     if (!currentPage || aiRegions.isPending) return;
     // Paid image analysis is approved for this request only.
-    const approved = await paidAi.requestApproval(settingsQuery.data?.ai.vision);
+    const approved = await paidAi.requestApproval(tasksQuery.data?.tasks.region_proposals);
     if (!approved) return;
     cancelRegionSelect();
     setProposalsOn(false);

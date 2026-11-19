@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+﻿import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CircleAlert, Sparkles, Table2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,8 +21,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
+import { useAiTasks } from "@/hooks/use-ai";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
-import { useAppSettings } from "@/hooks/use-app";
 import { useTableDraft } from "@/hooks/use-table-draft";
 import { api } from "@/lib/api";
 import {
@@ -66,8 +66,9 @@ export function AiTableDialog({
   const { insertTable } = useWorkspaceActions();
   const errorMessage = useApiErrorMessage();
   const queryClient = useQueryClient();
-  const settingsQuery = useAppSettings();
-  const visionModel = settingsQuery.data?.ai.vision.model?.trim() ?? "";
+  const tasksQuery = useAiTasks();
+  const tableTask = tasksQuery.data?.tasks.table_structure;
+  const visionModel = tableTask?.model_id ?? "";
   const paidAi = usePaidAiGuard();
 
   const [proposal, setProposal] = useState<AiTableResponse | null>(null);
@@ -115,7 +116,7 @@ export function AiTableDialog({
   const canRead =
     Boolean(element) &&
     visionModel.length > 0 &&
-    !settingsQuery.isLoading &&
+    !tasksQuery.isLoading &&
     !transcribe.isPending;
   const canInsert =
     proposal !== null &&
@@ -124,7 +125,7 @@ export function AiTableDialog({
   const handleRead = async () => {
     if (!element || !canRead) return;
     // A paid vision profile must be approved for this read only.
-    const approved = await paidAi.requestApproval(settingsQuery.data?.ai.vision);
+    const approved = await paidAi.requestApproval(tableTask);
     if (!approved) return;
     transcribe.mutate({ elementId: element.id, confirmPaid: true });
   };
@@ -150,7 +151,7 @@ export function AiTableDialog({
           ? "elements.table.aiCorrectedNote"
           : "elements.table.aiSourceNote",
         {
-          page: page?.page_number ?? "—",
+          page: page?.page_number ?? "â€”",
           model: proposal.model,
         },
       );
@@ -186,7 +187,7 @@ export function AiTableDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Table2 className="size-icon-sm text-primary" aria-hidden="true" />
-            {t("elements.table.aiTitle", { page: page?.page_number ?? "—" })}
+            {t("elements.table.aiTitle", { page: page?.page_number ?? "â€”" })}
           </DialogTitle>
           <DialogDescription>{t("elements.table.aiDescription")}</DialogDescription>
         </DialogHeader>

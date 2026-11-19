@@ -1,9 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type {
-  AiProfilePatch,
-  AiProfileSettings,
-  AppSettings,
-} from "@docurebuild/shared-types";
+﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { AppSettings } from "@docurebuild/shared-types";
 
 import { api, type SettingsPatch } from "@/lib/api";
 
@@ -35,19 +31,6 @@ export function useAppSettings() {
   });
 }
 
-function mergeAiProfile(
-  saved: AiProfileSettings,
-  patch: AiProfilePatch | undefined,
-): AiProfileSettings {
-  if (!patch) return saved;
-  const { api_key, clear_api_key, ...profile } = patch;
-  return {
-    ...saved,
-    ...profile,
-    has_api_key: api_key ? true : clear_api_key ? false : saved.has_api_key,
-  };
-}
-
 function mergeSettings(current: AppSettings | undefined, patch: SettingsPatch): AppSettings {
   const base: AppSettings = current ?? {
     language: "en",
@@ -62,25 +45,6 @@ function mergeSettings(current: AppSettings | undefined, patch: SettingsPatch): 
     },
     editor: { document_font: "serif" },
     export: { pdf_page_size: "a4", pdf_margin: "normal" },
-    ai: {
-      text: {
-        provider: "ollama",
-        base_url: "",
-        model: "",
-        allow_remote: false,
-        cost_class: "local",
-        has_api_key: false,
-      },
-      vision: {
-        provider: "ollama",
-        base_url: "",
-        model: "",
-        allow_remote: false,
-        cost_class: "local",
-        has_api_key: false,
-      },
-      request_limit: 0,
-    },
     backups: { auto_on_open: false, interval_hours: 24, keep_copies: 5 },
   };
   return {
@@ -89,11 +53,6 @@ function mergeSettings(current: AppSettings | undefined, patch: SettingsPatch): 
     appearance: { ...base.appearance, ...patch.appearance },
     editor: { ...base.editor, ...patch.editor },
     export: { ...base.export, ...patch.export },
-    ai: {
-      text: mergeAiProfile(base.ai.text, patch.ai?.text),
-      vision: mergeAiProfile(base.ai.vision, patch.ai?.vision),
-      request_limit: patch.ai?.request_limit ?? base.ai.request_limit,
-    },
     backups: { ...base.backups, ...patch.backups },
   };
 }

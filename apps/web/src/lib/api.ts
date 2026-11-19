@@ -1,12 +1,27 @@
 import type {
+  AiConnectionCreate,
+  AiConnectionDetail,
+  AiConnectionPatch,
+  AiConnectionTestRequest,
+  AiConnectionTestResponse,
+  AiConnectionsResponse,
   AiEquationRequest,
   AiEquationResponse,
-  AiProbeRequest,
-  AiProbeResponse,
+  AiKey,
+  AiKeyCreate,
+  AiKeyPatch,
+  AiManualModelCreate,
+  AiModel,
+  AiModelFavoriteInput,
+  AiOverview,
+  AiPreferences,
+  AiPreferencesPatch,
   AiProvidersResponse,
   AiRegionProposalsRequest,
   AiRegionProposalsResponse,
-  AiSettingsPatch,
+  AiRouteTask,
+  AiRouteUpdate,
+  AiRoutesResponse,
   AiSuggestionBulkInput,
   AiSuggestionBulkResponse,
   AiSuggestionCreate,
@@ -15,6 +30,7 @@ import type {
   AiSuggestionsResponse,
   AiTableRequest,
   AiTableResponse,
+  AiTasksResponse,
   AiUsageHistoryResponse,
   AiUsageOutcome,
   AiUsageResponse,
@@ -141,7 +157,6 @@ export interface SettingsPatch {
   appearance?: Partial<AppearanceSettings>;
   editor?: Partial<EditorSettings>;
   export?: Partial<ExportSettings>;
-  ai?: AiSettingsPatch;
   backups?: Partial<BackupSettings>;
 }
 
@@ -440,6 +455,94 @@ export const api = {
     ),
 
   listAiProviders: () => request<AiProvidersResponse>("/ai/providers"),
+  listAiConnections: () => request<AiConnectionsResponse>("/ai/connections"),
+  getAiConnection: (connectionId: string) =>
+    request<AiConnectionDetail>(`/ai/connections/${connectionId}`),
+  createAiConnection: (payload: AiConnectionCreate) =>
+    request<AiConnectionDetail>("/ai/connections", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateAiConnection: (connectionId: string, payload: AiConnectionPatch) =>
+    request<AiConnectionDetail>(`/ai/connections/${connectionId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deleteAiConnection: (connectionId: string) =>
+    request<void>(`/ai/connections/${connectionId}`, { method: "DELETE" }),
+  testAiConnection: (
+    connectionId: string,
+    payload: AiConnectionTestRequest = {},
+  ) =>
+    request<AiConnectionTestResponse>(`/ai/connections/${connectionId}/test`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  addAiKey: (connectionId: string, payload: AiKeyCreate) =>
+    request<AiKey>(`/ai/connections/${connectionId}/keys`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateAiKey: (connectionId: string, keyId: string, payload: AiKeyPatch) =>
+    request<AiKey>(`/ai/connections/${connectionId}/keys/${keyId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deleteAiKey: (connectionId: string, keyId: string) =>
+    request<void>(`/ai/connections/${connectionId}/keys/${keyId}`, {
+      method: "DELETE",
+    }),
+  listAiModels: (
+    connectionId: string | null,
+    params: {
+      query?: string;
+      capability?: "text" | "vision";
+      favoritesOnly?: boolean;
+      availableOnly?: boolean;
+    } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (params.query) query.set("query", params.query);
+    if (params.capability) query.set("capability", params.capability);
+    if (params.favoritesOnly) query.set("favorites_only", "true");
+    if (params.availableOnly) query.set("available_only", "true");
+    const suffix = query.size > 0 ? `?${query.toString()}` : "";
+    return request<AiModel[]>(
+      connectionId
+        ? `/ai/connections/${connectionId}/models${suffix}`
+        : `/ai/models${suffix}`,
+    );
+  },
+  addAiModel: (connectionId: string, payload: AiManualModelCreate) =>
+    request<AiModel>(`/ai/connections/${connectionId}/models`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  favoriteAiModel: (connectionId: string, payload: AiModelFavoriteInput) =>
+    request<AiModel>(`/ai/connections/${connectionId}/models/favorite`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  clearRecentAiModels: () =>
+    request<void>("/ai/models/clear-recent", { method: "POST" }),
+  listAiRoutes: () => request<AiRoutesResponse>("/ai/routes"),
+  updateAiRoute: (task: AiRouteTask, payload: AiRouteUpdate) =>
+    request<unknown>(`/ai/routes/${task}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  getAiTasks: () => request<AiTasksResponse>("/ai/tasks"),
+  getAiPreferences: () => request<AiPreferences>("/ai/preferences"),
+  updateAiPreferences: (payload: AiPreferencesPatch) =>
+    request<AiPreferences>("/ai/preferences", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  getAiOverview: () => request<AiOverview>("/ai/overview"),
+  getAiMigration: () =>
+    request<{ needed: boolean; migrated: boolean; completed_at: string | null; detail: string | null }>(
+      "/ai/migration",
+    ),
   getAiUsage: () => request<AiUsageResponse>("/ai/usage"),
   getAiUsageHistory: (
     params: {
@@ -447,6 +550,7 @@ export const api = {
       offset?: number;
       outcome?: AiUsageOutcome;
       task?: AiUsageTask;
+      connectionId?: string;
     } = {},
   ) => {
     const query = new URLSearchParams();
@@ -454,14 +558,11 @@ export const api = {
     if (params.offset !== undefined) query.set("offset", String(params.offset));
     if (params.outcome) query.set("outcome", params.outcome);
     if (params.task) query.set("task", params.task);
+    if (params.connectionId) query.set("connection_id", params.connectionId);
     const suffix = query.size > 0 ? `?${query.toString()}` : "";
     return request<AiUsageHistoryResponse>(`/ai/usage/history${suffix}`);
   },
-  probeAiProvider: (payload: AiProbeRequest) =>
-    request<AiProbeResponse>("/ai/probe", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+  clearAiUsage: () => request<void>("/ai/usage", { method: "DELETE" }),
   createAiCleanupSuggestion: (
     projectId: string,
     pageId: string,

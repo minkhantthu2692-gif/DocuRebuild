@@ -1,14 +1,12 @@
 import {
   Archive,
   ArrowLeft,
-  Brain,
   Check,
   ChevronRight,
   Copy,
   ExternalLink,
   FileDown,
   HardDrive,
-  History,
   Info,
   Languages,
   Palette,
@@ -16,21 +14,14 @@ import {
   ScanText,
   ShieldCheck,
   Type,
-  type LucideIcon,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import type {
   AccentName,
-  AiCostClass,
-  AiModel,
-  AiProfilePatch,
-  AiProfileSettings,
-  AiProbeResponse,
-  AiProviderKind,
   BackupSettings,
   BlurLevel,
   Density,
@@ -45,10 +36,13 @@ import type {
   ThemeMode,
 } from "@docurebuild/shared-types";
 
-import { AiUsageHistoryDialog } from "@/components/settings/ai-usage-history-dialog";
+import { AiSettings } from "@/components/settings/ai-settings";
+import {
+  SettingRow,
+  SettingsSection,
+} from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   Select,
@@ -59,12 +53,9 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
-import { useAiProviders, useAiUsage, useProbeAiProvider } from "@/hooks/use-ai";
 import { useAppMeta, useAppSettings, useHealth, useUpdateSettings } from "@/hooks/use-app";
 import { useOcrCapabilities } from "@/hooks/use-ocr";
-import { isLoopbackUrl } from "@/lib/ai-cost";
-import { aiTaskLabelKey } from "@/lib/ai-task";
-import { formatDateTime, formatNumber, resolveLocale } from "@/lib/format";
+import { formatNumber, resolveLocale } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const ACCENTS: AccentName[] = [
@@ -98,97 +89,6 @@ const STATUS_VARIANT = {
   planned: "outline",
 } as const;
 
-const DEFAULT_AI_PROFILE: AiProfileSettings = {
-  provider: "ollama",
-  base_url: "",
-  model: "",
-  allow_remote: false,
-  cost_class: "local",
-  has_api_key: false,
-};
-
-/**
- * A remote URL cannot stay classified as local inference. Only an explicit
- * "free" choice survives a URL change; local escalates to paid so the draft
- * matches what the backend will store.
- */
-function costClassForUrl(current: AiCostClass, baseUrl: string): AiCostClass {
-  if (current !== "local") return current;
-  return isLoopbackUrl(baseUrl) ? "local" : "paid";
-}
-
-function aiProfilePatch(
-  draft: AiProfileSettings,
-  apiKey: string,
-  clearKey: boolean,
-): AiProfilePatch {
-  return {
-    provider: draft.provider,
-    base_url: draft.base_url,
-    model: draft.model,
-    allow_remote: draft.allow_remote,
-    cost_class: draft.cost_class,
-    ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
-    ...(clearKey ? { clear_api_key: true } : {}),
-  };
-}
-
-/**
- * Find the typed model among the models the server listed. The id must match
- * exactly (after trimming), because the label claims the server listed it.
- */
-function findDiscoveredModel(models: AiModel[], value: string): AiModel | undefined {
-  const wanted = value.trim();
-  if (!wanted) return undefined;
-  return models.find((model) => model.id === wanted);
-}
-
-/** Secondary datalist label; providers may report no metadata at all. */
-function modelOptionLabel(model: AiModel): string | undefined {
-  const parts = [model.family, model.parameter_size].filter(
-    (part): part is string => Boolean(part),
-  );
-  return parts.length > 0 ? parts.join(" · ") : undefined;
-}
-
-interface ModelListingHintProps {
-  models: AiModel[];
-  value: string;
-}
-
-/**
- * Describe the chosen model using only what the connection test returned.
- *
- * "Listed" means the server reported this exact id during the last test; it is
- * not a promise that the model can load or that it fits the task. An unlisted
- * value is a non-blocking warning because some servers serve models they omit
- * from their listing.
- */
-function ModelListingHint({ models, value }: ModelListingHintProps) {
-  const { t } = useTranslation("settings");
-  if (models.length === 0 || !value.trim()) return null;
-
-  const model = findDiscoveredModel(models, value);
-  if (!model) {
-    return (
-      <p className="text-2xs leading-relaxed text-warning">
-        {t("ai.modelUnlisted")}
-      </p>
-    );
-  }
-
-  const details: string[] = [t("ai.modelListed")];
-  if (model.family) details.push(t("ai.modelFamily", { family: model.family }));
-  if (model.parameter_size) {
-    details.push(t("ai.modelParameters", { size: model.parameter_size }));
-  }
-  return (
-    <p className="text-2xs leading-relaxed text-muted-foreground">
-      {details.join(" · ")}
-    </p>
-  );
-}
-
 const DEFAULT_BACKUPS: BackupSettings = {
   auto_on_open: false,
   interval_hours: 24,
@@ -208,59 +108,6 @@ function withCurrentValue(options: readonly number[], current: number): number[]
   return Array.from(new Set([...options, current])).sort((a, b) => a - b);
 }
 
-interface SettingsSectionProps {
-  id: string;
-  icon: LucideIcon;
-  title: string;
-  children: ReactNode;
-}
-
-function SettingsSection({ id, icon: Icon, title, children }: SettingsSectionProps) {
-  return (
-    <section
-      id={id}
-      aria-labelledby={`${id}-heading`}
-      className="glass-panel scroll-mt-24 rounded-xl p-4 shadow-sm sm:p-5"
-    >
-      <header className="mb-4 flex items-center gap-2">
-        <span className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
-          <Icon className="size-icon-sm" aria-hidden="true" />
-        </span>
-        <h2 id={`${id}-heading`} className="text-sm font-semibold tracking-tight">
-          {title}
-        </h2>
-      </header>
-      <div className="space-y-4">{children}</div>
-    </section>
-  );
-}
-
-interface SettingRowProps {
-  title: string;
-  description?: string;
-  children: ReactNode;
-  stacked?: boolean;
-}
-
-function SettingRow({ title, description, children, stacked = false }: SettingRowProps) {
-  return (
-    <div
-      className={cn(
-        "flex gap-2.5",
-        stacked ? "flex-col" : "flex-col sm:flex-row sm:items-center sm:justify-between",
-      )}
-    >
-      <div className="min-w-0 max-w-md space-y-0.5">
-        <p className="text-sm font-medium leading-snug">{title}</p>
-        {description ? (
-          <p className="text-xs leading-relaxed text-muted-foreground">{description}</p>
-        ) : null}
-      </div>
-      <div className={cn("shrink-0", stacked ? "w-full" : "w-full sm:w-80")}>{children}</div>
-    </div>
-  );
-}
-
 export function SettingsPage() {
   const { t, i18n } = useTranslation("settings");
   const { t: tCommon } = useTranslation("common");
@@ -268,24 +115,9 @@ export function SettingsPage() {
   const metaQuery = useAppMeta();
   const healthQuery = useHealth();
   const ocrQuery = useOcrCapabilities();
-  const aiProvidersQuery = useAiProviders();
-  const aiUsageQuery = useAiUsage();
-  const probeAi = useProbeAiProvider();
-  const probeVisionAi = useProbeAiProvider();
   const updateSettings = useUpdateSettings();
   const errorMessage = useApiErrorMessage();
   const [copied, setCopied] = useState(false);
-  const [aiDraftOverride, setAiDraftOverride] = useState<AiProfileSettings | null>(null);
-  const [aiVisionDraftOverride, setAiVisionDraftOverride] =
-    useState<AiProfileSettings | null>(null);
-  const [aiLimitDraft, setAiLimitDraft] = useState<string | null>(null);
-  const [textApiKeyDraft, setTextApiKeyDraft] = useState("");
-  const [visionApiKeyDraft, setVisionApiKeyDraft] = useState("");
-  const [clearTextApiKey, setClearTextApiKey] = useState(false);
-  const [clearVisionApiKey, setClearVisionApiKey] = useState(false);
-  const [probeResult, setProbeResult] = useState<AiProbeResponse | null>(null);
-  const [visionProbeResult, setVisionProbeResult] = useState<AiProbeResponse | null>(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
 
   const settings = settingsQuery.data;
   const appearance = settings?.appearance;
@@ -294,57 +126,10 @@ export function SettingsPage() {
   const locale = resolveLocale(i18n.resolvedLanguage);
   const health = healthQuery.data;
   const ocr = ocrQuery.data;
-
-  const aiSaved = settings?.ai?.text ?? DEFAULT_AI_PROFILE;
-  const aiVisionSaved = settings?.ai?.vision ?? DEFAULT_AI_PROFILE;
-  const aiLimitSaved = settings?.ai?.request_limit ?? 0;
   const backupPrefs = settings?.backups ?? DEFAULT_BACKUPS;
   const exportPrefs = settings?.export ?? DEFAULT_EXPORT;
   const intervalOptions = withCurrentValue(BACKUP_INTERVALS, backupPrefs.interval_hours);
   const keepOptions = withCurrentValue(BACKUP_KEEP_COPIES, backupPrefs.keep_copies);
-  const aiDraft = aiDraftOverride ?? aiSaved;
-  const aiVisionDraft = aiVisionDraftOverride ?? aiVisionSaved;
-  const aiLimitValue = aiLimitDraft ?? String(aiLimitSaved);
-  const parsedAiLimit = Number(aiLimitValue);
-  const aiLimitValid =
-    aiLimitValue.trim() !== "" &&
-    Number.isInteger(parsedAiLimit) &&
-    parsedAiLimit >= 0 &&
-    parsedAiLimit <= 10_000;
-  const aiDirty =
-    aiDraft.provider !== aiSaved.provider ||
-    aiDraft.base_url !== aiSaved.base_url ||
-    aiDraft.model !== aiSaved.model ||
-    aiDraft.allow_remote !== aiSaved.allow_remote ||
-    aiDraft.cost_class !== aiSaved.cost_class ||
-    aiVisionDraft.provider !== aiVisionSaved.provider ||
-    aiVisionDraft.base_url !== aiVisionSaved.base_url ||
-    aiVisionDraft.model !== aiVisionSaved.model ||
-    aiVisionDraft.allow_remote !== aiVisionSaved.allow_remote ||
-    aiVisionDraft.cost_class !== aiVisionSaved.cost_class ||
-    textApiKeyDraft.trim() !== "" ||
-    visionApiKeyDraft.trim() !== "" ||
-    clearTextApiKey ||
-    clearVisionApiKey ||
-    (aiLimitValid && parsedAiLimit !== aiLimitSaved);
-  const aiUsage = aiUsageQuery.data;
-  const providerDefault =
-    aiProvidersQuery.data?.providers.find((item) => item.id === aiDraft.provider)
-      ?.default_base_url ?? "";
-  const visionProviderDefault =
-    aiProvidersQuery.data?.providers.find((item) => item.id === aiVisionDraft.provider)
-      ?.default_base_url ?? "";
-  const discoveredModels = probeResult?.status === "ready" ? probeResult.models : [];
-  const visionDiscoveredModels =
-    visionProbeResult?.status === "ready" ? visionProbeResult.models : [];
-
-  const updateAiDraft = (patch: Partial<AiProfileSettings>) => {
-    setAiDraftOverride({ ...aiDraft, ...patch });
-  };
-
-  const updateAiVisionDraft = (patch: Partial<AiProfileSettings>) => {
-    setAiVisionDraftOverride({ ...aiVisionDraft, ...patch });
-  };
 
   const ocrReason =
     ocr?.reason &&
@@ -358,64 +143,6 @@ export function SettingsPage() {
     updateSettings.mutate(patch, {
       onError: (error) => toast.error(errorMessage(error)),
     });
-  };
-
-  const testAiConnection = () => {
-    probeAi.mutate(
-      {
-        provider: aiDraft.provider,
-        base_url: aiDraft.base_url,
-        allow_remote: aiDraft.allow_remote,
-        task: "text",
-        ...(textApiKeyDraft.trim() ? { api_key: textApiKeyDraft.trim() } : {}),
-      },
-      {
-        onSuccess: (result) => setProbeResult(result),
-        onError: (error) => toast.error(errorMessage(error)),
-      },
-    );
-  };
-
-  const testVisionConnection = () => {
-    probeVisionAi.mutate(
-      {
-        provider: aiVisionDraft.provider,
-        base_url: aiVisionDraft.base_url,
-        allow_remote: aiVisionDraft.allow_remote,
-        task: "vision",
-        ...(visionApiKeyDraft.trim() ? { api_key: visionApiKeyDraft.trim() } : {}),
-      },
-      {
-        onSuccess: (result) => setVisionProbeResult(result),
-        onError: (error) => toast.error(errorMessage(error)),
-      },
-    );
-  };
-
-  const saveAiProfile = () => {
-    if (!aiLimitValid) return;
-    updateSettings.mutate(
-      {
-        ai: {
-          text: aiProfilePatch(aiDraft, textApiKeyDraft, clearTextApiKey),
-          vision: aiProfilePatch(aiVisionDraft, visionApiKeyDraft, clearVisionApiKey),
-          request_limit: parsedAiLimit,
-        },
-      },
-      {
-        onSuccess: () => {
-          setAiDraftOverride(null);
-          setAiVisionDraftOverride(null);
-          setAiLimitDraft(null);
-          setTextApiKeyDraft("");
-          setVisionApiKeyDraft("");
-          setClearTextApiKey(false);
-          setClearVisionApiKey(false);
-          toast.success(t("ai.saved"));
-        },
-        onError: (error) => toast.error(errorMessage(error)),
-      },
-    );
   };
 
   const sectionLinks: Array<{ id: string; label: string }> = [
@@ -853,648 +580,7 @@ export function SettingsPage() {
               </div>
             </SettingsSection>
 
-            <SettingsSection id="ai" icon={Brain} title={t("sections.ai")}>
-              <div className="space-y-1">
-                <h3 className="text-sm font-semibold">{t("ai.title")}</h3>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  {t("ai.description")}
-                </p>
-              </div>
-
-              <div className="space-y-4 rounded-lg border border-border/60 bg-background/40 p-3">
-                <div className="space-y-1">
-                  <h4 className="text-xs font-semibold">{t("ai.textTitle")}</h4>
-                  <p className="text-2xs leading-relaxed text-muted-foreground">
-                    {t("ai.textDescription")}
-                  </p>
-                </div>
-
-                <SettingRow
-                  title={t("ai.provider")}
-                  description={t("ai.providerDescription")}
-                >
-                  <SegmentedControl
-                    label={`${t("ai.textTitle")}: ${t("ai.provider")}`}
-                    value={aiDraft.provider}
-                    onValueChange={(value) => {
-                      setProbeResult(null);
-                      updateAiDraft({ provider: value as AiProviderKind });
-                    }}
-                    options={[
-                      { value: "ollama", label: t("ai.providerOllama") },
-                      { value: "openai_compatible", label: t("ai.providerOpenAI") },
-                    ]}
-                  />
-                </SettingRow>
-
-                <SettingRow title={t("ai.baseUrl")} description={t("ai.baseUrlDescription")}>
-                  <Input
-                    value={aiDraft.base_url}
-                    placeholder={providerDefault}
-                    spellCheck={false}
-                    aria-label={`${t("ai.textTitle")}: ${t("ai.baseUrl")}`}
-                    onChange={(event) => {
-                      const nextUrl = event.target.value;
-                      setProbeResult(null);
-                      updateAiDraft({
-                        base_url: nextUrl,
-                        cost_class: costClassForUrl(aiDraft.cost_class, nextUrl),
-                      });
-                    }}
-                  />
-                </SettingRow>
-
-                <SettingRow
-                  title={t("ai.allowRemote")}
-                  description={t("ai.allowRemoteDescription")}
-                >
-                  <label className="flex items-start gap-2 text-xs leading-relaxed">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 size-3.5 shrink-0 accent-primary"
-                      checked={aiDraft.allow_remote}
-                      onChange={(event) => {
-                        setProbeResult(null);
-                        updateAiDraft({ allow_remote: event.target.checked });
-                      }}
-                    />
-                    <span>{t("ai.allowRemoteLabel")}</span>
-                  </label>
-                </SettingRow>
-
-                <SettingRow
-                  title={t("ai.costClass")}
-                  description={t("ai.costClassDescription")}
-                >
-                  <div className="space-y-1.5">
-                    <SegmentedControl
-                      label={`${t("ai.textTitle")}: ${t("ai.costClass")}`}
-                      value={aiDraft.cost_class}
-                      onValueChange={(value) =>
-                        updateAiDraft({ cost_class: value as AiCostClass })
-                      }
-                      options={[
-                        { value: "local", label: t("ai.costClassValues.local") },
-                        { value: "free", label: t("ai.costClassValues.free") },
-                        { value: "paid", label: t("ai.costClassValues.paid") },
-                      ]}
-                    />
-                    <p className="text-2xs leading-relaxed text-muted-foreground">
-                      {aiDraft.cost_class === "local"
-                        ? t("ai.costClassHintLocal")
-                        : aiDraft.cost_class === "free"
-                          ? t("ai.costClassHintFree")
-                          : t("ai.costClassHintPaid")}
-                    </p>
-                    {aiDraft.cost_class === "local" &&
-                    !isLoopbackUrl(aiDraft.base_url) ? (
-                      <p className="text-2xs leading-relaxed text-warning">
-                        {t("ai.costClassRemoteHint")}
-                      </p>
-                    ) : null}
-                  </div>
-                </SettingRow>
-
-                <SettingRow title={t("ai.model")} description={t("ai.modelDescription")}>
-                  <Input
-                    value={aiDraft.model}
-                    placeholder={t("ai.modelPlaceholder")}
-                    spellCheck={false}
-                    aria-label={t("ai.model")}
-                    list={discoveredModels.length > 0 ? "ai-model-options" : undefined}
-                    onChange={(event) => updateAiDraft({ model: event.target.value })}
-                  />
-                  {discoveredModels.length > 0 ? (
-                    <datalist id="ai-model-options">
-                      {discoveredModels.map((model) => (
-                        <option
-                          key={model.id}
-                          value={model.id}
-                          label={modelOptionLabel(model)}
-                        />
-                      ))}
-                    </datalist>
-                  ) : null}
-                  <ModelListingHint models={discoveredModels} value={aiDraft.model} />
-                </SettingRow>
-
-                <SettingRow title={t("ai.apiKey")} description={t("ai.apiKeyDescription")}>
-                  <div className="space-y-1.5">
-                    <Input
-                      type="password"
-                      value={textApiKeyDraft}
-                      placeholder={
-                        aiSaved.has_api_key && !clearTextApiKey
-                          ? t("ai.apiKeySavedPlaceholder")
-                          : t("ai.apiKeyPlaceholder")
-                      }
-                      autoComplete="off"
-                      spellCheck={false}
-                      aria-label={`${t("ai.textTitle")}: ${t("ai.apiKey")}`}
-                      onChange={(event) => {
-                        setTextApiKeyDraft(event.target.value);
-                        setProbeResult(null);
-                      }}
-                    />
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge
-                        variant={
-                          aiSaved.has_api_key && !clearTextApiKey ? "success" : "outline"
-                        }
-                      >
-                        {aiSaved.has_api_key && !clearTextApiKey
-                          ? t("ai.apiKeySaved")
-                          : t("ai.apiKeyNotSet")}
-                      </Badge>
-                      {aiSaved.has_api_key && !clearTextApiKey ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setClearTextApiKey(true);
-                            setTextApiKeyDraft("");
-                            setProbeResult(null);
-                          }}
-                        >
-                          {t("ai.apiKeyClear")}
-                        </Button>
-                      ) : null}
-                      {clearTextApiKey ? (
-                        <span className="text-2xs text-warning">
-                          {t("ai.apiKeyWillClear")}
-                        </span>
-                      ) : textApiKeyDraft.trim() && aiSaved.has_api_key ? (
-                        <span className="text-2xs text-muted-foreground">
-                          {t("ai.apiKeyWillReplace")}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                </SettingRow>
-
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-medium">{t("ai.status")}</span>
-                    <Badge
-                      variant={
-                        probeAi.isPending
-                          ? "outline"
-                          : probeResult?.status === "ready"
-                            ? "success"
-                            : probeResult
-                              ? "warning"
-                              : "outline"
-                      }
-                    >
-                      {probeAi.isPending
-                        ? t("ai.testing")
-                        : probeResult?.status === "ready"
-                          ? t("ai.connected")
-                          : probeResult
-                            ? t("ai.disconnected")
-                            : t("ai.notTested")}
-                    </Badge>
-                    {probeResult?.version ? (
-                      <span className="text-2xs text-muted-foreground">
-                        v{probeResult.version}
-                      </span>
-                    ) : null}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 self-start sm:self-auto"
-                    disabled={probeAi.isPending}
-                    aria-label={`${t("ai.textTitle")}: ${t("ai.testConnection")}`}
-                    onClick={testAiConnection}
-                  >
-                    <RefreshCw className={probeAi.isPending ? "animate-spin" : undefined} />
-                    {t("ai.testConnection")}
-                  </Button>
-                </div>
-
-                {probeResult?.status === "ready" ? (
-                  <p className="text-2xs text-muted-foreground">
-                    {discoveredModels.length > 0
-                      ? t("ai.modelsFound", { count: discoveredModels.length })
-                      : t("ai.noModels")}
-                  </p>
-                ) : probeResult ? (
-                  <div className="space-y-0.5">
-                    <p className="text-2xs text-warning">
-                      {t(`ai.errorReasons.${probeResult.error_code ?? "ai_unreachable"}`)}
-                    </p>
-                    {probeResult.retry_after_seconds ? (
-                      <p className="text-2xs text-muted-foreground">
-                        {t("ai.retryAfter", {
-                          seconds: formatNumber(probeResult.retry_after_seconds, locale),
-                        })}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : (
-                  <p className="text-2xs text-muted-foreground">{t("ai.testHint")}</p>
-                )}
-              </div>
-
-              <div className="space-y-4 rounded-lg border border-border/60 bg-background/40 p-3">
-                <div className="space-y-1">
-                  <h4 className="text-xs font-semibold">{t("ai.visionTitle")}</h4>
-                  <p className="text-2xs leading-relaxed text-muted-foreground">
-                    {t("ai.visionDescription")}
-                  </p>
-                </div>
-
-                <SettingRow
-                  title={t("ai.provider")}
-                  description={t("ai.visionProviderDescription")}
-                >
-                  <SegmentedControl
-                    label={`${t("ai.visionTitle")}: ${t("ai.provider")}`}
-                    value={aiVisionDraft.provider}
-                    onValueChange={(value) => {
-                      setVisionProbeResult(null);
-                      updateAiVisionDraft({ provider: value as AiProviderKind });
-                    }}
-                    options={[
-                      { value: "ollama", label: t("ai.providerOllama") },
-                      { value: "openai_compatible", label: t("ai.providerOpenAI") },
-                    ]}
-                  />
-                </SettingRow>
-
-                <SettingRow
-                  title={t("ai.baseUrl")}
-                  description={t("ai.visionBaseUrlDescription")}
-                >
-                  <Input
-                    value={aiVisionDraft.base_url}
-                    placeholder={visionProviderDefault}
-                    spellCheck={false}
-                    aria-label={`${t("ai.visionTitle")}: ${t("ai.baseUrl")}`}
-                    onChange={(event) => {
-                      const nextUrl = event.target.value;
-                      setVisionProbeResult(null);
-                      updateAiVisionDraft({
-                        base_url: nextUrl,
-                        cost_class: costClassForUrl(aiVisionDraft.cost_class, nextUrl),
-                      });
-                    }}
-                  />
-                </SettingRow>
-
-                <SettingRow
-                  title={t("ai.allowRemote")}
-                  description={t("ai.visionAllowRemoteDescription")}
-                >
-                  <label className="flex items-start gap-2 text-xs leading-relaxed">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 size-3.5 shrink-0 accent-primary"
-                      checked={aiVisionDraft.allow_remote}
-                      onChange={(event) => {
-                        setVisionProbeResult(null);
-                        updateAiVisionDraft({ allow_remote: event.target.checked });
-                      }}
-                    />
-                    <span>{t("ai.visionAllowRemoteLabel")}</span>
-                  </label>
-                </SettingRow>
-
-                <SettingRow
-                  title={t("ai.costClass")}
-                  description={t("ai.costClassDescription")}
-                >
-                  <div className="space-y-1.5">
-                    <SegmentedControl
-                      label={`${t("ai.visionTitle")}: ${t("ai.costClass")}`}
-                      value={aiVisionDraft.cost_class}
-                      onValueChange={(value) =>
-                        updateAiVisionDraft({ cost_class: value as AiCostClass })
-                      }
-                      options={[
-                        { value: "local", label: t("ai.costClassValues.local") },
-                        { value: "free", label: t("ai.costClassValues.free") },
-                        { value: "paid", label: t("ai.costClassValues.paid") },
-                      ]}
-                    />
-                    <p className="text-2xs leading-relaxed text-muted-foreground">
-                      {aiVisionDraft.cost_class === "local"
-                        ? t("ai.costClassHintLocal")
-                        : aiVisionDraft.cost_class === "free"
-                          ? t("ai.costClassHintFree")
-                          : t("ai.costClassHintPaid")}
-                    </p>
-                    {aiVisionDraft.cost_class === "local" &&
-                    !isLoopbackUrl(aiVisionDraft.base_url) ? (
-                      <p className="text-2xs leading-relaxed text-warning">
-                        {t("ai.costClassRemoteHint")}
-                      </p>
-                    ) : null}
-                  </div>
-                </SettingRow>
-
-                <SettingRow
-                  title={t("ai.visionModel")}
-                  description={t("ai.visionModelDescription")}
-                >
-                  <Input
-                    value={aiVisionDraft.model}
-                    placeholder={t("ai.visionModelPlaceholder")}
-                    spellCheck={false}
-                    aria-label={t("ai.visionModel")}
-                    list={
-                      visionDiscoveredModels.length > 0
-                        ? "ai-vision-model-options"
-                        : undefined
-                    }
-                    onChange={(event) =>
-                      updateAiVisionDraft({ model: event.target.value })
-                    }
-                  />
-                  {visionDiscoveredModels.length > 0 ? (
-                    <datalist id="ai-vision-model-options">
-                      {visionDiscoveredModels.map((model) => (
-                        <option
-                          key={model.id}
-                          value={model.id}
-                          label={modelOptionLabel(model)}
-                        />
-                      ))}
-                    </datalist>
-                  ) : null}
-                  <ModelListingHint
-                    models={visionDiscoveredModels}
-                    value={aiVisionDraft.model}
-                  />
-                  <p className="text-2xs leading-relaxed text-muted-foreground">
-                    {aiVisionDraft.model.trim()
-                      ? t("ai.visionModelEnabled")
-                      : t("ai.visionModelDisabled")}
-                  </p>
-                </SettingRow>
-
-                <SettingRow
-                  title={t("ai.apiKey")}
-                  description={t("ai.visionApiKeyDescription")}
-                >
-                  <div className="space-y-1.5">
-                    <Input
-                      type="password"
-                      value={visionApiKeyDraft}
-                      placeholder={
-                        aiVisionSaved.has_api_key && !clearVisionApiKey
-                          ? t("ai.apiKeySavedPlaceholder")
-                          : t("ai.apiKeyPlaceholder")
-                      }
-                      autoComplete="off"
-                      spellCheck={false}
-                      aria-label={`${t("ai.visionTitle")}: ${t("ai.apiKey")}`}
-                      onChange={(event) => {
-                        setVisionApiKeyDraft(event.target.value);
-                        setVisionProbeResult(null);
-                      }}
-                    />
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge
-                        variant={
-                          aiVisionSaved.has_api_key && !clearVisionApiKey
-                            ? "success"
-                            : "outline"
-                        }
-                      >
-                        {aiVisionSaved.has_api_key && !clearVisionApiKey
-                          ? t("ai.apiKeySaved")
-                          : t("ai.apiKeyNotSet")}
-                      </Badge>
-                      {aiVisionSaved.has_api_key && !clearVisionApiKey ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setClearVisionApiKey(true);
-                            setVisionApiKeyDraft("");
-                            setVisionProbeResult(null);
-                          }}
-                        >
-                          {t("ai.apiKeyClear")}
-                        </Button>
-                      ) : null}
-                      {clearVisionApiKey ? (
-                        <span className="text-2xs text-warning">
-                          {t("ai.apiKeyWillClear")}
-                        </span>
-                      ) : visionApiKeyDraft.trim() && aiVisionSaved.has_api_key ? (
-                        <span className="text-2xs text-muted-foreground">
-                          {t("ai.apiKeyWillReplace")}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                </SettingRow>
-
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-medium">{t("ai.status")}</span>
-                    <Badge
-                      variant={
-                        probeVisionAi.isPending
-                          ? "outline"
-                          : visionProbeResult?.status === "ready"
-                            ? "success"
-                            : visionProbeResult
-                              ? "warning"
-                              : "outline"
-                      }
-                    >
-                      {probeVisionAi.isPending
-                        ? t("ai.testing")
-                        : visionProbeResult?.status === "ready"
-                          ? t("ai.connected")
-                          : visionProbeResult
-                            ? t("ai.disconnected")
-                            : t("ai.notTested")}
-                    </Badge>
-                    {visionProbeResult?.version ? (
-                      <span className="text-2xs text-muted-foreground">
-                        v{visionProbeResult.version}
-                      </span>
-                    ) : null}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 self-start sm:self-auto"
-                    disabled={probeVisionAi.isPending}
-                    aria-label={`${t("ai.visionTitle")}: ${t("ai.testConnection")}`}
-                    onClick={testVisionConnection}
-                  >
-                    <RefreshCw
-                      className={probeVisionAi.isPending ? "animate-spin" : undefined}
-                    />
-                    {t("ai.testConnection")}
-                  </Button>
-                </div>
-
-                {visionProbeResult?.status === "ready" ? (
-                  <p className="text-2xs text-muted-foreground">
-                    {visionDiscoveredModels.length > 0
-                      ? t("ai.modelsFound", { count: visionDiscoveredModels.length })
-                      : t("ai.noModels")}
-                  </p>
-                ) : visionProbeResult ? (
-                  <div className="space-y-0.5">
-                    <p className="text-2xs text-warning">
-                      {t(
-                        `ai.errorReasons.${visionProbeResult.error_code ?? "ai_unreachable"}`,
-                      )}
-                    </p>
-                    {visionProbeResult.retry_after_seconds ? (
-                      <p className="text-2xs text-muted-foreground">
-                        {t("ai.retryAfter", {
-                          seconds: formatNumber(
-                            visionProbeResult.retry_after_seconds,
-                            locale,
-                          ),
-                        })}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : (
-                  <p className="text-2xs text-muted-foreground">{t("ai.testHint")}</p>
-                )}
-              </div>
-
-              <SettingRow
-                title={t("ai.requestLimit")}
-                description={t("ai.requestLimitDescription")}
-              >
-                <div className="space-y-1.5">
-                  <Input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    max={10_000}
-                    step={1}
-                    value={aiLimitValue}
-                    aria-label={t("ai.requestLimit")}
-                    aria-invalid={!aiLimitValid}
-                    onChange={(event) => setAiLimitDraft(event.target.value)}
-                  />
-                  <p
-                    className={cn(
-                      "text-2xs leading-relaxed",
-                      aiLimitValid ? "text-muted-foreground" : "text-warning",
-                    )}
-                  >
-                    {!aiLimitValid
-                      ? t("ai.requestLimitInvalid")
-                      : aiUsage
-                        ? aiLimitSaved > 0
-                          ? t("ai.usageLimited", {
-                              used: formatNumber(aiUsage.used, locale),
-                              limit: formatNumber(aiLimitSaved, locale),
-                            })
-                          : t("ai.usageUnlimited", {
-                              used: formatNumber(aiUsage.used, locale),
-                            })
-                        : aiUsageQuery.isError
-                          ? t("ai.usageUnavailable")
-                          : t("ai.usageLoading")}
-                  </p>
-                  {aiUsage && aiUsage.by_task.length > 0 ? (
-                    <div className="space-y-1">
-                      <p className="text-2xs font-medium text-muted-foreground">
-                        {t("ai.usageByTask")}
-                      </p>
-                      <ul className="flex flex-wrap gap-x-3 gap-y-1 text-2xs text-muted-foreground">
-                        {aiUsage.by_task.map((row) => (
-                          <li key={row.task}>
-                            {t("ai.usageTaskCount", {
-                              task: t(aiTaskLabelKey(row.task)),
-                              requests: formatNumber(row.used, locale),
-                            })}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-              </SettingRow>
-
-              {aiUsage && aiUsage.recent.length > 0 ? (
-                <SettingRow
-                  title={t("ai.usageHistory")}
-                  description={t("ai.usageHistoryDescription")}
-                  stacked
-                >
-                  <ul className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/60 bg-background/40 text-xs">
-                    {aiUsage.recent.slice(0, 5).map((entry) => (
-                      <li
-                        key={entry.id}
-                        className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{entry.model}</p>
-                          <p className="truncate text-2xs text-muted-foreground">
-                            {entry.provider} · {formatDateTime(entry.created_at, locale)}
-                          </p>
-                        </div>
-                        <Badge variant={entry.outcome === "success" ? "success" : "warning"}>
-                          {entry.outcome === "success"
-                            ? t("ai.usageSuccess")
-                            : t("ai.usageFailed")}
-                        </Badge>
-                      </li>
-                    ))}
-                  </ul>
-                  <div>
-                    <Button variant="outline" size="sm" onClick={() => setHistoryOpen(true)}>
-                      <History className="size-icon-sm" aria-hidden="true" />
-                      {t("ai.usageHistoryOpen")}
-                    </Button>
-                  </div>
-                </SettingRow>
-              ) : (
-                <SettingRow
-                  title={t("ai.usageHistory")}
-                  description={t("ai.usageHistoryDescription")}
-                  stacked
-                >
-                  <p className="text-2xs text-muted-foreground">
-                    {t("ai.usageHistoryEmpty")}
-                  </p>
-                  <div>
-                    <Button variant="outline" size="sm" onClick={() => setHistoryOpen(true)}>
-                      <History className="size-icon-sm" aria-hidden="true" />
-                      {t("ai.usageHistoryOpen")}
-                    </Button>
-                  </div>
-                </SettingRow>
-              )}
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  disabled={!aiDirty || !aiLimitValid || updateSettings.isPending}
-                  onClick={saveAiProfile}
-                >
-                  {t("ai.saveProfile")}
-                </Button>
-                <span className="text-2xs text-muted-foreground">
-                  {aiDirty
-                    ? t("ai.unsaved")
-                    : aiDraft.model
-                      ? t("ai.enabledHint")
-                      : t("ai.notConfigured")}
-                </span>
-              </div>
-
-              <div className="flex gap-2 rounded-lg border border-border/60 bg-background/50 p-3 text-2xs leading-relaxed text-muted-foreground">
-                <ShieldCheck className="mt-0.5 size-icon-sm shrink-0 text-success" aria-hidden="true" />
-                <p>{t("ai.privacy")}</p>
-              </div>
-            </SettingsSection>
+            <AiSettings />
 
             <SettingsSection id="backups" icon={Archive} title={t("sections.backups")}>
               <div className="space-y-1">
@@ -1679,7 +765,6 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <AiUsageHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
     </div>
   );
 }

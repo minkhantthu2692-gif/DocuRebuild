@@ -1,23 +1,18 @@
 from __future__ import annotations
 
-import ipaddress
 import json
 import logging
 import math
-import socket
 import uuid
 from pathlib import Path
 from typing import Any, Callable, NamedTuple
-from urllib import error as urllib_error
-from urllib import request as urllib_request
-from urllib.parse import urlparse
 
-from pydantic import ValidationError
+from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.db.project_schema import project_db, utc_iso
-from app.schemas.ai import AiProviderKind, AiSuggestionStatus
-from app.schemas.settings import AiProfileSettings
+from app.schemas.ai import AiSuggestionStatus
+from app.services import ai_router
 from app.services import ocr as ocr_service
 from app.services.table_structure import (
     MAX_CELLS as MAX_TABLE_CELLS,
@@ -27,24 +22,7 @@ from app.services.table_structure import (
     MIN_ROWS as MIN_TABLE_ROWS,
 )
 
-# Only local inference servers are supported in this phase. Both are optional
-# and require an explicit connection test and model choice from the user.
-PROVIDERS: tuple[dict[str, str], ...] = (
-    {"id": "ollama", "default_base_url": "http://127.0.0.1:11434"},
-    {"id": "openai_compatible", "default_base_url": "http://127.0.0.1:1234/v1"},
-)
-DEFAULT_BASE_URLS = {item["id"]: item["default_base_url"] for item in PROVIDERS}
-
-MAX_RESPONSE_BYTES = 1_000_000
 MAX_TEXT_LENGTH = 20_000
-PROBE_TIMEOUT = 5.0
-GENERATE_TIMEOUT = 60.0
-USER_AGENT = "DocuRebuild/0.1"
-# A provider's Retry-After header is advisory only. Cap it so a nonsensical value
-# cannot be shown as an absurd wait, and never sleep or retry automatically.
-MAX_RETRY_AFTER_SECONDS = 86_400
-RATE_LIMIT_STATUS = 429
-AUTH_FAILURE_STATUSES = frozenset({401, 403})
 
 logger = logging.getLogger(__name__)
 
@@ -101,42 +79,18 @@ TABLE_PROMPT = (
 MAX_TABLE_CELL_LENGTH = 2_000
 
 
-class _FetchFailure(Exception):
-    def __init__(
-        self,
-        status: str,
-        error_code: str,
-        http_status: int | None = None,
-        retry_after: int | None = None,
-    ) -> None:
-        super().__init__(status)
-        self.status = status
-        self.error_code = error_code
-        self.http_status = http_status
-        self.retry_after = retry_after
-
-
 class Completion(NamedTuple):
     text: str
-    provider: AiProviderKind
+    provider: str
     model: str
     base_url: str
-
-
-class RequestAttempt(NamedTuple):
-    """Metadata for one provider request that actually left the app."""
-
-    provider: AiProviderKind
-    model: str
-    base_url: str
-    error_code: str | None
 
 
 class VisionCompletion(NamedTuple):
     """Validated, normalized regions proposed from one page image."""
 
     regions: list[dict[str, Any]]
-    provider: AiProviderKind
+    provider: str
     model: str
     base_url: str
 
@@ -145,7 +99,7 @@ class EquationCompletion(NamedTuple):
     """LaTeX proposed for one equation crop, still unverified."""
 
     latex: str
-    provider: AiProviderKind
+    provider: str
     model: str
     base_url: str
 
@@ -154,457 +108,39 @@ class TableCompletion(NamedTuple):
     """A rectangular text grid proposed for one table crop, still unverified."""
 
     rows: list[list[str]]
-    provider: AiProviderKind
+    provider: str
     model: str
     base_url: str
 
 
-def report_attempt(
-    callback: Callable[[RequestAttempt], None] | None,
-    attempt: RequestAttempt,
-) -> None:
-    if callback is None:
-        return
-    try:
-        callback(attempt)
-    except Exception:
-        # Usage accounting must never turn a successful proposal into an error
-        # or hide the original provider failure.
-        logger.exception("Could not record local AI usage metadata.")
-
-
-def provider_catalog() -> list[dict[str, str]]:
-    return [dict(item) for item in PROVIDERS]
-
-
-def default_base_url(provider: AiProviderKind) -> str:
-    return DEFAULT_BASE_URLS[provider]
-
-
-def normalize_base_url(
-    provider: AiProviderKind,
-    value: str,
+def _run_routed(
+    session: Session,
+    task: str,
     *,
-    allow_remote: bool = False,
-) -> str:
-    cleaned = (value or "").strip().rstrip("/")
-    if not cleaned:
-        cleaned = default_base_url(provider)
-    parsed = urlparse(cleaned)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise AppError(422, "invalid_ai_settings", "The AI server URL is not valid.")
-    if parsed.username or parsed.password:
-        raise AppError(
-            422,
-            "invalid_ai_settings",
-            "The AI server URL must not contain credentials.",
-        )
-    # Block the well-known cloud metadata endpoints. AI servers are expected to
-    # be local or user-owned, never a metadata service.
-    if (parsed.hostname or "").lower() in {"169.254.169.254", "metadata.google.internal"}:
-        raise AppError(422, "invalid_ai_settings", "That AI server address is not allowed.")
-    if not _is_loopback(parsed.hostname) and not allow_remote:
-        raise AppError(
-            403,
-            "ai_remote_not_allowed",
-            "This server is not on loopback. Enable remote AI consent in Settings first.",
-        )
-    if provider == "openai_compatible" and not cleaned.endswith("/v1"):
-        cleaned = f"{cleaned}/v1"
-    return cleaned
-
-
-def _is_loopback(hostname: str | None) -> bool:
-    host = (hostname or "").strip().lower()
-    if not host:
-        return False
-    if host == "localhost" or host.endswith(".localhost"):
-        return True
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return False
-
-
-def is_loopback_base_url(provider: AiProviderKind, value: str) -> bool:
-    """Report whether a configured base URL resolves to local inference.
-
-    Inference happens on the loopback interface only, so a remote URL can never
-    be classified as local. An empty value uses the provider's local default.
-    """
-    cleaned = (value or "").strip().rstrip("/")
-    if not cleaned:
-        cleaned = default_base_url(provider)
-    try:
-        hostname = urlparse(cleaned).hostname
-    except ValueError:
-        return False
-    return _is_loopback(hostname)
-
-
-def _decode_json(raw: bytes) -> Any:
-    try:
-        return json.loads(raw)
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise _FetchFailure("invalid_response", "ai_invalid_response") from exc
-
-
-def _http_error_code(status: int | None) -> str:
-    """Classify a provider HTTP error without guessing beyond the status code."""
-    if status == RATE_LIMIT_STATUS:
-        return "ai_rate_limited"
-    if status in AUTH_FAILURE_STATUSES:
-        return "ai_auth_failed"
-    return "ai_http_error"
-
-
-def _retry_after_seconds(headers: Any) -> int | None:
-    """Read an advisory integer Retry-After value; HTTP dates are ignored.
-
-    The value is shown to the user, never slept on: DocuRebuild does not retry a
-    provider request on its own, so a rate-limited action still costs nothing
-    more than the request that was already sent.
-    """
-    if headers is None:
-        return None
-    raw = headers.get("Retry-After")
-    if raw is None:
-        return None
-    try:
-        seconds = int(str(raw).strip())
-    except (TypeError, ValueError):
-        return None
-    if seconds < 0:
-        return None
-    return min(seconds, MAX_RETRY_AFTER_SECONDS)
-
-
-def _read_json(
-    url: str,
-    timeout: float,
-    payload: dict[str, Any] | None = None,
-    *,
-    api_key: str | None = None,
-) -> tuple[int, Any]:
-    data = None
-    headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    if payload is not None:
-        data = json.dumps(payload).encode("utf-8")
-        headers["Content-Type"] = "application/json"
-    request = urllib_request.Request(
-        url,
-        data=data,
-        headers=headers,
-        method="POST" if data is not None else "GET",
+    system_prompt: str,
+    user_text: str,
+    image_b64: str | None = None,
+    project_id: str | None = None,
+    page_id: str | None = None,
+    block_id: str | None = None,
+    confirm_paid: bool = False,
+    json_mode: bool = False,
+    validator=None,
+):
+    """Send one request through the single BYOK task router."""
+    return ai_router.complete(
+        session,
+        task,
+        system_prompt=system_prompt,
+        user_text=user_text,
+        image_b64=image_b64,
+        project_id=project_id,
+        page_id=page_id,
+        block_id=block_id,
+        confirm_paid=confirm_paid,
+        json_mode=json_mode,
+        validator=validator,
     )
-    try:
-        with urllib_request.urlopen(request, timeout=timeout) as response:
-            raw = response.read(MAX_RESPONSE_BYTES + 1)
-            if len(raw) > MAX_RESPONSE_BYTES:
-                raise _FetchFailure("invalid_response", "ai_invalid_response")
-            return response.status, _decode_json(raw)
-    except urllib_error.HTTPError as exc:
-        raise _FetchFailure(
-            "http_error",
-            _http_error_code(exc.code),
-            exc.code,
-            _retry_after_seconds(exc.headers),
-        ) from exc
-    except (TimeoutError, socket.timeout) as exc:
-        raise _FetchFailure("timeout", "ai_timeout") from exc
-    except urllib_error.URLError as exc:
-        if isinstance(exc.reason, (TimeoutError, socket.timeout)):
-            raise _FetchFailure("timeout", "ai_timeout") from exc
-        raise _FetchFailure("unreachable", "ai_unreachable") from exc
-    except (OSError, ValueError) as exc:
-        raise _FetchFailure("unreachable", "ai_unreachable") from exc
-
-
-def _model_entry(
-    model_id: str,
-    family: str | None = None,
-    parameter_size: str | None = None,
-) -> dict[str, Any]:
-    return {"id": model_id, "family": family, "parameter_size": parameter_size}
-
-
-def _ollama_models(
-    base_url: str, api_key: str | None = None
-) -> tuple[list[dict[str, Any]], str | None]:
-    _status, body = _read_json(
-        f"{base_url}/api/tags", PROBE_TIMEOUT, api_key=api_key
-    )
-    if not isinstance(body, dict) or not isinstance(body.get("models"), list):
-        raise _FetchFailure("invalid_response", "ai_invalid_response")
-    models: list[dict[str, Any]] = []
-    for item in body["models"]:
-        if not isinstance(item, dict):
-            continue
-        model_id = item.get("model") or item.get("name")
-        if not isinstance(model_id, str) or not model_id.strip():
-            continue
-        details = item.get("details") if isinstance(item.get("details"), dict) else {}
-        family = details.get("family")
-        parameter_size = details.get("parameter_size")
-        models.append(
-            _model_entry(
-                model_id.strip(),
-                family if isinstance(family, str) else None,
-                parameter_size if isinstance(parameter_size, str) else None,
-            )
-        )
-    models.sort(key=lambda entry: entry["id"].lower())
-    version = None
-    try:
-        _version_status, version_body = _read_json(
-            f"{base_url}/api/version", PROBE_TIMEOUT, api_key=api_key
-        )
-        if isinstance(version_body, dict) and isinstance(version_body.get("version"), str):
-            version = version_body["version"]
-    except _FetchFailure:
-        # Version reporting is optional; model discovery is what matters.
-        version = None
-    return models, version
-
-
-def _openai_models(base_url: str, api_key: str | None = None) -> list[dict[str, Any]]:
-    _status, body = _read_json(
-        f"{base_url}/models", PROBE_TIMEOUT, api_key=api_key
-    )
-    if not isinstance(body, dict) or not isinstance(body.get("data"), list):
-        raise _FetchFailure("invalid_response", "ai_invalid_response")
-    models: list[dict[str, Any]] = []
-    for item in body["data"]:
-        if not isinstance(item, dict):
-            continue
-        model_id = item.get("id")
-        if not isinstance(model_id, str) or not model_id.strip():
-            continue
-        models.append(_model_entry(model_id.strip()))
-    models.sort(key=lambda entry: entry["id"].lower())
-    return models
-
-
-def probe_provider(
-    provider: AiProviderKind,
-    base_url: str = "",
-    *,
-    allow_remote: bool = False,
-    api_key: str | None = None,
-) -> dict[str, Any]:
-    """Inspect a local server only when the user asks for a connection test.
-
-    Expected failures are returned as a status instead of raised so Settings can
-    explain what happened without pretending the server is ready.
-    """
-    resolved = normalize_base_url(provider, base_url, allow_remote=allow_remote)
-    try:
-        if provider == "ollama":
-            models, version = _ollama_models(resolved, api_key)
-        else:
-            models = _openai_models(resolved, api_key)
-            version = None
-    except _FetchFailure as exc:
-        return {
-            "status": exc.status,
-            "provider": provider,
-            "base_url": resolved,
-            "models": [],
-            "version": None,
-            "error_code": exc.error_code,
-            "http_status": exc.http_status,
-            "retry_after_seconds": exc.retry_after,
-        }
-    return {
-        "status": "ready",
-        "provider": provider,
-        "base_url": resolved,
-        "models": models,
-        "version": version,
-        "error_code": None,
-        "http_status": None,
-        "retry_after_seconds": None,
-    }
-
-
-def resolve_profile(
-    profile: AiProfileSettings,
-    *,
-    provider: AiProviderKind | None,
-    base_url: str | None,
-    model: str | None,
-) -> tuple[AiProviderKind, str, str]:
-    resolved_provider = provider or profile.provider
-    resolved_model = (model if model is not None else profile.model).strip()
-    if not resolved_model:
-        raise AppError(
-            409,
-            "ai_not_configured",
-            "Choose a local AI model in Settings before using AI assistance.",
-        )
-    try:
-        resolved = AiProfileSettings(
-            provider=resolved_provider,
-            base_url=base_url if base_url is not None else profile.base_url,
-            model=resolved_model,
-            allow_remote=profile.allow_remote,
-        )
-    except ValidationError as exc:
-        raise AppError(422, "invalid_ai_settings", "The AI settings are not valid.") from exc
-    return (
-        resolved.provider,
-        normalize_base_url(
-            resolved.provider,
-            resolved.base_url,
-            allow_remote=resolved.allow_remote,
-        ),
-        resolved.model,
-    )
-
-
-def _chat_completion(
-    provider: AiProviderKind,
-    base_url: str,
-    model: str,
-    text: str,
-    api_key: str | None = None,
-) -> str:
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": text},
-    ]
-    try:
-        if provider == "ollama":
-            _status, body = _read_json(
-                f"{base_url}/api/chat",
-                GENERATE_TIMEOUT,
-                {
-                    "model": model,
-                    "messages": messages,
-                    "stream": False,
-                    "options": {"temperature": 0},
-                },
-                api_key=api_key,
-            )
-        else:
-            _status, body = _read_json(
-                f"{base_url}/chat/completions",
-                GENERATE_TIMEOUT,
-                {
-                    "model": model,
-                    "messages": messages,
-                    "temperature": 0,
-                    "stream": False,
-                },
-                api_key=api_key,
-            )
-    except _FetchFailure as exc:
-        raise AppError(
-            502,
-            exc.error_code,
-            "The configured local AI server could not complete the request.",
-        ) from exc
-
-    cleaned = _assistant_content(body, provider).strip()
-    if not cleaned:
-        raise AppError(
-            502,
-            "ai_empty_response",
-            "The configured local AI server returned no text.",
-        )
-    if len(cleaned) > MAX_TEXT_LENGTH:
-        raise AppError(
-            502,
-            "ai_text_too_long",
-            "The AI response was too long to store as a proposal.",
-        )
-    return cleaned
-
-
-def _assistant_content(body: Any, provider: AiProviderKind) -> str:
-    if provider == "ollama":
-        message = body.get("message") if isinstance(body, dict) else None
-    else:
-        choices = body.get("choices") if isinstance(body, dict) else None
-        first = choices[0] if isinstance(choices, list) and choices else None
-        message = first.get("message") if isinstance(first, dict) else None
-    content = message.get("content") if isinstance(message, dict) else None
-    if not isinstance(content, str):
-        raise AppError(
-            502,
-            "ai_invalid_response",
-            "The configured local AI server returned an unexpected response.",
-        )
-    return content
-
-
-def _vision_completion(
-    provider: AiProviderKind,
-    base_url: str,
-    model: str,
-    image_b64: str,
-    *,
-    prompt: str = VISION_PROMPT,
-    user_text: str = "Analyse the attached document page image.",
-    json_mode: bool = True,
-    api_key: str | None = None,
-) -> str:
-    # The data URL keeps the image in the same request body as the prompt, so
-    # the server never has to fetch anything on its own.
-    image_url = f"data:image/jpeg;base64,{image_b64}"
-    ollama_payload: dict[str, Any] = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": prompt},
-            {
-                "role": "user",
-                "content": user_text,
-                "images": [image_b64],
-            },
-        ],
-        "stream": False,
-        "options": {"temperature": 0},
-    }
-    if json_mode:
-        ollama_payload["format"] = "json"
-    try:
-        if provider == "ollama":
-            _status, body = _read_json(
-                f"{base_url}/api/chat",
-                GENERATE_TIMEOUT,
-                ollama_payload,
-                api_key=api_key,
-            )
-        else:
-            _status, body = _read_json(
-                f"{base_url}/chat/completions",
-                GENERATE_TIMEOUT,
-                {
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": prompt},
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": user_text},
-                                {"type": "image_url", "image_url": {"url": image_url}},
-                            ],
-                        },
-                    ],
-                    "temperature": 0,
-                    "stream": False,
-                },
-                api_key=api_key,
-            )
-    except _FetchFailure as exc:
-        raise AppError(
-            502,
-            exc.error_code,
-            "The configured local AI server could not analyse the image.",
-        ) from exc
-    return _assistant_content(body, provider)
 
 
 def _strip_code_fence(value: str) -> str:
@@ -687,48 +223,28 @@ def parse_region_proposals(content: str) -> list[dict[str, Any]]:
 
 
 def request_region_proposals(
-    profile: AiProfileSettings,
+    session: Session,
     image_b64: str,
     *,
-    provider: AiProviderKind | None = None,
-    base_url: str | None = None,
-    model: str | None = None,
-    api_key: str | None = None,
-    on_attempt: Callable[[RequestAttempt], None] | None = None,
+    project_id: str | None = None,
+    page_id: str | None = None,
+    confirm_paid: bool = False,
 ) -> VisionCompletion:
-    resolved_provider, resolved_url, resolved_model = resolve_profile(
-        profile,
-        provider=provider,
-        base_url=base_url,
-        model=model,
+    reply = _run_routed(
+        session,
+        "region_proposals",
+        system_prompt=VISION_PROMPT,
+        user_text="Analyse the attached document page image.",
+        image_b64=image_b64,
+        project_id=project_id,
+        page_id=page_id,
+        confirm_paid=confirm_paid,
+        json_mode=True,
+        validator=parse_region_proposals,
     )
-    try:
-        content = _vision_completion(
-            resolved_provider,
-            resolved_url,
-            resolved_model,
-            image_b64,
-            api_key=api_key,
-        )
-    except AppError as exc:
-        report_attempt(
-            on_attempt,
-            RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
-        )
-        raise
-    try:
-        regions = parse_region_proposals(content)
-    except AppError as exc:
-        report_attempt(
-            on_attempt,
-            RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
-        )
-        raise
-    report_attempt(
-        on_attempt,
-        RequestAttempt(resolved_provider, resolved_model, resolved_url, None),
+    return VisionCompletion(
+        reply.data, reply.provider, reply.model, reply.base_url
     )
-    return VisionCompletion(regions, resolved_provider, resolved_model, resolved_url)
 
 
 def parse_equation_latex(content: str) -> str:
@@ -755,7 +271,7 @@ def parse_equation_latex(content: str) -> str:
         raise AppError(
             502,
             "ai_equation_empty",
-            "The configured local AI server returned no LaTeX for this equation.",
+            "The configured AI provider returned no LaTeX for this equation.",
         )
     if len(value) > MAX_EQUATION_LENGTH:
         raise AppError(
@@ -767,51 +283,30 @@ def parse_equation_latex(content: str) -> str:
 
 
 def request_equation_latex(
-    profile: AiProfileSettings,
+    session: Session,
     image_b64: str,
     *,
-    provider: AiProviderKind | None = None,
-    base_url: str | None = None,
-    model: str | None = None,
-    api_key: str | None = None,
-    on_attempt: Callable[[RequestAttempt], None] | None = None,
+    project_id: str | None = None,
+    page_id: str | None = None,
+    block_id: str | None = None,
+    confirm_paid: bool = False,
 ) -> EquationCompletion:
-    resolved_provider, resolved_url, resolved_model = resolve_profile(
-        profile,
-        provider=provider,
-        base_url=base_url,
-        model=model,
+    reply = _run_routed(
+        session,
+        "equation_transcription",
+        system_prompt=EQUATION_PROMPT,
+        user_text="Transcribe the equation in the attached crop.",
+        image_b64=image_b64,
+        project_id=project_id,
+        page_id=page_id,
+        block_id=block_id,
+        confirm_paid=confirm_paid,
+        json_mode=False,
+        validator=parse_equation_latex,
     )
-    try:
-        content = _vision_completion(
-            resolved_provider,
-            resolved_url,
-            resolved_model,
-            image_b64,
-            prompt=EQUATION_PROMPT,
-            user_text="Transcribe the equation in the attached crop.",
-            json_mode=False,
-            api_key=api_key,
-        )
-    except AppError as exc:
-        report_attempt(
-            on_attempt,
-            RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
-        )
-        raise
-    try:
-        latex = parse_equation_latex(content)
-    except AppError as exc:
-        report_attempt(
-            on_attempt,
-            RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
-        )
-        raise
-    report_attempt(
-        on_attempt,
-        RequestAttempt(resolved_provider, resolved_model, resolved_url, None),
+    return EquationCompletion(
+        reply.data, reply.provider, reply.model, reply.base_url
     )
-    return EquationCompletion(latex, resolved_provider, resolved_model, resolved_url)
 
 
 def parse_table_grid(content: str) -> list[list[str]]:
@@ -842,7 +337,7 @@ def parse_table_grid(content: str) -> list[list[str]]:
         raise AppError(
             502,
             "ai_table_empty",
-            "The configured local AI server returned no table for this crop.",
+            "The configured AI provider returned no table for this crop.",
         )
     if len(raw) > MAX_TABLE_ROWS:
         raise AppError(
@@ -880,27 +375,27 @@ def parse_table_grid(content: str) -> list[list[str]]:
         row: list[str] = []
         for value in raw_row:
             if value is None:
-                text = ""
+                cell = ""
             elif isinstance(value, str):
-                text = value.strip()
+                cell = value.strip()
             elif isinstance(value, (int, float)) and not isinstance(value, bool):
                 # A number is still text the model read; a bool or a nested value
                 # is not a cell and is refused instead of being stringified.
-                text = str(value)
+                cell = str(value)
             else:
                 raise AppError(
                     502,
                     "ai_invalid_response",
                     "The AI table reply had a cell that was not text.",
                 )
-            if len(text) > MAX_TABLE_CELL_LENGTH:
+            if len(cell) > MAX_TABLE_CELL_LENGTH:
                 raise AppError(
                     502,
                     "ai_table_too_large",
                     "An AI table cell was too long to review.",
                 )
-            total_length += len(text)
-            row.append(text)
+            total_length += len(cell)
+            row.append(cell)
         rows.append(row)
 
     if width is None or width < MIN_TABLE_COLUMNS or len(rows) < MIN_TABLE_ROWS:
@@ -919,91 +414,73 @@ def parse_table_grid(content: str) -> list[list[str]]:
 
 
 def request_table_grid(
-    profile: AiProfileSettings,
+    session: Session,
     image_b64: str,
     *,
-    provider: AiProviderKind | None = None,
-    base_url: str | None = None,
-    model: str | None = None,
-    api_key: str | None = None,
-    on_attempt: Callable[[RequestAttempt], None] | None = None,
+    project_id: str | None = None,
+    page_id: str | None = None,
+    block_id: str | None = None,
+    confirm_paid: bool = False,
 ) -> TableCompletion:
-    resolved_provider, resolved_url, resolved_model = resolve_profile(
-        profile,
-        provider=provider,
-        base_url=base_url,
-        model=model,
+    reply = _run_routed(
+        session,
+        "table_structure",
+        system_prompt=TABLE_PROMPT,
+        user_text="Transcribe the table in the attached crop.",
+        image_b64=image_b64,
+        project_id=project_id,
+        page_id=page_id,
+        block_id=block_id,
+        confirm_paid=confirm_paid,
+        json_mode=True,
+        validator=parse_table_grid,
     )
-    try:
-        content = _vision_completion(
-            resolved_provider,
-            resolved_url,
-            resolved_model,
-            image_b64,
-            prompt=TABLE_PROMPT,
-            user_text="Transcribe the table in the attached crop.",
-            api_key=api_key,
+    return TableCompletion(reply.data, reply.provider, reply.model, reply.base_url)
+
+
+def _validate_cleanup(content: str) -> str:
+    cleaned = content.strip()
+    if not cleaned:
+        raise AppError(
+            502,
+            "ai_empty_response",
+            "The configured AI provider returned no text.",
         )
-    except AppError as exc:
-        report_attempt(
-            on_attempt,
-            RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
+    if len(cleaned) > MAX_TEXT_LENGTH:
+        raise AppError(
+            502,
+            "ai_text_too_long",
+            "The AI response was too long to store as a proposal.",
         )
-        raise
-    try:
-        rows = parse_table_grid(content)
-    except AppError as exc:
-        report_attempt(
-            on_attempt,
-            RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
-        )
-        raise
-    report_attempt(
-        on_attempt,
-        RequestAttempt(resolved_provider, resolved_model, resolved_url, None),
-    )
-    return TableCompletion(rows, resolved_provider, resolved_model, resolved_url)
+    return cleaned
 
 
 def request_cleanup(
-    profile: AiProfileSettings,
+    session: Session,
     text: str,
     *,
-    provider: AiProviderKind | None = None,
-    base_url: str | None = None,
-    model: str | None = None,
-    api_key: str | None = None,
-    on_attempt: Callable[[RequestAttempt], None] | None = None,
+    project_id: str | None = None,
+    page_id: str | None = None,
+    block_id: str | None = None,
+    confirm_paid: bool = False,
 ) -> Completion:
     if not text.strip():
         raise AppError(422, "ocr_block_empty", "This OCR block has no text to review.")
     if len(text) > MAX_TEXT_LENGTH:
         raise AppError(422, "ai_text_too_long", "This OCR block is too long for one AI request.")
-    resolved_provider, resolved_url, resolved_model = resolve_profile(
-        profile,
-        provider=provider,
-        base_url=base_url,
-        model=model,
+    reply = _run_routed(
+        session,
+        "ocr_cleanup",
+        system_prompt=SYSTEM_PROMPT,
+        user_text=text,
+        project_id=project_id,
+        page_id=page_id,
+        block_id=block_id,
+        confirm_paid=confirm_paid,
+        json_mode=False,
+        validator=_validate_cleanup,
     )
-    try:
-        cleaned = _chat_completion(
-            resolved_provider,
-            resolved_url,
-            resolved_model,
-            text,
-            api_key=api_key,
-        )
-    except AppError as exc:
-        report_attempt(
-            on_attempt,
-            RequestAttempt(resolved_provider, resolved_model, resolved_url, exc.code),
-        )
-        raise
-    report_attempt(
-        on_attempt,
-        RequestAttempt(resolved_provider, resolved_model, resolved_url, None),
-    )
-    return Completion(cleaned, resolved_provider, resolved_model, resolved_url)
+    return Completion(reply.data, reply.provider, reply.model, reply.base_url)
 
 
 def _get_page(conn, page_id: str):
@@ -1132,16 +609,13 @@ def list_project_suggestions(
 
 
 def create_cleanup_suggestion(
+    session: Session,
     project_dir: Path,
     page_id: str,
     block_id: str,
-    profile: AiProfileSettings,
     *,
-    provider: AiProviderKind | None = None,
-    base_url: str | None = None,
-    model: str | None = None,
-    api_key: str | None = None,
-    on_attempt: Callable[[RequestAttempt], None] | None = None,
+    project_id: str | None = None,
+    confirm_paid: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     with project_db(project_dir) as conn:
         _page, block, _run = _load_block(conn, page_id, block_id)
@@ -1150,13 +624,12 @@ def create_cleanup_suggestion(
 
     # The network call happens outside the database transaction.
     completion = request_cleanup(
-        profile,
+        session,
         original,
-        provider=provider,
-        base_url=base_url,
-        model=model,
-        api_key=api_key,
-        on_attempt=on_attempt,
+        project_id=project_id,
+        page_id=page_id,
+        block_id=block_id,
+        confirm_paid=confirm_paid,
     )
 
     now = utc_iso()

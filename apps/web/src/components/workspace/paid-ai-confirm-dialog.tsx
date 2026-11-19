@@ -1,8 +1,8 @@
-import { ShieldAlert } from "lucide-react";
+﻿import { ShieldAlert } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { AiProfileSettings } from "@docurebuild/shared-types";
+import type { AiTaskStatus } from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,15 +17,15 @@ import {
 import { needsPaidApproval } from "@/lib/ai-cost";
 
 interface PendingApproval {
-  profile: AiProfileSettings;
+  status: AiTaskStatus;
   resolve: (approved: boolean) => void;
 }
 
 /**
- * Ask once, per action, before a paid AI profile sends anything.
+ * Ask once, per action, before a paid AI route sends anything.
  *
- * The hook resolves to `true` immediately for local and free profiles. Only a
- * remote profile that is not declared free opens the dialog, so the user always
+ * The hook resolves to `true` immediately for local and free routes. Only a
+ * remote route that is not declared free opens the dialog, so the user always
  * knows which request may cost money. The backend enforces the same rule.
  */
 export function usePaidAiGuard() {
@@ -42,10 +42,10 @@ export function usePaidAiGuard() {
   }, []);
 
   const requestApproval = useCallback(
-    (profile: AiProfileSettings | undefined): Promise<boolean> => {
-      if (!needsPaidApproval(profile)) return Promise.resolve(true);
+    (status: AiTaskStatus | undefined): Promise<boolean> => {
+      if (!needsPaidApproval(status)) return Promise.resolve(true);
       return new Promise<boolean>((resolve) => {
-        const entry = { profile: profile as AiProfileSettings, resolve };
+        const entry = { status: status as AiTaskStatus, resolve };
         pendingRef.current = entry;
         setPending(entry);
       });
@@ -74,11 +74,18 @@ export function usePaidAiGuard() {
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="warning">{t("paidAi.badge")}</Badge>
               <span className="min-w-0 break-words">
-                {pending.profile.model || t("paidAi.unknownModel")}
+                {pending.status.model_display_name ||
+                  pending.status.model_id ||
+                  t("paidAi.unknownModel")}
               </span>
             </div>
+            {pending.status.connection_name ? (
+              <p className="text-2xs text-muted-foreground">
+                {pending.status.connection_name}
+              </p>
+            ) : null}
             <p className="break-all text-2xs text-muted-foreground">
-              {pending.profile.base_url || t("paidAi.defaultServer")}
+              {pending.status.base_url || t("paidAi.defaultServer")}
             </p>
             <p className="text-2xs leading-relaxed text-muted-foreground">
               {t("paidAi.costNote")}

@@ -1,0 +1,67 @@
+name: Bug report
+description: Report a reproducible problem in DocuRebuild
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Do not include API keys, private documents,
+        screenshots of private pages, database files or anything from your local data
+        folder. A redacted description is enough.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the actual result and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: DocuRebuild version or commit
+      placeholder: "0.1.0 or a commit hash"
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Project import or storage
+        - OCR or region extraction
+        - AI providers or task routing
+        - Document editor or export
+        - Backup, restore or version history
+        - Settings, appearance or language
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "OS, browser, Node and Python versions, local or remote AI provider (no keys)"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs (redacted)
+      description: Remove credentials, file paths that identify you and document text.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I removed API keys, private documents and personal data from this report.
+          required: true
+        - label: I searched existing issues before opening this one.
+          required: true

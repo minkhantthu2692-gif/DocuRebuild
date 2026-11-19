@@ -3,15 +3,14 @@ from __future__ import annotations
 import base64
 import io
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from PIL import Image
+from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.storage import resolve_within
 from app.db.project_schema import project_db
-from app.schemas.ai import AiProviderKind
-from app.schemas.settings import AiProfileSettings
 from app.services import ai as ai_service
 from app.services.regions import (
     DEDUPE_IOU,
@@ -45,15 +44,12 @@ def _encode_image(path: Path) -> str:
 
 
 def propose_regions(
+    session: Session,
     project_dir: Path,
     page_id: str,
-    profile: AiProfileSettings,
     *,
-    provider: AiProviderKind | None = None,
-    base_url: str | None = None,
-    model: str | None = None,
-    api_key: str | None = None,
-    on_attempt: Callable[[ai_service.RequestAttempt], None] | None = None,
+    project_id: str | None = None,
+    confirm_paid: bool = False,
 ) -> dict[str, Any]:
     """Ask the configured vision model for reviewable region proposals.
 
@@ -104,13 +100,11 @@ def propose_regions(
 
     image_b64 = _encode_image(image_path)
     completion = ai_service.request_region_proposals(
-        profile,
+        session,
         image_b64,
-        provider=provider,
-        base_url=base_url,
-        model=model,
-        api_key=api_key,
-        on_attempt=on_attempt,
+        project_id=project_id,
+        page_id=page_id,
+        confirm_paid=confirm_paid,
     )
 
     proposals: list[dict[str, Any]] = []
@@ -173,15 +167,12 @@ def element_context(project_dir: Path, element_id: str) -> dict[str, str]:
 
 
 def transcribe_equation(
+    session: Session,
     project_dir: Path,
     element_id: str,
-    profile: AiProfileSettings,
     *,
-    provider: AiProviderKind | None = None,
-    base_url: str | None = None,
-    model: str | None = None,
-    api_key: str | None = None,
-    on_attempt: Callable[[ai_service.RequestAttempt], None] | None = None,
+    project_id: str | None = None,
+    confirm_paid: bool = False,
 ) -> dict[str, Any]:
     """Ask the configured vision model for the LaTeX of one equation crop.
 
@@ -222,13 +213,12 @@ def transcribe_equation(
 
     image_b64 = _encode_image(image_path)
     completion = ai_service.request_equation_latex(
-        profile,
+        session,
         image_b64,
-        provider=provider,
-        base_url=base_url,
-        model=model,
-        api_key=api_key,
-        on_attempt=on_attempt,
+        project_id=project_id,
+        page_id=page_id,
+        block_id=None,
+        confirm_paid=confirm_paid,
     )
     return {
         "element_id": element_id,
@@ -241,15 +231,12 @@ def transcribe_equation(
 
 
 def transcribe_table(
+    session: Session,
     project_dir: Path,
     element_id: str,
-    profile: AiProfileSettings,
     *,
-    provider: AiProviderKind | None = None,
-    base_url: str | None = None,
-    model: str | None = None,
-    api_key: str | None = None,
-    on_attempt: Callable[[ai_service.RequestAttempt], None] | None = None,
+    project_id: str | None = None,
+    confirm_paid: bool = False,
 ) -> dict[str, Any]:
     """Ask the vision model to read one saved table crop into a reviewable grid.
 
@@ -302,13 +289,12 @@ def transcribe_table(
 
     image_b64 = _encode_image(image_path)
     completion = ai_service.request_table_grid(
-        profile,
+        session,
         image_b64,
-        provider=provider,
-        base_url=base_url,
-        model=model,
-        api_key=api_key,
-        on_attempt=on_attempt,
+        project_id=project_id,
+        page_id=page_id,
+        block_id=None,
+        confirm_paid=confirm_paid,
     )
 
     cells: list[dict[str, Any]] = []

@@ -56,7 +56,6 @@ export interface AppSettings {
   appearance: AppearanceSettings;
   editor: EditorSettings;
   export: ExportSettings;
-  ai: AiSettings;
   backups: BackupSettings;
 }
 
@@ -428,71 +427,303 @@ export interface PageTableProposals {
 /*                                    AI                                      */
 /* -------------------------------------------------------------------------- */
 
-export type AiProviderKind = "ollama" | "openai_compatible";
+/** Provider id from the backend registry; the catalog is discovered at runtime. */
+export type AiProviderId = string;
 
-export type AiProbeStatus =
+export type AiCostClass = "local" | "free" | "paid";
+export type AiRotationStrategy =
+  | "priority"
+  | "failover"
+  | "round_robin"
+  | "least_recent"
+  | "least_usage";
+
+export type AiConnectionStatus =
+  | "connected"
+  | "untested"
+  | "configuration_required"
+  | "auth_failed"
+  | "rate_limited"
+  | "quota_exhausted"
+  | "unavailable"
+  | "error"
+  | "disabled";
+
+export type AiKeyStatus =
   | "ready"
-  | "unreachable"
-  | "timeout"
-  | "http_error"
-  | "invalid_response";
+  | "disabled"
+  | "auth_failed"
+  | "rate_limited"
+  | "error";
 
-export type AiProbeErrorCode =
-  | "ai_unreachable"
-  | "ai_timeout"
-  | "ai_http_error"
-  | "ai_invalid_response"
-  | "ai_rate_limited"
-  | "ai_auth_failed";
+export type AiTaskCapability = "text" | "vision";
 
-export type AiTask = "ocr_cleanup";
+/** Every task the unified router can route. */
+export type AiTaskId =
+  | "ocr_cleanup"
+  | "region_proposals"
+  | "equation_transcription"
+  | "table_structure";
+
+/** "default" is the fallback route used by tasks without their own route. */
+export type AiRouteTask = AiTaskId | "default";
+
+export type AiUsageTask = AiTaskId;
 export type AiSuggestionStatus = "pending" | "accepted" | "rejected";
 export type AiUsageOutcome = "success" | "error";
-/** User-declared cost class; only "paid" requests need per-action approval. */
-export type AiCostClass = "local" | "free" | "paid";
+export type AiTask = "ocr_cleanup";
 
-export interface AiProvider {
-  id: AiProviderKind;
+export interface AiProviderInfo {
+  id: AiProviderId;
+  name: string;
+  kind: string;
   default_base_url: string;
+  requires_base_url: boolean;
+  supports_model_discovery: boolean;
+  allows_manual_models: boolean;
+  local_default: boolean;
+  requires_api_key: boolean;
+  docs_url: string | null;
 }
 
 export interface AiProvidersResponse {
-  providers: AiProvider[];
+  providers: AiProviderInfo[];
 }
 
-export interface AiProbeRequest {
-  provider: AiProviderKind;
-  base_url?: string;
-  allow_remote?: boolean;
-  /** Write-only key for testing an unsaved value. */
-  api_key?: string;
-  /** Reuse the stored key for this task when `api_key` is omitted. */
-  task?: "text" | "vision";
+/** A credential stored in the encrypted local vault. The secret is never returned. */
+export interface AiKey {
+  id: string;
+  label: string;
+  enabled: boolean;
+  priority: number;
+  request_limit: number;
+  auth_failed: boolean;
+  status: AiKeyStatus;
+  has_secret: boolean;
+  last_used_at: string | null;
+  last_success_at: string | null;
+  last_error_at: string | null;
+  last_error_code: string | null;
+  cooldown_until: string | null;
+  created_at: string | null;
 }
 
+export interface AiKeyCreate {
+  label?: string;
+  /** Write-only. Never echoed back in any response. */
+  api_key: string;
+  priority?: number;
+  enabled?: boolean;
+  request_limit?: number;
+}
+
+export interface AiKeyPatch {
+  label?: string;
+  priority?: number;
+  enabled?: boolean;
+  request_limit?: number;
+  auth_failed?: boolean;
+}
+
+/** One model discovered from a provider with the user's own credential. */
 export interface AiModel {
   id: string;
+  connection_id: string;
+  model_id: string;
+  display_name: string | null;
   family: string | null;
-  parameter_size: string | null;
+  context_window: number | null;
+  input_modalities: string[] | null;
+  output_modalities: string[] | null;
+  supports_tools: boolean | null;
+  supports_streaming: boolean | null;
+  pricing: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+  source: "discovered" | "manual";
+  available: boolean;
+  favorite: boolean;
+  last_used_at: string | null;
+  discovered_at: string | null;
 }
 
-export interface AiProbeResponse {
-  status: AiProbeStatus;
-  provider: AiProviderKind;
+export interface AiManualModelCreate {
+  model_id: string;
+  display_name?: string;
+  context_window?: number;
+  input_modalities?: string[];
+  output_modalities?: string[];
+}
+
+export interface AiModelFavoriteInput {
+  model_id: string;
+  favorite: boolean;
+}
+
+export interface AiConnection {
+  id: string;
+  provider: AiProviderId;
+  provider_name: string;
+  provider_kind: string;
+  name: string;
   base_url: string;
-  models: AiModel[];
-  version: string | null;
-  error_code: AiProbeErrorCode | null;
-  http_status: number | null;
-  /** Advisory Retry-After seconds from the provider, capped for display. */
+  allow_remote: boolean;
+  cost_class: AiCostClass;
+  enabled: boolean;
+  rotation_strategy: AiRotationStrategy;
+  max_attempts: number;
+  request_limit: number;
+  monthly_budget_usd: number | null;
+  settings: Record<string, unknown>;
+  status: AiConnectionStatus;
+  last_error_code: string | null;
+  last_http_status: number | null;
   retry_after_seconds: number | null;
+  last_checked_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  key_count: number;
+  enabled_key_count: number;
+  model_count: number;
+  requires_api_key: boolean;
+}
+
+export interface AiConnectionDetail extends AiConnection {
+  keys: AiKey[];
+}
+
+export interface AiConnectionsResponse {
+  connections: AiConnection[];
+}
+
+export interface AiConnectionCreate {
+  provider: AiProviderId;
+  name?: string;
+  base_url?: string;
+  allow_remote?: boolean;
+  cost_class?: AiCostClass;
+  enabled?: boolean;
+  rotation_strategy?: AiRotationStrategy;
+  max_attempts?: number;
+  request_limit?: number;
+  monthly_budget_usd?: number | null;
+}
+
+export interface AiConnectionPatch {
+  name?: string;
+  base_url?: string;
+  allow_remote?: boolean;
+  cost_class?: AiCostClass;
+  enabled?: boolean;
+  rotation_strategy?: AiRotationStrategy;
+  max_attempts?: number;
+  request_limit?: number;
+  monthly_budget_usd?: number | null;
+}
+
+export interface AiConnectionTestRequest {
+  /** Write-only key supplied only for this test. */
+  api_key?: string;
+}
+
+export interface AiConnectionTestResponse {
+  connection_id: string;
+  status: AiConnectionStatus;
+  provider: AiProviderId;
+  base_url: string;
+  models_found: number;
+  cached: boolean;
+  version: string | null;
+  error_code: string | null;
+  http_status: number | null;
+  retry_after_seconds: number | null;
+  last_checked_at: string | null;
+  message: string | null;
+}
+
+/** One routed task: its connection, model, fallback and warnings. */
+export interface AiTaskRoute {
+  task: AiRouteTask;
+  connection_id: string | null;
+  connection_name: string | null;
+  connection_status: string | null;
+  cost_class: AiCostClass | null;
+  model_id: string | null;
+  model_display_name: string | null;
+  model_source: string | null;
+  capability: AiTaskCapability;
+  fallback_connection_id: string | null;
+  fallback_connection_name: string | null;
+  fallback_model_id: string | null;
+  temperature: number;
+  timeout_seconds: number;
+  request_limit: number;
+  configured: boolean;
+  warnings: string[];
+  updated_at: string | null;
+}
+
+export interface AiRoutesResponse {
+  routes: AiTaskRoute[];
+  default_model: string | null;
+}
+
+export interface AiRouteUpdate {
+  connection_id?: string | null;
+  model_id?: string | null;
+  fallback_connection_id?: string | null;
+  fallback_model_id?: string | null;
+  temperature?: number;
+  timeout_seconds?: number;
+  request_limit?: number;
+}
+
+/** Minimal per-task state used to enable workspace actions and explain gaps. */
+export interface AiTaskStatus {
+  configured: boolean;
+  connection_id: string | null;
+  connection_name: string | null;
+  base_url: string | null;
+  model_id: string | null;
+  model_display_name: string | null;
+  cost_class: AiCostClass | null;
+  warnings: string[];
+}
+
+export interface AiTasksResponse {
+  tasks: Partial<Record<AiTaskId, AiTaskStatus>>;
+}
+
+export interface AiPreferences {
+  /** Rolling 24-hour request cap. Zero means unlimited. */
+  daily_request_limit: number;
+  /** Verified monthly spend cap in USD. Null means no cap. */
+  monthly_budget_usd: number | null;
+}
+
+export interface AiPreferencesPatch {
+  daily_request_limit?: number;
+  monthly_budget_usd?: number | null;
+}
+
+export interface AiOverview {
+  connection_count: number;
+  enabled_connection_count: number;
+  key_count: number;
+  model_count: number;
+  configured_task_count: number;
+  task_count: number;
+  preferences: AiPreferences;
+}
+
+export interface AiMigrationStatus {
+  needed: boolean;
+  migrated: boolean;
+  completed_at: string | null;
+  detail: string | null;
 }
 
 export interface AiSuggestionCreate {
-  provider?: AiProviderKind;
-  base_url?: string;
-  model?: string;
-  /** Required before a profile marked as paid may generate a proposal. */
+  /** Required before a connection marked as paid may generate a proposal. */
   confirm_paid?: boolean;
 }
 
@@ -505,7 +736,7 @@ export interface AiSuggestion {
   task: AiTask;
   original_text: string;
   proposed_text: string;
-  provider: AiProviderKind;
+  provider: AiProviderId;
   model: string;
   base_url: string;
   status: AiSuggestionStatus;
@@ -556,6 +787,16 @@ export interface AiUsageEntry {
   project_id: string | null;
   page_id: string | null;
   block_id: string | null;
+  connection_id: string | null;
+  connection_name: string | null;
+  key_id: string | null;
+  key_label: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
+  estimated_cost_usd: number | null;
+  cost_source: string | null;
+  duration_ms: number | null;
   created_at: string;
 }
 
@@ -569,6 +810,17 @@ export interface AiUsageTaskCount {
   used: number;
 }
 
+export interface AiUsageConnectionCount {
+  connection_id: string;
+  connection_name: string;
+  provider: string;
+  used: number;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_usd: number;
+  unpriced_requests: number;
+}
+
 export interface AiUsageResponse {
   window_hours: number;
   request_limit: number;
@@ -576,17 +828,17 @@ export interface AiUsageResponse {
   remaining: number | null;
   successful: number;
   failed: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  unpriced_requests: number;
+  monthly_cost_usd: number;
   /** Attempts per task in the rolling window. Empty before the first attempt. */
   by_task: AiUsageTaskCount[];
+  by_connection: AiUsageConnectionCount[];
   recent: AiUsageEntry[];
 }
-
-/** Tasks that can appear in the local usage ledger. */
-export type AiUsageTask =
-  | "ocr_cleanup"
-  | "region_proposals"
-  | "equation_transcription"
-  | "table_structure";
 
 export interface AiUsageHistoryEntry extends AiUsageEntry {
   /** Null when the project was deleted or the attempt had no project. */
@@ -600,47 +852,64 @@ export interface AiUsageHistoryResponse {
   offset: number;
 }
 
-/** One local AI server profile. Empty model means AI actions stay disabled. */
-export interface AiProfileSettings {
-  provider: AiProviderKind;
-  base_url: string;
+/** Optional per-request paid approval for the routed region task. */
+export interface AiRegionProposalsRequest {
+  confirm_paid?: boolean;
+}
+
+/** Vision output is always a proposal: nothing is saved until the user accepts it. */
+export interface AiRegionProposalsResponse {
+  status: "ready";
+  page_width: number;
+  page_height: number;
+  provider: AiProviderId;
   model: string;
-  allow_remote: boolean;
-  /**
-   * "local" is loopback inference, "free" is a remote free tier and "paid" is
-   * gated by an explicit confirmation for each AI action.
-   */
-  cost_class: AiCostClass;
-  /** True when an encrypted key is stored for this task; the key is never sent. */
-  has_api_key: boolean;
+  proposals: RegionProposal[];
 }
 
-/** Patch shape for one task profile; `api_key` is write-only. */
-export interface AiProfilePatch {
-  provider?: AiProviderKind;
-  base_url?: string;
-  model?: string;
-  allow_remote?: boolean;
-  cost_class?: AiCostClass;
-  api_key?: string;
-  clear_api_key?: boolean;
+/** Optional per-request paid approval for one equation transcription. */
+export interface AiEquationRequest {
+  confirm_paid?: boolean;
 }
 
-export interface AiSettingsPatch {
-  text?: AiProfilePatch;
-  vision?: AiProfilePatch;
-  request_limit?: number;
+/**
+ * LaTeX proposed for one equation crop. It is unverified model output: the user
+ * must review the local preview before it becomes document content.
+ */
+export interface AiEquationResponse {
+  element_id: string;
+  page_id: string;
+  latex: string;
+  provider: AiProviderId;
+  model: string;
+  base_url: string;
 }
 
-export interface AiSettings {
-  text: AiProfileSettings;
-  /**
-   * Image analysis is a separate task profile: it can use its own local server,
-   * model and remote consent. An empty model keeps image AI disabled.
-   */
-  vision: AiProfileSettings;
-  /** Rolling 24-hour request cap. Zero means unlimited. */
-  request_limit: number;
+/** Optional per-request paid approval for one AI table read. */
+export interface AiTableRequest {
+  confirm_paid?: boolean;
+}
+
+/**
+ * A table grid read from one saved crop. It is unverified model output with no
+ * confidence scores, shaped like a local table proposal so the same review grid
+ * can show it and require acknowledgement before insertion.
+ */
+export interface AiTableResponse {
+  element_id: string;
+  page_id: string;
+  provider: AiProviderId;
+  model: string;
+  base_url: string;
+  page_width: number | null;
+  page_height: number | null;
+  rows: number;
+  columns: number;
+  uncertain_cells: number;
+  empty_cells: number;
+  warnings: TableProposalWarning[];
+  source: TableSourceBox;
+  cells: TableProposalCell[];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -718,78 +987,6 @@ export interface RegionProposals {
   ocr_run_id: string | null;
   engine: string | null;
   proposals: RegionProposal[];
-}
-
-/** Optional per-request overrides for the saved vision connection. */
-export interface AiRegionProposalsRequest {
-  provider?: AiProviderKind;
-  base_url?: string;
-  model?: string;
-  /** Required before a profile marked as paid may analyse the page. */
-  confirm_paid?: boolean;
-}
-
-/** Vision output is always a proposal: nothing is saved until the user accepts it. */
-export interface AiRegionProposalsResponse {
-  status: "ready";
-  page_width: number;
-  page_height: number;
-  provider: AiProviderKind;
-  model: string;
-  proposals: RegionProposal[];
-}
-
-/** Optional per-request overrides for one equation transcription. */
-export interface AiEquationRequest {
-  provider?: AiProviderKind;
-  base_url?: string;
-  model?: string;
-  /** Required before a profile marked as paid may transcribe the crop. */
-  confirm_paid?: boolean;
-}
-
-/**
- * LaTeX proposed for one equation crop. It is unverified model output: the user
- * must review the local preview before it becomes document content.
- */
-export interface AiEquationResponse {
-  element_id: string;
-  page_id: string;
-  latex: string;
-  provider: AiProviderKind;
-  model: string;
-  base_url: string;
-}
-
-/** Optional per-request overrides for one AI table read. */
-export interface AiTableRequest {
-  provider?: AiProviderKind;
-  base_url?: string;
-  model?: string;
-  /** Required before a profile marked as paid may read the crop. */
-  confirm_paid?: boolean;
-}
-
-/**
- * A table grid read from one saved crop. It is unverified model output with no
- * confidence scores, shaped like a local table proposal so the same review grid
- * can show it and require acknowledgement before insertion.
- */
-export interface AiTableResponse {
-  element_id: string;
-  page_id: string;
-  provider: AiProviderKind;
-  model: string;
-  base_url: string;
-  page_width: number | null;
-  page_height: number | null;
-  rows: number;
-  columns: number;
-  uncertain_cells: number;
-  empty_cells: number;
-  warnings: TableProposalWarning[];
-  source: TableSourceBox;
-  cells: TableProposalCell[];
 }
 
 /* -------------------------------------------------------------------------- */

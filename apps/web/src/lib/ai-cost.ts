@@ -1,4 +1,4 @@
-import type { AiProfileSettings } from "@docurebuild/shared-types";
+﻿import type { AiCostClass } from "@docurebuild/shared-types";
 
 /**
  * Report whether a configured AI server runs on this device.
@@ -23,16 +23,20 @@ export function isLoopbackUrl(value: string | null | undefined): boolean {
   }
 }
 
+export interface AiCostTarget {
+  base_url?: string | null;
+  cost_class?: AiCostClass | null;
+}
+
 /**
- * A remote profile needs approval unless the user declared a free tier.
+ * A remote connection needs approval unless the user declared a free tier.
  *
- * "local" never applies to a remote host: the backend coerces that combination
- * to paid, so the UI must ask before sending the request.
+ * The task router resolves the effective cost class, so the UI only has to look
+ * at it. "local" never applies to a remote host: the backend coerces that
+ * combination to paid, so the UI must ask before sending the request.
  */
-export function needsPaidApproval(
-  profile: Pick<AiProfileSettings, "base_url" | "cost_class"> | undefined,
-): boolean {
-  if (!profile) return false;
-  if (isLoopbackUrl(profile.base_url)) return false;
-  return profile.cost_class !== "free";
+export function needsPaidApproval(target: AiCostTarget | undefined): boolean {
+  if (!target) return false;
+  if (isLoopbackUrl(target.base_url)) return false;
+  return target.cost_class !== "free";
 }

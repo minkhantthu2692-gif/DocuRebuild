@@ -1,0 +1,46 @@
+name: Feature request
+description: Suggest a capability or improvement
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behaviour you would like. Note any manual alternative that must keep working.
+    validations:
+      required: true
+  - type: dropdown
+    id: principles
+    attributes:
+      label: Which product principle does this affect?
+      options:
+        - Local-first storage
+        - Free usage first
+        - User control
+        - Accuracy and review
+        - Manual plus AI
+        - Modularity
+        - Accessibility or internationalization
+        - Other
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing workflows, other tools or a smaller change that could solve the same problem.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: This request does not require uploading private user data to a new service.
+          required: true
+        - label: I understand that AI output remains a proposal until reviewed.
+          required: true

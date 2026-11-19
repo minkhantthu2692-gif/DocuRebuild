@@ -51,14 +51,18 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.artwork` | Deterministic locator for large ink clusters that the OCR text layout does not explain on a photographed page: grayscale grid, text masking, cluster joining and size filters; returns boxes only |
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout, raster-page ink, and embedded PDF raster-image placement and vector-drawing geometry |
-| `services.settings` | Persisted appearance, language, editor, AI text and vision task profiles and request-limit settings |
+| `services.settings` | Persisted appearance, language, editor, export and backup settings, plus global AI limits (`ai_preferences`) |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness |
 | `services.table_structure` | Reviewable table proposals: word-box row clustering and whitespace column bands, plus exact merged-cell grids from a PDF's drawn rules; cell text/confidence/flags/alignment, page-level grouping of vertically contiguous row blocks, vector/OCR de-duplication, source pixel box, size caps and typed refusal errors |
 | `app.ocr_benchmark` | Local CER/WER measurement against checked reference transcripts, by running the OCR adapter or scoring a stored transcript; validates fixtures and never uploads |
-| `services.ai` | Local provider catalog, URL and remote-consent validation, Ollama/OpenAI-compatible probe and model discovery, OCR cleanup proposals, vision region and equation-crop requests, LaTeX reply reduction, table-grid replies, listing and review decisions |
-| `services.ai_vision` | Page and region image encoding, normalized-to-source rectangle mapping and filtering for optional vision region proposals, one-crop equation transcription and one-crop table reading |
-| `services.ai_usage` | Local AI request metadata, rolling-window request counting and usage summaries |
-| `services.ai_secrets` | Encrypted, write-only per-task provider keys in the local data folder, with a generated master key; never returns the plain value |
+| `services.ai_providers` | Modular provider registry and adapters (Ollama, OpenAI-compatible and 12 cloud APIs), model discovery, model metadata/pricing normalization, URL/HTTPS/SSRF and remote-consent validation, bounded requests and typed provider errors |
+| `services.ai_store` | Connection, key, model and task-route persistence; capability checks; task status; encrypted-secret wiring and connection health state |
+| `services.ai_router` | Unified task router: route/fallback selection, key ordering and rotation, cooldowns, capability checks, paid approval, global/task/connection limits, cost estimation, usage recording and optional reply validation |
+| `services.ai` | Reviewable OCR cleanup proposals, suggestion listing and accept/reject decisions; delegates all provider work to the router |
+| `services.ai_vision` | Page and region image encoding, normalized-to-source rectangle mapping and filtering, one-crop equation transcription and one-crop table reading through routed tasks |
+| `services.ai_usage` | Metadata-only AI request ledger: rolling counts, token totals, verified cost, task/connection breakdowns and history |
+| `services.ai_secrets` | Encrypted, write-only arbitrary secret IDs (`connkey:<uuid>`) in the local data folder, with a generated master key; never returns the plain value |
+| `services.ai_migrate` | One-time, explicit migration of legacy text/vision profiles and encrypted keys into the connection platform, keeping the old JSON as a backup |
 | `app.scheduled_backup` | Optional one-pass CLI entry point for external schedulers: creates due automatic copies, respects saved preferences and reports failures |
 | `api.routes.*` | HTTP surface (`/api/...`) |
 
@@ -67,8 +71,13 @@ to the same local API; the API is not intended to be exposed publicly.
 The application database (`app.db`) contains only global state:
 
 - `projects` — id, name, description, directory, timestamps
-- `app_settings` - key/value JSON (appearance, language, editor, export layout, local AI text and vision profiles, request limit and local backup preferences)
-- `ai_usage` — local AI request metadata: provider, model, task, outcome, error code, project/page/block ids and timestamp; never document text
+- `app_settings` - key/value JSON (appearance, language, editor, export layout, backup preferences and global `ai_preferences`: daily request limit and monthly budget)
+- `ai_connections` — named provider connections: provider, endpoint, remote consent, cost class, enabled state, rotation strategy, attempt cap, request/spend limits and health state
+- `ai_connection_keys` — key metadata per connection: label, priority, limits, enabled/authentication/cooldown state; the secret itself lives only in the encrypted vault
+- `ai_models` — discovered or manually entered models per connection, with normalized modality, context, tool/streaming and pricing metadata; discovery is the source of truth, not a shipped catalog
+- `ai_model_preferences` — per-model favorite flag and last-use metadata
+- `ai_task_routes` — one row per task (`default`, `ocr_cleanup`, `region_proposals`, `equation_transcription`, `table_structure`) with connection/model, fallback, temperature, timeout and request limit
+- `ai_usage` — local AI request metadata: provider, model, task, connection/key, outcome, error code, reported tokens, verified cost/source, project/page/block ids and timestamp; never document text or replies
 - `schema_migrations` — created by Alembic
 
 Each project owns a portable folder and its own `project.db`:
@@ -166,9 +175,32 @@ GET    /api/health
 GET    /api/meta
 GET    /api/ocr/capabilities
 GET    /api/ai/providers
+GET    /api/ai/connections
+POST   /api/ai/connections
+GET    /api/ai/connections/{connection_id}
+PATCH  /api/ai/connections/{connection_id}
+DELETE /api/ai/connections/{connection_id}
+POST   /api/ai/connections/{connection_id}/test
+GET    /api/ai/connections/{connection_id}/keys
+POST   /api/ai/connections/{connection_id}/keys
+PATCH  /api/ai/connections/{connection_id}/keys/{key_id}
+DELETE /api/ai/connections/{connection_id}/keys/{key_id}
+GET    /api/ai/connections/{connection_id}/models
+POST   /api/ai/connections/{connection_id}/models
+POST   /api/ai/connections/{connection_id}/models/refresh
+POST   /api/ai/connections/{connection_id}/models/favorite
+GET    /api/ai/models
+POST   /api/ai/models/clear-recent
+GET    /api/ai/routes
+PUT    /api/ai/routes/{task}
+GET    /api/ai/tasks
+GET    /api/ai/preferences
+PATCH  /api/ai/preferences
+GET    /api/ai/overview
+GET    /api/ai/migration
 GET    /api/ai/usage
 GET    /api/ai/usage/history
-POST   /api/ai/probe
+DELETE /api/ai/usage
 GET    /api/settings
 PATCH  /api/settings
 GET    /api/projects
@@ -499,7 +531,7 @@ src/
   usual provenance blockquote. The stored crop and the element's extracted text are
   unchanged, so the formula is a separate, reviewable reconstruction rather than a
   claim about the OCR text.
-- The same dialog can ask the configured vision model for LaTeX. It posts to
+- The same dialog can ask the routed model for LaTeX. It posts to
   `POST .../elements/{element_id}/ai-equation`, which reads the element first, refuses
   anything that is not an equation region (`409 ai_equation_region_required`) and
   missing crops, then sends only the saved crop. The reply is reduced to its LaTeX
@@ -511,8 +543,8 @@ src/
   to the manual note. Each attempt is recorded with task `equation_transcription`.
 - A saved table region can be read the same way from the region library. Its dialog
   posts to `POST .../elements/{element_id}/ai-table`, which refuses a non-table
-  region (`409 ai_table_region_required`), a missing crop and an unconfigured vision
-  model before any request. Only a complete rectangle within the local table caps is
+  region (`409 ai_table_region_required`), a missing crop and an unconfigured
+  `table_structure` route before any request. Only a complete rectangle within the local table caps is
   accepted, every cell is unscored, and the reply is shown in the same `TableReview`
   grid as a local proposal. Nothing is written to the region; insertion writes the
   reviewed grid (with any manual corrections) and a note that names the model. Each
@@ -1197,196 +1229,136 @@ src/
   unsafe-path, checksum and schema checks apply. A failed restore removes its staging
   folder and leaves both the copy and the original project in place.
 
-### Local AI cleanup
+### AI provider platform (BYOK)
 
-- Phase 6 starts with the smallest useful AI workflow: correcting one OCR text
-  block. The provider layer is deliberately local-only and adapter-based:
-  `ollama` and `openai_compatible` share the same request, validation and review
-  path. `GET /api/ai/providers` returns the catalog and default URLs; the frontend
-  never hardcodes a provider list.
-- `app_settings.ai.text` stores `{ provider, base_url, model, allow_remote, cost_class }`
-  in `app.db`. An empty `base_url` uses the provider default; an empty `model` keeps
-  every AI action disabled. `allow_remote` defaults to `false` and is the user's
-  explicit consent for a non-loopback endpoint. `cost_class` defaults to `local` and
-  is the user's declaration that the server is local inference, a verified free tier
-  or paid. The Settings page edits a local draft and saves explicitly, so typing a URL
-  does not trigger a PATCH or a network request.
-- Provider credentials are optional and separate from `app.db`. `services.ai_secrets`
-  keeps one key per task profile (`text`, `vision`) in
-  `<data_dir>/secrets/ai_keys.enc`, encrypted with Fernet and a generated 32-byte
-  master key in `<data_dir>/secrets/ai_keys.key`; the directory is created with
-  user-only permissions where the platform supports it. The API exposes only
-  `has_api_key`; `PATCH /api/settings` accepts `api_key` (trimmed, opaque, 1–1024
-  characters) or `clear_api_key: true`, never both. A key is write-only: it is never
-  returned, logged, copied into `app.db`, usage rows, suggestions or exports. An
-  unreadable or missing secret store degrades to "no key" with a warning instead of
-  breaking the Settings page.
-- When a key exists, the adapter sends `Authorization: Bearer <key>` for both
-  provider kinds. This is harmless for a local Ollama server that ignores it and
-  supports an authenticated gateway. A stored key is attached only when the request
-  keeps the saved provider and base URL; any per-request `provider`/`base_url`
-  override is sent without it, so a key is never leaked to a different server.
-  `POST /api/ai/probe` accepts a write-only `api_key` for testing an unsaved value and
-  an optional `task` to reuse that task's saved key for the same server.
-- `app_settings.ai.vision` is a separate task profile with its own provider, base
-  URL, model and remote-consent decision, so image analysis can run on a different
-  local server or device than text cleanup. An empty model keeps image AI disabled
-  and both `POST .../ai-region-proposals` and `POST .../ai-equation` return
-  `409 ai_vision_not_configured` before contacting the server or recording usage.
-  Settings saved by an older build kept one `ai.vision_model` string next to the
-  text server; on read it is mapped to a vision profile with the same provider, URL
-  and consent, and the legacy key is replaced on the next save.
-- `POST /api/ai/probe` is user-triggered. It reads Ollama `/api/tags` and
-  `/api/version`, or OpenAI-compatible `/models`, with a short timeout and a
-  1 MB response cap. Expected failures (`unreachable`, `timeout`, `http_error`,
-  `invalid_response`) are returned as status plus a stable error code so Settings
-  can explain them without pretending the server is ready. Model entries keep only
-  `id` plus the optional `family` and `parameter_size` that Ollama reports;
-  OpenAI-compatible servers usually report only `id`. Settings shows those details
-  for the typed model and marks a model that the last successful test did not list as
-  unlisted. That is a warning, not a validation: the app still saves and uses a typed
-  name because a server may serve models it omits from its listing.
-- Provider HTTP errors are classified from the status code only: 429 becomes
-  `ai_rate_limited`, 401 and 403 become `ai_auth_failed`, and anything else stays
-  `ai_http_error`. An integer `Retry-After` header is capped at 24 hours and returned
-  as `retry_after_seconds` on the probe, so Settings can show the advisory wait. The
-  backend never sleeps, retries, falls back to another provider or re-sends a failed
-  generation: a failed generation is recorded in the usage ledger with the same code,
-  and the route answers `502` rather than claiming success. No response body or
-  provider message is stored or shown verbatim.
+- Phase 6 uses one platform for every AI task. `services.ai_providers` owns a
+  registry of adapter specifications: local `ollama`, a custom `openai_compatible`
+  server, and the `openai`, `anthropic`, `gemini`, `openrouter`, `groq`, `mistral`,
+  `deepseek`, `xai`, `together`, `fireworks`, `cerebras` and `perplexity` APIs.
+  `GET /api/ai/providers` returns the catalog and default endpoints; the frontend
+  never hardcodes a provider or model list. A provider can opt out of model discovery
+  and allow manual model IDs; a custom server requires the user to supply its URL.
+- A **connection** is a named account/endpoint in `ai_connections`. It stores the
+  provider, normalized base URL, explicit `allow_remote` consent, `cost_class`
+  (`local`, `free` or `paid`), enabled flag, rotation strategy, maximum attempts and
+  optional request/spend limits. Several connections can exist for the same provider,
+  so a user can separate work and personal accounts or use different endpoints.
+- A connection holds zero or more **keys** in `ai_connection_keys`. The key secret is
+  never in `app.db`: `services.ai_secrets` stores it under a generated
+  `connkey:<uuid>` id in `<data_dir>/secrets/ai_keys.enc`, encrypted with Fernet and
+  a generated 32-byte master key in `secrets/ai_keys.key`. The directory is created
+  with user-only permissions where the platform supports it. The API returns only
+  key metadata (`has_secret`, label, limits, status, cooldown) and never the value.
+  An unreadable or missing vault degrades to "no key" with a warning instead of
+  breaking Settings. Legacy per-task keys are copied vault-to-vault during the
+  one-time migration.
+- **Model discovery** is user-triggered by `POST /api/ai/connections/{id}/test`.
+  The adapter uses the selected key, calls Ollama `/api/tags` and `/api/version`, or
+  the provider's OpenAI-compatible `/models`, Anthropic, Gemini or other documented
+  listing endpoint, with short timeouts and a bounded response. Results are cached in
+  `ai_models` with normalized `input_modalities`, `output_modalities`, context,
+  tool/streaming flags and pricing when the provider reports them. A provider with no
+  listing endpoint returns `ai_model_discovery_unsupported`; the user can then add a
+  model ID manually, marked `source = manual`. Favorites are stored separately so a
+  refresh never loses them.
+- A **task route** in `ai_task_routes` maps `ocr_cleanup`, `region_proposals`,
+  `equation_transcription` and `table_structure` to a connection/model pair, with an
+  optional fallback connection/model, temperature, timeout and rolling 24-hour
+  request limit. `default` is used by any task without its own row. A route with a
+  connection must have a model. Saving a route validates that the model is in the
+  connection's catalog and that its discovered modalities fit the task: vision tasks
+  need `image` input, text tasks need `text` output. Unknown modality metadata is
+  allowed and marked unverified instead of blocking a model whose metadata is
+  incomplete. Route payloads are always complete: omitting a field resets it to its
+  default.
+- `services.ai_router.complete` is the only generation path. It resolves the primary
+  and optional fallback, applies global daily and monthly-budget limits, then
+  per-task and per-connection limits. A paid connection requires `confirm_paid` for
+  that action and otherwise returns `409 ai_paid_confirmation_required` before any
+  network call or usage row. It selects eligible keys by rotation strategy
+  (`priority`, `failover`, `round_robin`, `least_recent`, `least_usage`), skips
+  disabled, failed or cooling-down keys, and bounds provider requests by the
+  connection's `max_attempts`. A configured connection with no usable key never
+  degrades to an unauthenticated request. A fallback is tried only after the primary
+  fails, and only when it is a different configured connection.
+- Provider HTTP errors are classified from the status code: 429 becomes
+  `ai_rate_limited` and puts that key into a cooldown (the provider's `Retry-After`
+  is capped at 24 hours; otherwise a short default), 401/403 become `ai_auth_failed`
+  and mark the key failed, and other statuses stay `ai_http_error`. The router does
+  not sleep or retry the same key indefinitely, does not bypass a provider limit, and
+  reports quota exhaustion as the provider reports it. The UI shows the advisory wait
+  and lets the user disable or replace a key.
 - `normalize_base_url` accepts only `http`/`https`, rejects embedded credentials and
-  the well-known cloud metadata hosts, and appends `/v1` for OpenAI-compatible
-  servers when missing. It also enforces the consent boundary: `localhost`,
-  `*.localhost` and loopback IPs are allowed by default, while any other host
-  returns `403 ai_remote_not_allowed` unless `allow_remote` is enabled. This check
-  runs for probes, cleanup requests and per-request overrides, after the metadata
-  block. The backend calls only the configured URL, using Python's standard library;
-  no new runtime dependency is introduced.
-- Paid approval is a second, independent gate. `services.ai.is_loopback_base_url`
-  classifies the URL that a request would actually reach; loopback and an empty
-  (provider default) URL are local, and a per-request override is treated as paid
-  because it has no saved declaration. `services.settings` classifies profiles written
-  before cost classes existed (loopback local, anything else paid) and coerces a
-  stored `local` next to a remote URL to `paid` on save, so the stored class never
-  contradicts the target. The three generating routes call
-  `_require_paid_approval` after model/config validation and after URL/consent
-  validation but before `ai_usage.ensure_within_limit` and the network call; a paid
-  profile without `confirm_paid: true` gets `409 ai_paid_confirmation_required`.
-  Probes deliberately stay allowed so a user can test a server before saving it. The
-  frontend mirrors the rule with `lib/ai-cost.ts` and a per-action
-  `usePaidAiGuard` dialog, and sends `confirm_paid: true` afterward for all three
-  actions; the flag is harmless for local and free profiles, and the backend remains
-  the authority.
-- `ai_usage` records one row for each cleanup request that actually leaves the app,
-  including provider failures. Validation failures that never contact the server are
-  not counted, and connection tests are excluded. The row stores provider, model,
-  task, outcome, error code, project/page/block ids and a timestamp — never document
-  text or the model reply. `GET /api/ai/usage` returns the rolling 24-hour count,
-  success/failure split, attempts per task and the 20 most recent entries. The task
-  breakdown uses a stable order for known tasks and lists any other stored name
-  alphabetically, so rows from another build still add up to the same total.
-- `GET /api/ai/usage/history` pages the same ledger newest first for the Settings
-  history dialog. `limit` defaults to 25 (maximum 100), `offset` is zero-based and
-  the optional `outcome` and `task` filters are validated against the same literal
-  types used when recording. Each row joins the project name; a row whose project
-  was deleted stays visible with `project_name: null`. The endpoint is read-only and
-  still returns metadata only.
-- `ai.request_limit` (0 = unlimited, maximum 10,000) is checked before each cleanup
-  request. Reaching the cap returns `429 ai_request_limit_reached` without contacting
-  the provider. The limit and usage summary are shown in Settings, and the recent
-  request list is metadata only. The ledger lives in the application database, so it
-  spans projects without copying project text into the app database.
+  the well-known cloud metadata hosts, and normalizes provider API paths. Remote
+  endpoints require explicit `allow_remote` consent and HTTPS; loopback HTTP is
+  allowed. Consent is checked when a connection is created or updated, so a remote
+  connection cannot exist without it, and again at request time. Redirects are not
+  followed. Provider defaults that point at a remote host also require consent.
+- `ai_usage` records one row for every provider request, including failures. It stores
+  provider, model, task, connection and key labels, outcome, error code, reported
+  input/output/total tokens, estimated cost and its source, project/page/block ids
+  and a timestamp. It never stores document text, images, crops, prompts, replies or
+  raw provider responses. Costs are recorded only when the provider reports pricing
+  or token counts the app can verify; otherwise the row is marked unpriced. The
+  monthly budget is a local gate on verified recorded spend, not a provider billing
+  control.
+- `GET /api/ai/usage` returns the rolling 24-hour count, success/failure split,
+  token totals, verified cost, unpriced count, attempts per task, per-connection
+  totals and the recent entries. The task breakdown uses a stable order for known
+  tasks and lists any other stored name alphabetically, so rows from another build
+  still add up. `GET /api/ai/usage/history` pages the same ledger newest first with
+  outcome/task filters and joins the project name; a row whose project was deleted
+  stays visible with `project_name: null`. The ledger is read-only except for an
+  explicit clear action.
 - `POST .../ocr/blocks/{block_id}/ai-suggestions` loads the block and run, refuses
-  missing, unfinished or stale OCR results, and sends the **block text only** with a
-  fixed correction system prompt (`temperature: 0`). The network call happens
+  missing, unfinished or stale OCR results, and sends the **block text only** through
+  the `ocr_cleanup` route with a fixed correction prompt. The network call happens
   outside the SQLite transaction. Empty, non-text and oversized responses are
-  rejected rather than stored.
-- The reply is inserted into `ai_suggestions` with `status = pending`. Before insert,
-  the block text is read again; if a manual correction happened during the request,
-  the proposal is refused as stale instead of overwriting newer text.
-- Accepting a proposal re-checks that the OCR run and block text still match the
-  original proposal, then writes through `ocr.update_block`, which sets
-  `corrected = true` and `verified = false`. An accepted proposal is therefore not a
-  verification. Rejecting only updates the proposal status, so it remains possible
-  after the page changes.
-- `GET .../pages/{page_id}/ai-suggestions?status=pending` lists the page's stored
-  proposals in `created_at DESC` order. The OCR dialog queries pending proposals when
-  it opens and after each change, so proposals survive closing and reopening the
-  dialog. The UI only renders proposals whose `block_id` belongs to the current OCR
-  run, which keeps proposals from an older run hidden; the database rows remain.
-- The same endpoint without `status` returns every proposal for the page, capped by
-  `limit` (default 200, maximum 500). The OCR dialog also reads this list and shows
-  accepted and rejected proposals for the current run's blocks as a per-block
-  history with status, provider, model, decision time and the preserved
-  original/proposed text. History is read-only, never rewrites OCR text, and remains
-  available after later manual corrections.
-- `GET /api/projects/{project_id}/ai-suggestions` returns proposals across every page
-  with the page number, newest first, using the same `status`/`limit` parameters. The
-  project-wide review dialog shows pending proposals with the current and proposed
-  text and calls the existing decision endpoint, so per-block stale/run checks still
-  apply. The queue reads from the project database and never changes OCR text on its
-  own. Both review surfaces mark the exact changed characters with a local inline
-  diff: common prefixes and suffixes are trimmed, the remaining grapheme clusters are
-  aligned, and a changed middle beyond a fixed budget becomes one coarse change so a
-  large rewrite cannot stall the dialog. Removed text uses `<del>` and added text uses
-  `<ins>`, so the comparison does not depend on colour. The diff is computed in the
-  browser, is read-only and never contacts a provider.
-- `POST /api/projects/{project_id}/ai-suggestions/bulk` decides 1–100 proposals in
-  one request. It runs each id through the same single-decision path in request order,
-  so an acceptance still re-checks the run and current text and every refusal is
-  reported per item (`status: null` plus `error_code`) instead of aborting the batch.
-  Duplicate ids are processed once, the response reports requested/succeeded/failed
-  counts, and any proposal not decided stays pending. The dialog selects proposals,
-  requires a confirmation that names the count, and refreshes the queue and OCR text
-  after the batch. Bulk acceptance never marks a block verified.
-- The OCR dialog shows the current text and the proposal side by side with provider
-  and model badges. It disables **Accept** when the block changed after the proposal
-  and shows a Settings link when no model is configured.
-- Vision region proposals use their own saved task profile (provider, base URL,
-  model and remote consent) and the same usage ledger. `services.ai_vision` reads the
-  page's display (or original) asset, resizes it to a bounded JPEG in memory and
-  sends it as base64 to the configured vision model. The model returns normalized
-  0-1 rectangles; the backend validates the JSON, drops unsupported kinds, non-finite
-  or out-of-page origins, clamps boxes to the page, adds the heuristic padding and
-  removes duplicates or regions that already have an extracted element. Coordinates
-  are mapped with the stored page width/height, so the source viewer can overlay them
-  without extra geometry.
-- `POST .../pages/{page_id}/ai-region-proposals` returns `status: ready`, page
-  dimensions, provider, model and low-confidence `ai_vision` proposals. It does not
-  insert rows in `elements` or `ai_suggestions`; choosing a rectangle only prefills
-  the extraction dialog. Each request is recorded with task `region_proposals`.
-- `POST .../elements/{element_id}/ai-equation` uses the same saved vision profile and
-  consent boundary. It resolves the element before any provider setting, refuses a
-  non-equation region and a missing crop, resizes only that crop, and asks for plain
-  LaTeX with `temperature: 0` and JSON mode off. The reply is returned as an
-  unverified proposal (`latex`, provider, model, base URL) and is not persisted; the
-  dialog keeps it in memory until the user edits or inserts it. Usage is recorded
-  with task `equation_transcription` and the element's page, without the crop, the
-  reply or any document text.
-- `POST .../elements/{element_id}/ai-table` reads one saved table region with the
-  same saved vision profile, consent and usage-ledger boundary. It resolves the
-  element first, refuses a non-table region (`409 ai_table_region_required`) and a
-  missing crop, and sends only that crop. The reply must be a complete rectangle:
-  every row has the same cell count, at least 2 rows and 2 columns, at most
-  60 rows, 20 columns, 600 cells, 20,000 characters in total and 2,000 characters per
-  cell, and only text, numbers or null cells (a null becomes an empty cell). A ragged,
-  empty, oversized or non-text reply is refused with a typed error instead of being
-  padded or truncated. The response is shaped like a local table proposal (`cells`, `source`,
-  `warnings`) but every cell has `confidence: null` and the warnings contain
-  `no_confidence`, so the review grid requires an explicit acknowledgement before
-  insertion. Nothing is written to `elements`, `ai_suggestions` or the document; the
-  grid lives in the dialog until the user inserts it, and manual corrections are what
-  get inserted. Usage is recorded with task `table_structure` and the element's page,
-  without the crop or the reply.
-- Tests use a loopback stub HTTP server, not a real model, and cover discovery,
-  unreachable/timeout/HTTP/invalid probes, remote-consent refusal, both adapters,
-  proposal listing and filtering, usage recording and rolling-limit enforcement,
-  stale runs, stale text, rejection, validation, vision coordinate mapping and
-  vision output filtering, plus equation-crop transcription, wrapper reduction,
-  empty replies, region-kind refusal and remote consent, table-grid parsing (ragged,
-  empty, oversized, non-text and null cells), the AI table endpoint's region/config
-  refusals and review-shaped response, and its usage task. This verifies protocol
-  handling and review safety, not model quality.
+  rejected. The reply is inserted into `ai_suggestions` with `status = pending`;
+  before insert the block text is read again, so a manual correction during the
+  request refuses the proposal as stale instead of overwriting newer text.
+- Accepting a proposal re-checks the OCR run and block text, then writes through
+  `ocr.update_block`, which sets `corrected = true` and `verified = false`. An
+  accepted proposal is therefore not a verification. Rejecting only updates the
+  proposal status. The OCR dialog, the project-wide review queue and bulk decisions
+  all use the same path; a stale item is skipped and reported per item while the rest
+  of a batch still applies. Both review surfaces mark changed characters with a local
+  `<del>`/`<ins>` diff and never contact a provider.
+- Vision region proposals use the `region_proposals` route. `services.ai_vision`
+  reads the page's display (or original) asset, resizes it to a bounded JPEG in
+  memory and sends it as base64. The reply is validated as normalized 0–1
+  rectangles, unsupported kinds and out-of-page origins are dropped, boxes are
+  clamped, padded and de-duplicated, and regions that already have an element are
+  removed. `POST .../pages/{page_id}/ai-region-proposals` returns low-confidence
+  proposals and does not insert rows; choosing one only prefills the extraction
+  dialog.
+- `POST .../elements/{element_id}/ai-equation` uses the `equation_transcription`
+  route, refuses a non-equation region and a missing crop, and sends only that crop.
+  The reply is reduced to plain LaTeX (code fences, math delimiters and wrapping
+  quotes are stripped, never rewritten) and returned as an unverified proposal; it is
+  not persisted. `POST .../elements/{element_id}/ai-table` uses `table_structure`,
+  refuses a non-table region, and accepts only a complete rectangle within the same
+  60 × 20 × 600 limits as a local table proposal. A ragged, empty, oversized or
+  non-text reply is refused rather than padded. Every cell is unscored
+  (`no_confidence`), so the review grid requires acknowledgement before insertion;
+  nothing is written back to the element.
+- The one-time migration in `services.ai_migrate` runs from the AI routes and on
+  startup. It converts legacy `app_settings.ai.text` and `ai.vision` profiles into
+  connections, copies their encrypted keys vault-to-vault, imports their model names
+  and creates task routes, then records a completion marker. The legacy JSON is kept
+  as a backup, and a failed migration leaves the old values untouched and retries
+  later. A new database does not need the migration.
+- Tests use a loopback stub HTTP server, not a real model. They cover provider
+  discovery, timeouts, unreachable servers, invalid responses, remote consent and
+  HTTPS enforcement, cost-class normalization, paid refusal without network access,
+  rate-limit/auth classification and cooldowns, key rotation and failover, global and
+  per-connection/per-task limits, usage recording and token/cost accounting, task
+  routing and capability validation, legacy migration, stale OCR runs and text,
+  suggestion decisions and bulk review, vision coordinate mapping and filtering,
+  equation wrapper reduction, table-grid parsing and the review-shaped responses.
+  A separate migration test upgrades a database that already holds legacy usage rows
+  from revision 0002 to head, checks the rows survive, and downgrades again.
+  This verifies protocol handling and review safety, not model quality.
 
 ### Design system
 
@@ -1417,25 +1389,26 @@ src/
   to every response.
 - No secret is persisted or logged by the frontend: a typed key lives only in
   component state until the user saves it, and the draft is cleared afterwards.
-  Provider keys are optional, stored only encrypted in the local
-  data folder, exposed as `has_api_key`, and sent as a bearer token only to the saved
-  server. The AI profile itself stores only a URL, model names, the consent flag and a
-  user-declared cost class (`local`, `free` or `paid`).
-- The cost class is a request gate, not a billing engine. Loopback inference is always
-  local; a remote URL cannot stay marked local, so an unspecified class next to a
-  remote URL is stored as paid and a profile written before cost classes existed is
-  classified on read. A paid
-  profile needs `confirm_paid: true` on cleanup, region proposals and equation
-  transcription, checked after URL/consent validation but before the usage limit and
-  before any network call, so a refused action sends nothing and records nothing. The
-  app never estimates provider prices, verifies a declared free tier or enforces a
-  monetary cap; it only makes sure a potentially billable request is explicit.
+  Provider keys are optional and stored only in the encrypted local vault; the API
+  returns metadata (`has_secret`, label, limits, state) and never the value. A key is
+  decrypted in the backend only for the request that uses it and is sent only to that
+  connection's endpoint. `app.db` stores connections, key metadata, cached model
+  metadata and task routes, never a key.
+- The cost class is a request gate, not a billing engine. Loopback inference is local;
+  a remote connection cannot stay marked local, so a remote connection saved without
+  an explicit class defaults to paid. A paid connection needs `confirm_paid: true` for
+  OCR cleanup, region proposals, equation transcription and table reading, checked
+  after URL/consent validation and before any limit check or network call, so a
+  refused action sends nothing and records nothing. The app never invents provider
+  prices, verifies a declared free tier or enforces a provider-side cap; the optional
+  monthly budget only gates verified spend recorded in the local ledger.
 - The encrypted key files live under the user data folder, not in a project or in
   Git. `.gitignore` excludes local data folders, databases and `*.key`/`*.enc`
   files; the repository contains no sample key and no default master key.
-- AI usage history is metadata only: provider, model, task, outcome, error code,
-  project/page/block ids and timestamps. It never stores sent text, page images or
-  model output, and a request limit is enforced before a provider is contacted.
+- AI usage history is metadata only: provider, model, task, connection/key labels,
+  outcome, error code, reported token counts, verified cost and project/page/block ids
+  with timestamps. It never stores sent text, page images, crops or model output, and
+  request limits are enforced before a provider is contacted.
 - OCR and PDF rendering run entirely on the local machine. Page images and PDF
   files are never uploaded; the backend reads the project's own source/display
   assets and invokes local libraries. Missing engine/language packs are reported,
@@ -1470,14 +1443,17 @@ src/
 - Document links are validated to `http`, `https` or `mailto` before they enter the
   document, and Markdown export repeats that check. A stored `javascript:` or
   `data:` target is never emitted as a link; only its text is kept.
-- AI requests are sent only when the user tests a connection, asks for a cleanup or
-  asks for region proposals, and only to the URL saved or entered in Settings. A
-  cleanup sends one OCR text block; a region request sends the current page image
-  only. The backend rejects non-HTTP(S) URLs, embedded credentials and well-known
-  metadata hosts; it never switches to a remote or paid provider on failure, and
-  responses are bounded. A profile classified as paid additionally needs a
-  per-action confirmation in the UI before the request is sent. Cleanup replies are
-  stored as reviewable proposals; region proposals are not persisted.
+- AI requests are sent only when the user tests a connection or runs an action that
+  has a route, and only to that route's saved connection. A cleanup sends one OCR text
+  block; a region request sends the current page image only; an equation or table
+  request sends one saved crop. The backend rejects non-HTTP(S) URLs, embedded
+  credentials and well-known metadata hosts, requires HTTPS and explicit consent for
+  remote hosts, does not follow redirects and bounds every response. The router never
+  switches to a connection or key the user did not configure, never bypasses a
+  provider limit and never sends an unauthenticated request in place of a configured
+  key. A paid connection additionally needs a per-action confirmation in the UI before
+  the request is sent. Cleanup replies are stored as reviewable proposals; region
+  proposals are not persisted.
 - Uploaded file names are validated and generated asset names are independent of
   user input.
 - The source repository URL is configuration (`DOCUREBUILD_REPOSITORY_URL`),
@@ -1511,12 +1487,13 @@ src/
   without merged cells. Embedded PDF raster images supply precise figure boxes
   without a model; vector drawings and artwork in photographed pages still need
   manual selection or a later detector.
-- **AI starts local and proposal-only** — the AI workflows correct one OCR block
-  or propose reviewable page regions through a user-configured server. Loopback is
-  allowed by default and any other host needs stored remote consent, with
-  provider/model/URL provenance and explicit review. This keeps the free-first,
-  accuracy-first guarantees and needs no secret store, at the cost of no remote
-  free tiers, batch review or automatic routing yet.
+- **AI is optional and proposal-only** — the AI workflows correct one OCR block or
+  propose reviewable page regions through a user-configured connection. Local Ollama or
+  a local OpenAI-compatible server keeps the path free and offline; any remote host
+  needs stored consent, HTTPS and a cost class, with provider/model/URL provenance and
+  explicit review. The trade-off is that the app carries a provider abstraction and a
+  credential vault, and that a user can still configure a paid provider the app cannot
+  bill or audit.
 - **Element extraction is manual first** — a crop is an exact pixel copy of the
   page, not inferred structure. This preserves accuracy and needs no model, at the
   cost of no automatic figure/equation detection. A table crop stays an image;

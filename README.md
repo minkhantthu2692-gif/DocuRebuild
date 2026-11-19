@@ -9,29 +9,27 @@ data on your device, and treats every AI result as a reviewable proposal.
 > **Project status — early development (Phase 6 of 12).**
 > The workspace, local project storage, image and PDF import, non-destructive
 > image adjustments, the rich-text editor, local Tesseract OCR, manual region
-> extraction, an optional local-AI OCR text cleanup, optional vision region
-> proposals, optional on-demand transcription of a saved equation crop into
-> reviewable LaTeX, optional AI reading of a saved table crop into a reviewable grid,
-> local Markdown/TXT/Word/PDF document export and document version history
-> are implemented. Imports run
-> as background jobs with page-level progress, cancellation and localized failures.
+> extraction, the unified AI provider platform, local Markdown/TXT/Word/PDF
+> document export and document version history are implemented. Imports run as
+> background jobs with page-level progress, cancellation and localized failures.
 > PDF pages are rendered locally and embedded text layers are stored as reviewable
 > proposals; image-only PDF pages can be processed with OCR. OCR and PDF import are
-> only advertised when their local dependencies actually work. The AI workflow only
-> talks to an Ollama or OpenAI-compatible server that the user configures and tests;
-> loopback addresses are the default, and any other host needs explicit remote
-> consent. An optional bearer token can be saved for a provider that requires one; it
-> is encrypted on this device and never returned by the API. Every result is a
-> proposal that must be accepted or rejected. Cloud
-> providers, free-tier adapters, paid usage, image generation and page-wide automatic
-> equation/figure reconstruction are **not implemented yet** and are clearly marked
-> as unavailable in the UI. Table cells can be proposed from stored OCR word boxes,
-> including table rows that a PDF stored as separate text blocks; merged cells are
-> also taken from a PDF's own drawn table lines, and raster images embedded in a PDF
-> can be proposed as figure regions — but only as reviewed, user-confirmed content.
-> A saved table crop can also be read by the vision model on request into a
-> reviewable grid whose every cell must be checked before insertion.
-> Nothing in this repository fakes those features.
+> only advertised when their local dependencies actually work.
+>
+> AI is bring-your-own-key and optional. One platform supports local Ollama, a
+> custom OpenAI-compatible server, and the OpenAI, Anthropic, Google Gemini,
+> OpenRouter, Groq, Mistral, DeepSeek, xAI, Together, Fireworks, Cerebras and
+> Perplexity APIs through modular adapters. Connections, multiple encrypted keys,
+> discovered models, per-task routes with a fallback, key rotation, request limits,
+> a verified-cost budget and a metadata-only usage ledger are managed in one place.
+> Model lists come from the provider with your credential; the app does not ship a
+> hardcoded model catalog. Loopback endpoints are the default and any remote endpoint
+> needs explicit consent. Paid routes ask for approval before each request, and the
+> core application remains usable without any provider or credential. Every AI reply
+> is a proposal that must be accepted or rejected; nothing is inserted silently.
+> Image generation and page-wide automatic equation/figure reconstruction are
+> **not implemented yet** and are marked as unavailable in the UI. Nothing in this
+> repository fakes those features.
 
 ---
 
@@ -78,20 +76,25 @@ data on your device, and treats every AI result as a reviewable proposal.
   word boxes, every cell keeps its OCR text and confidence, and nothing is inserted
   until you review and confirm the proposal. Uncertain cells are flagged and must be
   acknowledged before insertion.
-- **Optional local AI text cleanup** — connect an Ollama server or an
-  OpenAI-compatible local server (for example LM Studio) in Settings, test the
-  connection, discover installed models and choose a text model. In the OCR dialog,
-  "Ask local AI" sends only the selected text block to that configured local URL and
-  stores the reply as an `ai_suggestion` with provider, model, base URL and original
-  text. The proposal is shown beside the current OCR text and can be accepted or
-  rejected. Accepting is refused when the block changed after the proposal was
-  created, and OCR text changes are refused if the run is stale. If the chosen
-  provider requires authentication, an optional **API key** can be saved per task;
-  it is encrypted at rest, write-only in the API, and sent only as a bearer token to
-  the saved server. Each profile is declared **local**, **free** or **paid**: a remote
-  URL is saved as paid unless the user explicitly marks it as a free tier, and a paid
-  action asks for confirmation before any request is sent. No request runs silently,
-  and AI output never becomes document content automatically.
+- **Unified AI provider platform (BYOK)** — Settings → AI providers manages named
+  connections to local Ollama, a custom OpenAI-compatible server, or the OpenAI,
+  Anthropic, Google Gemini, OpenRouter, Groq, Mistral, DeepSeek, xAI, Together,
+  Fireworks, Cerebras and Perplexity APIs. A connection holds its endpoint, remote
+  consent, cost class, key rotation strategy, attempt cap and optional request or
+  spend limits; it can hold several encrypted API keys, each with its own priority
+  and limit. **Test connection** discovers the models that key can actually use, and
+  the model list supports search, favorites and manual entry where the provider has
+  no listing endpoint. A task router maps OCR text cleanup, region proposals,
+  equation transcription and table reading to a connection/model pair, with an
+  optional fallback, temperature, timeout and per-task request limit. A task without
+  its own route uses the default route. Keys cool down after a rate limit, rotation
+  strategies skip unhealthy keys, and a connection with no usable key never falls
+  back to an unauthenticated request. The OCR dialog sends only the selected text
+  block and stores the reply as an `ai_suggestion` with provider, model, endpoint
+  and original text; accepting is refused if the block changed after the proposal
+  was created. Remote endpoints require explicit consent and HTTPS, paid routes ask
+  for confirmation before every action, and no AI output becomes document content
+  automatically.
 - **Region extraction (manual + suggestions)** — drag a rectangle on the source page
   or type its source-pixel coordinates, then crop a figure, table or equation
   region. Crops are stored as immutable project assets, can be captioned, verified
@@ -119,18 +122,17 @@ data on your device, and treats every AI result as a reviewable proposal.
   supplies its text. Suggestions are never
   saved on their own: choosing one only prefills the normal extraction dialog and
   names the signal it came from.
-  When a vision model is saved in the image analysis profile, "Ask AI for regions"
-  sends only the current page image to that configured local server and shows its
-  figure, table
-  and equation proposals as clearly marked low-confidence regions. Nothing is
-  saved automatically; each proposal goes through the same review and extraction
-  dialog, and every request counts toward the AI usage limit. A saved equation
-  crop can also be transcribed on demand: "Transcribe with AI" in the formula
-  dialog sends only that crop to the vision model and fills the review field with
-  the returned LaTeX, marked with the proposing model and an unverified warning.
-  Nothing is inserted until you compare it with the crop and confirm; manual
-  typing works without a vision model. A saved table region can be read the same
-  way: **Read table with AI** sends only that crop and shows the reply in the normal
+  When the region-proposal route is configured, "Ask AI for regions" sends only the
+  current page image to that routed model and shows its figure, table and equation
+  proposals as clearly marked low-confidence regions. Nothing is saved
+  automatically; each proposal goes through the same review and extraction dialog,
+  and every request counts toward the AI usage limits. A saved equation crop can
+  also be transcribed on demand: "Transcribe with AI" in the formula dialog sends
+  only that crop to the routed vision model and fills the review field with the
+  returned LaTeX, marked with the proposing model and an unverified warning.
+  Nothing is inserted until you compare it with the crop and confirm; manual typing
+  works without a vision model. A saved table region can be read the same way:
+  **Read table with AI** sends only that crop and shows the reply in the normal
   table review grid. Every cell of that reply is unscored, so insertion waits for
   your acknowledgement, manual cell corrections are used instead of the raw reply,
   and the saved region is never modified.
@@ -206,12 +208,12 @@ data on your device, and treats every AI result as a reviewable proposal.
   and PDF export (exact LaTeX source).
   A saved equation region can be brought in the same way: its reviewed text starts
   the LaTeX, the dialog previews it beside the crop and only inserts what you
-  confirm. If a vision model is saved in the image analysis profile, the same dialog
-  can transcribe the
-  crop into a proposal on request; the reply is shown as unverified, only the crop
-  is sent, and the provenance note credits the model only while you leave its reply
-  unchanged. Equations are never recognised automatically: transcription is an
-  explicit action on one saved crop, and every reply needs manual review.
+  confirm. If the equation-transcription route is configured, the same dialog can
+  transcribe the crop into a proposal on request; the reply is shown as unverified,
+  only the crop is sent, and the provenance note credits the model only while you
+  leave its reply unchanged. Equations are never recognised automatically:
+  transcription is an explicit action on one saved crop, and every reply needs manual
+  review.
 - **Footnotes** — insert a footnote from the toolbar and type its text in the
   dialog. Footnotes are numbered in document order, so inserting or deleting one
   renumbers the rest automatically; the number is never stored in the note. Export
@@ -226,39 +228,39 @@ data on your device, and treats every AI result as a reviewable proposal.
   filtered, searched and exported as CSV or JSON without uploading anything.
 - **Appearance and language** — light/dark/system themes, accent colours, radius,
   blur, density, text size, reduced motion, and live English/Burmese switching.
-- **Local-only defaults** — no account, no cloud database, no telemetry, and no
-  outbound request unless you explicitly test or use a local AI server you
-  configured. The app remains usable without any AI provider.
+- **Local-only defaults** — no account, no cloud database and no telemetry. An
+  outbound request happens only when you explicitly test a connection or run an AI
+  action through a route you configured. Local routes need no internet access, and
+  the app remains usable without any AI provider or credential.
 
 ### Not available yet
 
-Automatic page-wide equation transcription, generative figure detection, verified
-provider pricing/quota metadata, spending caps, automatic provider routing,
-image-generation profiles, desktop packaging and PWA install support are planned but
-not implemented. Remote free-tier and paid OpenAI-compatible providers can already be
-configured explicitly; a paid profile is gated by a per-action confirmation, but the
-application does not estimate prices or verify what the provider charges. OCR extracts
-text blocks, reading order and conservative layout hints. It can turn a block the
-layout labels as a table into a reviewable cell grid derived from its word boxes,
-group vertically contiguous paragraph blocks into one page-level candidate, and read a
-PDF's drawn table rules so merged cells keep exactly the shape the document drew. It
-never inserts a grid on its own, never invents a cell, and does not transcribe
-equations across a page. A saved table crop can be read by a vision model on
-request, but nested tables and page-wide vision table detection are not implemented.
-Region extraction produces exact pixel crops and can read their plain text locally;
-it does not build structured table cells. Equation markup comes only from manual
-typing or the formula dialog's explicit, reviewed transcription of one saved crop.
-Deterministic region
-suggestions are heuristics over the OCR text layout, on PDF pages over the placement
-of embedded raster images and the shapes of vector drawings, and on a photographed
-page over ink that the text layout does not explain,
-not a vision model: they cover OCR table/equation blocks, embedded images, vector
-artwork, unexplained ink and the empty band above a figure-like caption, and they are
-skipped when no suitable signal exists. The
-optional vision path only proposes rectangles for review; apart from the explicit
-transcription of one saved equation or table crop, it does not read their text,
-invent content or change the document. The local AI workflow does not switch
-providers silently or use any remote service without consent.
+Automatic page-wide equation transcription, generative figure detection, provider
+billing/quota verification against an account, image generation, desktop packaging and
+PWA install support are planned but not implemented. Provider pricing is not invented:
+a cost is recorded only when the provider reports a price or token counts that the
+app can verify, and a monthly budget is a local gate on that recorded spend, not a
+provider-side billing control. OCR extracts text blocks, reading order and
+conservative layout hints. It can turn a block the layout labels as a table into a
+reviewable cell grid derived from its word boxes, group vertically contiguous
+paragraph blocks into one page-level candidate, and read a PDF's drawn table rules so
+merged cells keep exactly the shape the document drew. It never inserts a grid on its
+own, never invents a cell, and does not transcribe equations across a page. A saved
+table crop can be read by a routed vision model on request, but nested tables and
+page-wide vision table detection are not implemented. Region extraction produces exact
+pixel crops and can read their plain text locally; it does not build structured table
+cells. Equation markup comes only from manual typing or the formula dialog's explicit,
+reviewed transcription of one saved crop. Deterministic region suggestions are
+heuristics over the OCR text layout, on PDF pages over the placement of embedded
+raster images and the shapes of vector drawings, and on a photographed page over ink
+that the text layout does not explain, not a vision model: they cover OCR
+table/equation blocks, embedded images, vector artwork, unexplained ink and the empty
+band above a figure-like caption, and they are skipped when no suitable signal exists.
+The optional vision path only proposes rectangles for review; apart from the explicit
+transcription of one saved equation or table crop, it does not read their text, invent
+content or change the document. The AI router never switches to a provider or key
+that the user did not configure, never bypasses a provider limit, and never contacts a
+remote endpoint without consent.
 See [`docs/roadmap.md`](docs/roadmap.md).
 
 ---
@@ -311,9 +313,14 @@ packages/
 docs/
   architecture.md       Modules, storage layout, data model, API surface
   roadmap.md            Phase status, limitations and next steps
+.github/
+  workflows/            CI, CodeQL and dependency-update automation
+  ISSUE_TEMPLATE/       Bug and feature request forms
 start-docurebuild.bat   Windows one-click launcher for the local app
 AGENTS.md               Permanent instructions for AI coding agents
 Prompt.md               Product specification and phased roadmap source
+CONTRIBUTING.md         Setup, checks and contribution rules
+SECURITY.md             Vulnerability reporting and local-credential scope
 ```
 
 Local runtime data is **never** stored in this repository. See
@@ -326,10 +333,9 @@ Local runtime data is **never** stored in this repository. See
 - Node.js **20 or newer** (Node 24 tested) and npm 10+
 - Python **3.11 or newer** (3.12 tested)
 - Optional: Tesseract 5+ for local OCR, with `eng` and/or `mya` traineddata
-- Optional: Ollama or an OpenAI-compatible local server (for example LM Studio)
-  for reviewable AI text cleanup. No account or paid subscription is required; a
-  subscription API key is optional and only needed when your server enforces bearer
-  authentication.
+- Optional: Ollama or an OpenAI-compatible local server (for example LM Studio) for
+  free local AI, or an API key for one of the supported providers. AI is optional; no
+  account or paid subscription is required for the rest of the application.
 
 PDF import needs no separate system package: PyMuPDF is installed with the
 backend requirements and runs entirely on the local machine.
@@ -466,84 +472,68 @@ codes are `0` when every case was scored, `1` when a case could not be scored an
 `2` for an invalid manifest or argument. The project does not publish accuracy
 numbers until fixtures from real documents have been measured.
 
-### Optional local AI cleanup
+### AI providers (bring your own key)
 
-AI cleanup is optional and free to run locally. It is not needed to use the
-application, and OCR review works without it.
+AI is optional. It stays off until you add a connection and route a task, and OCR
+review, editing and export work without it.
 
-1. Start a local server:
-   - **Ollama** — default `http://127.0.0.1:11434`; pull a text model such as
-     `ollama pull qwen2.5:7b`.
-   - **OpenAI-compatible** — for example LM Studio's local server; the default
-     address is `http://127.0.0.1:1234/v1`.
-2. Open **Settings → Local AI**, keep or change the provider, and use **Test
-   connection** to discover installed models.
-3. Choose a text model and select **Save AI settings**. Localhost and loopback URLs
-   need no extra approval. If the server is on another host or IP that you control,
-   enable **Remote endpoint consent** first; until you do, the backend refuses to
-   contact that URL for either a connection test or a cleanup. If that server requires
-   a bearer token, paste it into **API key**; the value is encrypted on this device,
-   never returned by the API, and is only attached to requests that keep the saved
-   provider and URL. **Remove key** deletes it on the next save.
-4. Optionally set a rolling 24-hour **Request limit**. Zero means unlimited.
-   Connection tests are not counted.
-5. Optionally configure **Image analysis server** (provider, URL, consent, an
-   optional **API key** and a **Vision model** such as `llava:7b`) if you want AI
-   region proposals, equation-crop transcription or saved table-crop reading. It is a
-   separate task profile, so it can use a different server, key or device than text
-   cleanup. Leave the model empty to keep image AI disabled.
-6. Open **Extract text** on a page and select **Ask local AI** on one text block.
-   For region proposals, use **Ask AI for regions** in the source viewer. For a saved
-   table region, use **Read table with AI** in the region library.
+1. Open **Settings → AI providers** and choose **Add connection**. Pick a provider:
+   local Ollama (`http://127.0.0.1:11434` by default), a custom OpenAI-compatible
+   server, or one of the supported cloud APIs. A custom server needs its own URL.
+   A remote endpoint needs **Remote endpoint consent** and HTTPS; loopback HTTP is
+   allowed.
+2. Add at least one API key to the connection. Keys are encrypted in the local vault,
+   are never returned by the API, and are not written to logs, exports or Git.
+   Several keys can be added; each has a priority and an optional request limit.
+3. Press **Test connection**. The app lists the models that key can actually use and
+   caches them locally. Use search and favorites to find models, or add a model ID
+   manually when the provider has no listing endpoint.
+4. Choose the connection's **cost class** honestly: **Local** for inference on this
+   device, **Free** only for a provider tier you have verified, and **Paid** for
+   anything that may bill you. A remote connection is never silently treated as
+   local. A paid route asks for confirmation before every action.
+5. Open **Task routing** and choose a connection and model for OCR text cleanup,
+   region proposals, equation transcription and table reading. Each task can also
+   set a fallback connection/model, temperature, timeout and its own rolling
+   24-hour request limit. A task with no route of its own uses the default route.
+   A vision task only offers models whose discovered metadata does not explicitly
+   exclude image input; unknown metadata is allowed and marked unverified.
+6. Optionally set the global **Daily request limit** and **Monthly budget** in the
+   same section. Zero or blank means no cap. The budget applies to verified spend
+   recorded in the local ledger and stops paid requests when it is reached.
+7. Use the workspace actions: **Ask AI to clean up** on an OCR block, **Ask AI for
+   regions** in the source viewer, **Transcribe with AI** in the formula dialog, or
+   **Read table with AI** in the region library.
 
-Only that block's text is sent, to the URL you configured. The reply is stored as an
-unverified proposal with provider, model, URL and the original text. The OCR text
-does not change until you accept the proposal, and accepting is blocked if the block
-changed after the proposal was created. Rejecting keeps the OCR text unchanged.
-Pending proposals are read back from the project database when the dialog opens, so
-closing and reopening it does not discard an unreviewed proposal. Accepted and
-rejected proposals remain available in the block's read-only **Proposal history**,
-including the original and proposed text, provider, model and decision time. That
-record is kept even if the block is corrected again later. The source toolbar's
-**Review AI proposals** dialog lists pending proposals from every page so they can
-be accepted or rejected without reopening each OCR dialog. Selecting several
-proposals enables **Accept selected** / **Reject selected**; a confirmation names the
-count, each proposal is re-checked separately, and a stale one is skipped instead of
-applied.
+Only the content the action needs is sent to the routed provider: the selected OCR
+block, the current page image, one saved equation crop or one saved table crop. The
+reply is a proposal. OCR cleanup replies are stored as an `ai_suggestion` with
+provider, model, endpoint and the original text; the OCR text changes only when
+you accept, and acceptance is refused if the block changed after the proposal was
+created. Region proposals are not stored: they are low-confidence rectangles you can
+choose to extract. Equation and table replies live in their dialogs until you review
+and insert them.
 
-Region proposals use the saved image analysis profile and its vision model. Only
-the current page image is resized locally and sent; the reply is shown as
-low-confidence figure, table and equation rectangles. Nothing is saved until you
-choose a rectangle and confirm the normal extraction dialog, so the proposal can
-never silently become a document element.
-
-A saved table crop can also be read on request from the region library. Only that
-crop is sent, and the reply must be a complete grid within the same 60 × 20 × 600
-limits as a local table proposal; a ragged, empty, oversized or non-text reply is
-refused instead of being padded or truncated. The reply is shown in the normal table
-review grid with no confidence scores, so every cell must be acknowledged and
-checked against the crop before insertion. Nothing is written back to the region or
-stored as a proposal.
-
-Each cleanup, region-proposal, equation-transcription or table-reading attempt is
-recorded in the local application database
-as metadata only: provider, model, task, outcome, error code and time. The selected
-document text, page image, crop and model output are never written to that usage
-history.
-Settings shows the requests from the last 24 hours and the most recent entries; when
-a configured limit is reached, the backend refuses the next request before contacting
-the server. **View full history** pages the whole local ledger with outcome and task
+The usage ledger records metadata only: provider, model, task, connection, key label,
+outcome, error code, reported token counts, verified cost when available, project,
+page, block and time. It never stores document text, page images, crops or model
+replies. **View full history** pages the whole local ledger with outcome and task
 filters, names the project each request belonged to and keeps rows after that project
 is deleted (without a name).
 
-The URL is only contacted when you press **Test connection**, **Ask local AI** or
-**Ask AI for regions**; nothing is downloaded, loaded or generated in the background.
-A saved key is reused for a connection test only when the task, provider and
-normalized URL still match the saved profile, so you can retest a protected server
-without retyping it while a different server never receives it. There is still no
-cloud provider, paid call,
-automatic fallback or cost estimation in this phase. A model name can also be typed
-manually when discovery is unsupported by the server.
+Provider limits are respected, not bypassed. A 429 response puts that key into a
+cooldown and the router may try another configured key or the configured fallback;
+it never sends an unauthenticated request in place of a configured key. A 401/403
+marks the key as failed and asks you to check it. Quota exhaustion is reported as the
+provider reports it; the app does not invent a quota, a price or a reset time. A
+free tier is your declaration, not a guarantee, and provider pricing and availability
+can change.
+
+The URL is contacted only when you press **Test connection** or run an AI action;
+nothing is downloaded, loaded or generated in the background. A model name can also be
+typed manually when discovery is unsupported by the server. Keys can be disabled,
+replaced or deleted without deleting the connection, and deleting a connection also
+removes its keys, cached models and task routes.
 
 ### Document tables
 
@@ -942,6 +932,12 @@ npm run build      # typecheck + production build
 On Windows, the root scripts call `python`; activate `backend/.venv` first (or pass
 the interpreter explicitly) so backend dependencies are importable.
 
+The same checks run in GitHub Actions (`.github/workflows/ci.yml`): backend Pytest on
+Python 3.12 with Tesseract installed, and web typecheck, Vitest and production build
+on Node 20. CodeQL analysis and weekly Dependabot updates are configured separately.
+CI needs no AI credential; tests use a local stub server and never contact a real
+provider.
+
 ---
 
 ## Data and privacy
@@ -972,20 +968,23 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   Deleting a PDF page keeps the shared original until its last page is removed.
 - Asset paths stored in databases are relative and validated against traversal.
 - The local API binds to loopback by default and sends no telemetry.
-- AI settings are stored per task in `app.db`: text cleanup and image analysis each
-  keep their own server, model, key state and consent decision. An optional API key is
-  stored only in `secrets/ai_keys.enc` inside the local data folder, encrypted with a
-  Fernet master key in `secrets/ai_keys.key`; the plain value is never stored, logged,
-  returned by the API or committed. The frontend only learns whether a key exists.
-  Project text sent for cleanup and the current page image sent for region
-  proposals go only to the configured server URL; a non-loopback URL is refused
-  unless remote consent is explicitly enabled. Cleanup responses are stored in the
-  project database as reviewable proposals; region proposals are not stored at all.
+- AI connections, cached model metadata, task routes and limits are stored in
+  `app.db`. API key secrets are stored only in `secrets/ai_keys.enc` inside the local
+  data folder, encrypted with a Fernet master key in `secrets/ai_keys.key`; the plain
+  value is never stored in `app.db`, logged, returned by the API or committed. The
+  frontend only learns whether a key exists. Project text sent for cleanup, the
+  current page image sent for region proposals, and one saved equation or table crop
+  go only to the connection routed for that task. A non-loopback URL requires
+  explicit remote consent and HTTPS; loopback HTTP is allowed, embedded credentials
+  and cloud-metadata hosts are rejected, and redirects are not followed. Cleanup
+  replies are stored in the project database as reviewable proposals; region
+  proposals are not stored at all.
 - AI usage history lives in the application database and contains only provider,
-  model, task, outcome, error code, project/page/block ids and timestamps. It never
-  stores the selected document text, page images, model output or the full server
-  response. Settings pages it through a read-only history dialog; deleted projects
-  leave their rows behind without a project name.
+  model, task, connection/key labels, outcome, error code, reported token counts,
+  verified cost, project/page/block ids and timestamps. It never stores the selected
+  document text, page images, crops, model output or the full server response.
+  Settings pages it through a read-only history dialog; deleted projects leave their
+  rows behind without a project name.
 - The project activity log is stored in `project.db` and contains event type,
   summary, a small metadata payload (such as counts, format, byte size or OCR
   language), and a timestamp. It never stores document text, OCR output, image data
@@ -1110,20 +1109,20 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   It does not reconstruct table cells, merged spans, reading order inside tables or
   equation markup. The text is an unverified proposal and may omit or misread
   characters; manual correction is always available and never overwrites the crop.
-- Local AI cleanup is proposal-only and limited to one OCR text block per request.
-  The model can still paraphrase, translate, drop or invent text; accepting a
-  proposal marks the block corrected but does not make it verified. Very long blocks
-  are rejected instead of truncated. Only Ollama and OpenAI-compatible servers that
-  the user configures are supported; loopback is the default, and any other host
-  requires explicit remote consent before a request. Cleanup attempts are counted
-  against an optional rolling 24-hour limit; connection tests are not. Cloud free
-  tiers, paid providers, cost estimation, rate-limit handling and provider fallbacks
-  are not implemented yet. An API key can be stored for a provider that requires
-  bearer authentication, but there is no account sign-in, key validation against a
-  billing account or per-provider spending cap; a paid provider is never contacted
-  automatically. A local server's "free" status
-  depends on the user's own installation and hardware, so nothing is advertised as
-  universally free.
+- AI cleanup is proposal-only and limited to one OCR text block per request. The
+  model can still paraphrase, translate, drop or invent text; accepting a proposal
+  marks the block corrected but does not make it verified. Very long blocks are
+  rejected instead of truncated. Only providers and endpoints the user configures are
+  contacted; loopback is the default, and any other host requires explicit remote
+  consent and HTTPS before a request. Attempts are counted against the optional
+  global daily limit and any task or connection limit; connection tests are not
+  counted. Rate limits put a key into a temporary cooldown, and the router may use
+  another configured key or fallback, but it never bypasses a provider limit or sends
+  an unauthenticated request. Provider billing accounts are not linked, so the app
+  cannot verify an account's quota or charge; the monthly budget only gates verified
+  spend recorded in the local ledger. A free tier is the user's own declaration and
+  can change. A local server's "free" status depends on the user's installation and
+  hardware, so nothing is advertised as universally free.
 - The bounding-box overlay only draws the latest successful run and is hidden
   when that run is stale, failed or lacks geometry. It shows where text was
   found; it is not a verified layout model.
@@ -1158,7 +1157,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 3. Import and image processing | Complete |
 | 4. Local OCR and layout detection | In progress: OCR, layout hints, reviewable table proposals and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
-| 6. AI integration and free usage first | In progress: local AI providers, separate text and vision task profiles, optional encrypted per-task API keys, remote-consent boundary, request limits, usage-history browser, bulk AI proposal review, reviewable persisted OCR text cleanup, optional vision region proposals, one-crop equation transcription and one-crop table reading done; free-tier/paid adapters and automatic provider fallback pending |
+| 6. AI integration and free usage first | In progress: unified BYOK provider platform with local Ollama, custom OpenAI-compatible and 12 cloud adapters, dynamic model discovery, multiple connections and encrypted keys, key rotation and cooldown, per-task routing with a fallback, remote-consent and HTTPS boundary, daily/task/connection limits, verified-cost budget, metadata-only usage ledger and history browser, reviewable OCR text cleanup, optional vision region proposals, one-crop equation transcription and one-crop table reading done; account-level billing/quota verification and page-wide automatic reconstruction pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, reviewable automatic table proposals from OCR word boxes, merged-cell spans read from PDF vector rules, AI reading of one saved table crop, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; page-wide vision tables, nested tables and page-wide equation extraction pending |
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
 | 9. History, backup and recovery | **Complete**: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |

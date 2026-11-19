@@ -1,21 +1,42 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Response, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import DbSession, ProjectDep
 from app.core.errors import AppError
+from app.db.models import AiConnection, AiModel, utcnow
 from app.schemas.ai import (
+    AiConnectionCreate,
+    AiConnectionDetailOut,
+    AiConnectionOut,
+    AiConnectionPatch,
+    AiConnectionTestIn,
+    AiConnectionTestOut,
+    AiConnectionsOut,
     AiEquationOut,
     AiEquationRequest,
-    AiProbeOut,
-    AiProbeRequest,
+    AiKeyCreate,
+    AiKeyOut,
+    AiKeyPatch,
+    AiModelFavoriteIn,
+    AiModelManualCreate,
+    AiModelOut,
+    AiOverviewOut,
+    AiPreferencesOut,
+    AiPreferencesPatch,
+    AiProviderOut,
     AiProvidersOut,
     AiRegionProposalsOut,
     AiRegionProposalsRequest,
+    AiRouteOut,
+    AiRouteUpdate,
+    AiRoutesOut,
     AiSuggestionBulkIn,
     AiSuggestionBulkOut,
     AiSuggestionCreate,
@@ -31,113 +52,364 @@ from app.schemas.ai import (
     AiUsageTask,
 )
 from app.services import ai as ai_service
-from app.services import ai_secrets
-from app.services import ai_usage
-from app.services import ai_vision
+from app.services import ai_migrate, ai_providers, ai_router, ai_store, ai_usage, ai_vision
 from app.services import projects as project_service
 from app.services.projects import touch_project
-from app.services.settings import get_app_settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ai"])
 
 
-def _commit_usage(session: Session) -> None:
-    """Persist usage metadata without hiding the provider or validation error."""
+def _ensure_migrated(session: Session) -> None:
     try:
-        session.commit()
+        ai_migrate.run_legacy_ai_migration(session)
     except Exception:
-        logger.exception("Could not persist local AI usage metadata.")
+        # A failed migration must not hide the rest of the settings UI. The
+        # marker stays pending, so the next start retries.
+        logger.exception("Could not migrate legacy AI settings.")
         session.rollback()
 
 
-def _effective_cost_class(profile: Any, payload: Any) -> str:
-    """Classify the server this request would actually reach.
-
-    The target URL is validated first, so remote consent and URL errors keep
-    their own status codes before a cost decision is made. Loopback is always
-    local inference. A saved remote profile keeps a declared "free" class; any
-    other remote target needs confirmation because the user may be billed.
-    """
-    provider = getattr(payload, "provider", None) or profile.provider
-    base_url = getattr(payload, "base_url", None)
-    if base_url is None:
-        base_url = profile.base_url
-    resolved = ai_service.normalize_base_url(
-        provider, base_url, allow_remote=profile.allow_remote
-    )
-    if ai_service.is_loopback_base_url(provider, resolved):
-        return "local"
-    if getattr(payload, "provider", None) is None and getattr(
-        payload, "base_url", None
-    ) is None and profile.cost_class == "free":
-        return "free"
-    return "paid"
-
-
-def _require_paid_approval(profile: Any, payload: Any) -> None:
-    """Refuse a paid generation request that the user has not approved.
-
-    This runs before the usage limit check and before any network request, so a
-    refused action never costs money or counts against the request limit.
-    """
-    if getattr(payload, "confirm_paid", False):
-        return
-    if _effective_cost_class(profile, payload) != "paid":
-        return
-    raise AppError(
-        409,
-        "ai_paid_confirmation_required",
-        "This AI profile is marked as paid. Confirm the request before it is sent.",
-    )
-
-
-def _probe_api_key(payload: AiProbeRequest, session: Session) -> str | None:
-    if payload.api_key:
-        return ai_secrets.clean_api_key(payload.api_key)
-    if not payload.task:
+def _iso(value: datetime | None) -> str | None:
+    if value is None:
         return None
-    saved = getattr(get_app_settings(session).ai, payload.task)
-    if saved.provider != payload.provider:
-        return None
-    try:
-        # Normalization is only used for comparison here; nothing is requested.
-        saved_url = ai_service.normalize_base_url(
-            saved.provider, saved.base_url, allow_remote=True
-        )
-        requested_url = ai_service.normalize_base_url(
-            payload.provider, payload.base_url, allow_remote=True
-        )
-    except AppError:
-        return None
-    if saved_url != requested_url:
-        return None
-    return ai_secrets.get_api_key(payload.task)
-
-
-def _stored_api_key(task: str, payload: Any) -> str | None:
-    """Use the saved key only when the request keeps the saved server.
-
-    A per-request provider or base URL override must never receive a key that was
-    stored for a different server.
-    """
-    if getattr(payload, "provider", None) is not None:
-        return None
-    if getattr(payload, "base_url", None) is not None:
-        return None
-    return ai_secrets.get_api_key(task)
+    resolved = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+    return resolved.astimezone(timezone.utc).isoformat()
 
 
 @router.get("/ai/providers", response_model=AiProvidersOut)
 def list_ai_providers() -> dict[str, Any]:
-    return {"providers": ai_service.provider_catalog()}
+    return {"providers": ai_providers.provider_catalog()}
+
+
+@router.get("/ai/connections", response_model=AiConnectionsOut)
+def list_ai_connections(session: DbSession) -> dict[str, Any]:
+    _ensure_migrated(session)
+    return {"connections": ai_store.list_connections(session)}
+
+
+@router.post(
+    "/ai/connections",
+    response_model=AiConnectionDetailOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_ai_connection(
+    payload: AiConnectionCreate, session: DbSession
+) -> dict[str, Any]:
+    values = ai_store.ConnectionInput(**payload.model_dump())
+    return ai_store.create_connection(session, values)
+
+
+@router.get("/ai/connections/{connection_id}", response_model=AiConnectionDetailOut)
+def read_ai_connection(connection_id: str, session: DbSession) -> dict[str, Any]:
+    return ai_store.get_connection_payload(session, connection_id)
+
+
+@router.patch("/ai/connections/{connection_id}", response_model=AiConnectionDetailOut)
+def update_ai_connection(
+    connection_id: str, payload: AiConnectionPatch, session: DbSession
+) -> dict[str, Any]:
+    values = ai_store.ConnectionPatch(**payload.model_dump(exclude_unset=True))
+    return ai_store.update_connection(session, connection_id, values)
+
+
+@router.delete(
+    "/ai/connections/{connection_id}", status_code=status.HTTP_200_OK
+)
+def delete_ai_connection(connection_id: str, session: DbSession) -> None:
+    ai_store.delete_connection(session, connection_id)
+
+
+@router.post(
+    "/ai/connections/{connection_id}/test", response_model=AiConnectionTestOut
+)
+def test_ai_connection(
+    connection_id: str, session: DbSession, payload: AiConnectionTestIn | None = None
+) -> dict[str, Any]:
+    connection = ai_store.get_connection(session, connection_id)
+    spec = ai_providers.PROVIDER_BY_ID.get(connection.provider)
+    if spec is None:
+        raise AppError(409, "ai_unknown_provider", "Unknown AI provider.")
+    provided = payload.api_key if payload else None
+    used_key, secret = ai_store.preferred_key(session, connection, provided)
+    if spec.requires_api_key and not secret:
+        connection.last_status = "configuration_required"
+        connection.last_checked_at = utcnow()
+        session.commit()
+        return {
+            "connection_id": connection.id,
+            "status": "configuration_required",
+            "provider": connection.provider,
+            "base_url": connection.base_url,
+            "models_found": 0,
+            "cached": True,
+            "version": None,
+            "error_code": "ai_api_key_required",
+            "http_status": None,
+            "retry_after_seconds": None,
+            "last_checked_at": _iso(connection.last_checked_at),
+            "message": "Add an API key before testing this connection.",
+        }
+
+    try:
+        result = ai_providers.discover_models(
+            spec, connection.base_url, api_key=secret
+        )
+    except ai_providers.ProviderError as exc:
+        status_name = {
+            "auth": "auth_failed",
+            "rate_limit": "rate_limited",
+            "server": "unavailable",
+            "network": "unavailable",
+            "config": "configuration_required",
+        }.get(exc.category, "error")
+        connection.last_status = status_name
+        connection.last_error_code = exc.code
+        connection.last_http_status = exc.http_status
+        connection.retry_after_seconds = exc.retry_after_seconds
+        connection.last_checked_at = utcnow()
+        connection.updated_at = utcnow()
+        if used_key is not None:
+            used_key.last_error_at = utcnow()
+            used_key.last_error_code = exc.code
+            if exc.category == "auth":
+                used_key.auth_failed = True
+        session.commit()
+        cached = ai_store.list_models(session, connection_id=connection.id)
+        return {
+            "connection_id": connection.id,
+            "status": status_name,
+            "provider": connection.provider,
+            "base_url": connection.base_url,
+            "models_found": len(cached),
+            "cached": True,
+            "version": None,
+            "error_code": exc.code,
+            "http_status": exc.http_status,
+            "retry_after_seconds": exc.retry_after_seconds,
+            "last_checked_at": _iso(connection.last_checked_at),
+            "message": exc.message,
+        }
+
+    count = ai_store.replace_discovered_models(session, connection, result.models)
+    if isinstance(result.version, str) and result.version:
+        settings = dict(connection.settings or {})
+        settings["provider_version"] = result.version[:120]
+        connection.settings = settings
+    connection.last_status = "connected"
+    connection.last_error_code = None
+    connection.last_http_status = None
+    connection.retry_after_seconds = None
+    connection.last_checked_at = utcnow()
+    connection.updated_at = utcnow()
+    if used_key is not None:
+        used_key.last_used_at = utcnow()
+        used_key.last_success_at = utcnow()
+        used_key.last_error_code = None
+        used_key.cooldown_until = None
+        used_key.auth_failed = False
+    session.commit()
+    return {
+        "connection_id": connection.id,
+        "status": "connected",
+        "provider": connection.provider,
+        "base_url": connection.base_url,
+        "models_found": count,
+        "cached": False,
+        "version": result.version,
+        "error_code": None,
+        "http_status": None,
+        "retry_after_seconds": None,
+        "last_checked_at": _iso(connection.last_checked_at),
+        "message": None,
+    }
+
+
+@router.get("/ai/connections/{connection_id}/keys", response_model=list[AiKeyOut])
+def list_ai_keys(connection_id: str, session: DbSession) -> list[dict[str, Any]]:
+    return ai_store.list_keys(session, connection_id)
+
+
+@router.post(
+    "/ai/connections/{connection_id}/keys",
+    response_model=AiKeyOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_ai_key(
+    connection_id: str, payload: AiKeyCreate, session: DbSession
+) -> dict[str, Any]:
+    values = ai_store.KeyInput(**payload.model_dump())
+    return ai_store.add_key(session, connection_id, values)
+
+
+@router.patch(
+    "/ai/connections/{connection_id}/keys/{key_id}", response_model=AiKeyOut
+)
+def update_ai_key(
+    connection_id: str, key_id: str, payload: AiKeyPatch, session: DbSession
+) -> dict[str, Any]:
+    values = ai_store.KeyPatch(**payload.model_dump(exclude_unset=True))
+    return ai_store.update_key(session, connection_id, key_id, values)
+
+
+@router.delete(
+    "/ai/connections/{connection_id}/keys/{key_id}",
+    status_code=status.HTTP_200_OK,
+)
+def delete_ai_key(connection_id: str, key_id: str, session: DbSession) -> None:
+    ai_store.delete_key(session, connection_id, key_id)
+
+
+@router.get("/ai/connections/{connection_id}/models", response_model=list[AiModelOut])
+def list_connection_models(
+    connection_id: str,
+    session: DbSession,
+    query: str | None = Query(default=None, max_length=200),
+    capability: str | None = Query(default=None, pattern="^(text|vision)$"),
+    favorites_only: bool = Query(default=False),
+    available_only: bool = Query(default=False),
+) -> list[dict[str, Any]]:
+    return ai_store.list_models(
+        session,
+        connection_id=connection_id,
+        query=query,
+        capability=capability,
+        favorites_only=favorites_only,
+        available_only=available_only,
+    )
+
+
+@router.get("/ai/models", response_model=list[AiModelOut])
+def list_all_models(
+    session: DbSession,
+    query: str | None = Query(default=None, max_length=200),
+    connection_id: str | None = Query(default=None),
+    capability: str | None = Query(default=None, pattern="^(text|vision)$"),
+    favorites_only: bool = Query(default=False),
+    available_only: bool = Query(default=False),
+) -> list[dict[str, Any]]:
+    return ai_store.list_models(
+        session,
+        connection_id=connection_id,
+        query=query,
+        capability=capability,
+        favorites_only=favorites_only,
+        available_only=available_only,
+    )
+
+
+@router.post(
+    "/ai/connections/{connection_id}/models",
+    response_model=AiModelOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_manual_model(
+    connection_id: str, payload: AiModelManualCreate, session: DbSession
+) -> dict[str, Any]:
+    values = ai_store.ManualModelInput(**payload.model_dump())
+    return ai_store.add_manual_model(session, connection_id, values)
+
+
+@router.post(
+    "/ai/connections/{connection_id}/models/refresh",
+    response_model=AiConnectionTestOut,
+)
+def refresh_models(
+    connection_id: str, session: DbSession, payload: AiConnectionTestIn | None = None
+) -> dict[str, Any]:
+    return test_ai_connection(connection_id, session, payload)
+
+
+@router.post(
+    "/ai/connections/{connection_id}/models/favorite", response_model=AiModelOut
+)
+def favorite_model(
+    connection_id: str, payload: AiModelFavoriteIn, session: DbSession
+) -> dict[str, Any]:
+    model_id = payload.model_id
+    return ai_store.set_favorite(session, connection_id, model_id, payload.favorite)
+
+
+@router.post("/ai/models/clear-recent", status_code=status.HTTP_200_OK)
+def clear_recent_models(session: DbSession) -> None:
+    ai_store.clear_recent_models(session)
+
+
+@router.get("/ai/routes", response_model=AiRoutesOut)
+def list_ai_routes(session: DbSession) -> dict[str, Any]:
+    _ensure_migrated(session)
+    routes = ai_store.list_routes(session)
+    default = next(
+        (item["model_id"] for item in routes if item["task"] == ai_store.DEFAULT_ROUTE_TASK),
+        None,
+    )
+    return {"routes": routes, "default_model": default}
+
+
+@router.put("/ai/routes/{task}", response_model=AiRouteOut)
+def update_ai_route(
+    task: str, payload: AiRouteUpdate, session: DbSession
+) -> dict[str, Any]:
+    values = ai_store.RouteInput(**payload.model_dump())
+    return ai_store.set_route(session, task, values)
+
+
+@router.get("/ai/tasks")
+def read_ai_task_status(session: DbSession) -> dict[str, Any]:
+    _ensure_migrated(session)
+    return {"tasks": ai_router.task_status(session)}
+
+
+@router.get("/ai/preferences", response_model=AiPreferencesOut)
+def read_ai_preferences(session: DbSession) -> dict[str, Any]:
+    return ai_store.get_preferences(session).model_dump()
+
+
+@router.patch("/ai/preferences", response_model=AiPreferencesOut)
+def update_ai_preferences(
+    payload: AiPreferencesPatch, session: DbSession
+) -> dict[str, Any]:
+    current = ai_store.get_preferences(session)
+    values = payload.model_dump(exclude_unset=True)
+    merged = {**current.model_dump(), **values}
+    updated = ai_store.AiPreferences.model_validate(merged)
+    return ai_store.save_preferences(session, updated).model_dump()
+
+
+@router.get("/ai/overview", response_model=AiOverviewOut)
+def read_ai_overview(session: DbSession) -> dict[str, Any]:
+    _ensure_migrated(session)
+    connections = ai_store.list_connections(session)
+    model_count = 0
+    key_count = 0
+    for connection in connections:
+        model_count += int(connection["model_count"])
+        key_count += int(connection["key_count"])
+    tasks = ai_router.task_status(session)
+    preferences = ai_store.get_preferences(session)
+    return {
+        "connection_count": len(connections),
+        "enabled_connection_count": sum(1 for item in connections if item["enabled"]),
+        "key_count": key_count,
+        "model_count": model_count,
+        "configured_task_count": sum(
+            1 for item in tasks.values() if item["configured"]
+        ),
+        "task_count": len(tasks),
+        "preferences": preferences.model_dump(),
+    }
+
+
+@router.get("/ai/migration")
+def read_ai_migration(session: DbSession) -> dict[str, Any]:
+    return ai_migrate.migration_status(session)
 
 
 @router.get("/ai/usage", response_model=AiUsageOut)
 def read_ai_usage(session: DbSession) -> dict[str, Any]:
-    ai_settings = get_app_settings(session).ai
-    return ai_usage.usage_summary(session, ai_settings.request_limit)
+    preferences = ai_store.get_preferences(session)
+    return ai_usage.usage_summary(session, preferences.daily_request_limit)
 
 
 @router.get("/ai/usage/history", response_model=AiUsageHistoryOut)
@@ -147,25 +419,22 @@ def read_ai_usage_history(
     offset: int = Query(0, ge=0),
     outcome: AiUsageOutcome | None = Query(None),
     task: AiUsageTask | None = Query(None),
+    connection_id: str | None = Query(default=None),
 ) -> dict[str, Any]:
-    """Browse the local ledger beyond the five recent rows shown in Settings."""
+    """Browse the local ledger beyond the recent rows shown in Settings."""
     return ai_usage.usage_history(
         session,
         limit=limit,
         offset=offset,
         outcome=outcome,
         task=task,
+        connection_id=connection_id,
     )
 
 
-@router.post("/ai/probe", response_model=AiProbeOut)
-def probe_ai_provider(payload: AiProbeRequest, session: DbSession) -> dict[str, Any]:
-    return ai_service.probe_provider(
-        payload.provider,
-        payload.base_url,
-        allow_remote=payload.allow_remote,
-        api_key=_probe_api_key(payload, session),
-    )
+@router.delete("/ai/usage", status_code=status.HTTP_200_OK)
+def clear_ai_usage(session: DbSession) -> None:
+    ai_store.clear_usage_history(session)
 
 
 @router.post(
@@ -179,44 +448,13 @@ def create_ai_region_proposals(
     session: DbSession,
 ) -> dict[str, Any]:
     directory = project_service.ensure_project_storage(project)
-    ai_settings = get_app_settings(session).ai
-    vision = ai_settings.vision
-    if not vision.model:
-        raise AppError(
-            409,
-            "ai_vision_not_configured",
-            "Choose a vision model in Settings before analysing page images.",
-        )
-    _require_paid_approval(vision, payload)
-    ai_usage.ensure_within_limit(session, ai_settings.request_limit)
-
-    def record_attempt(attempt: ai_service.RequestAttempt) -> None:
-        ai_usage.record_attempt(
-            session,
-            provider=attempt.provider,
-            model=attempt.model,
-            task="region_proposals",
-            outcome="error" if attempt.error_code else "success",
-            error_code=attempt.error_code,
-            project_id=project.id,
-            page_id=page_id,
-            block_id=None,
-        )
-
-    try:
-        result = ai_vision.propose_regions(
-            directory,
-            page_id,
-            vision,
-            provider=payload.provider,
-            base_url=payload.base_url,
-            model=payload.model,
-            api_key=_stored_api_key("vision", payload),
-            on_attempt=record_attempt,
-        )
-    except Exception:
-        _commit_usage(session)
-        raise
+    result = ai_vision.propose_regions(
+        session,
+        directory,
+        page_id,
+        project_id=project.id,
+        confirm_paid=payload.confirm_paid,
+    )
     touch_project(session, project)
     return result
 
@@ -232,8 +470,6 @@ def create_ai_equation_proposal(
     session: DbSession,
 ) -> dict[str, Any]:
     directory = project_service.ensure_project_storage(project)
-    # Resolve the element first so a missing region or a non-equation crop is
-    # reported before any provider setting or request limit is involved.
     element = ai_vision.element_context(directory, element_id)
     if element["kind"] != "equation":
         raise AppError(
@@ -241,44 +477,13 @@ def create_ai_equation_proposal(
             "ai_equation_region_required",
             "Only an equation region can be transcribed.",
         )
-    ai_settings = get_app_settings(session).ai
-    vision = ai_settings.vision
-    if not vision.model:
-        raise AppError(
-            409,
-            "ai_vision_not_configured",
-            "Choose a vision model in Settings before transcribing equations.",
-        )
-    _require_paid_approval(vision, payload)
-    ai_usage.ensure_within_limit(session, ai_settings.request_limit)
-
-    def record_attempt(attempt: ai_service.RequestAttempt) -> None:
-        ai_usage.record_attempt(
-            session,
-            provider=attempt.provider,
-            model=attempt.model,
-            task="equation_transcription",
-            outcome="error" if attempt.error_code else "success",
-            error_code=attempt.error_code,
-            project_id=project.id,
-            page_id=element["page_id"],
-            block_id=None,
-        )
-
-    try:
-        result = ai_vision.transcribe_equation(
-            directory,
-            element_id,
-            vision,
-            provider=payload.provider,
-            base_url=payload.base_url,
-            model=payload.model,
-            api_key=_stored_api_key("vision", payload),
-            on_attempt=record_attempt,
-        )
-    except Exception:
-        _commit_usage(session)
-        raise
+    result = ai_vision.transcribe_equation(
+        session,
+        directory,
+        element_id,
+        project_id=project.id,
+        confirm_paid=payload.confirm_paid,
+    )
     touch_project(session, project)
     return result
 
@@ -294,8 +499,6 @@ def create_ai_table_proposal(
     session: DbSession,
 ) -> dict[str, Any]:
     directory = project_service.ensure_project_storage(project)
-    # Resolve the element first so a missing region or a non-table crop is
-    # reported before any provider setting or request limit is involved.
     element = ai_vision.element_context(directory, element_id)
     if element["kind"] != "table":
         raise AppError(
@@ -303,44 +506,13 @@ def create_ai_table_proposal(
             "ai_table_region_required",
             "Only a table region can be read as a table.",
         )
-    ai_settings = get_app_settings(session).ai
-    vision = ai_settings.vision
-    if not vision.model:
-        raise AppError(
-            409,
-            "ai_vision_not_configured",
-            "Choose a vision model in Settings before reading tables.",
-        )
-    _require_paid_approval(vision, payload)
-    ai_usage.ensure_within_limit(session, ai_settings.request_limit)
-
-    def record_attempt(attempt: ai_service.RequestAttempt) -> None:
-        ai_usage.record_attempt(
-            session,
-            provider=attempt.provider,
-            model=attempt.model,
-            task="table_structure",
-            outcome="error" if attempt.error_code else "success",
-            error_code=attempt.error_code,
-            project_id=project.id,
-            page_id=element["page_id"],
-            block_id=None,
-        )
-
-    try:
-        result = ai_vision.transcribe_table(
-            directory,
-            element_id,
-            vision,
-            provider=payload.provider,
-            base_url=payload.base_url,
-            model=payload.model,
-            api_key=_stored_api_key("vision", payload),
-            on_attempt=record_attempt,
-        )
-    except Exception:
-        _commit_usage(session)
-        raise
+    result = ai_vision.transcribe_table(
+        session,
+        directory,
+        element_id,
+        project_id=project.id,
+        confirm_paid=payload.confirm_paid,
+    )
     touch_project(session, project)
     return result
 
@@ -398,38 +570,14 @@ def create_ai_cleanup_suggestion(
     session: DbSession,
 ) -> dict[str, Any]:
     directory = project_service.ensure_project_storage(project)
-    ai_settings = get_app_settings(session).ai
-    _require_paid_approval(ai_settings.text, payload)
-    ai_usage.ensure_within_limit(session, ai_settings.request_limit)
-
-    def record_attempt(attempt: ai_service.RequestAttempt) -> None:
-        ai_usage.record_attempt(
-            session,
-            provider=attempt.provider,
-            model=attempt.model,
-            task="ocr_cleanup",
-            outcome="error" if attempt.error_code else "success",
-            error_code=attempt.error_code,
-            project_id=project.id,
-            page_id=page_id,
-            block_id=block_id,
-        )
-
-    try:
-        suggestion, run = ai_service.create_cleanup_suggestion(
-            directory,
-            page_id,
-            block_id,
-            ai_settings.text,
-            provider=payload.provider,
-            base_url=payload.base_url,
-            model=payload.model,
-            api_key=_stored_api_key("text", payload),
-            on_attempt=record_attempt,
-        )
-    except Exception:
-        _commit_usage(session)
-        raise
+    suggestion, run = ai_service.create_cleanup_suggestion(
+        session,
+        directory,
+        page_id,
+        block_id,
+        project_id=project.id,
+        confirm_paid=payload.confirm_paid,
+    )
     touch_project(session, project)
     return {"suggestion": suggestion, "run": run}
 

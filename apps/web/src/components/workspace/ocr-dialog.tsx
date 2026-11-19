@@ -33,12 +33,13 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/input";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import {
+  useAiTasks,
   useCreateAiSuggestion,
   useDecideAiSuggestion,
   usePageAiSuggestionHistory,
   usePageAiSuggestions,
 } from "@/hooks/use-ai";
-import { useAppMeta, useAppSettings } from "@/hooks/use-app";
+import { useAppMeta } from "@/hooks/use-app";
 import { useOcrCapabilities, useLatestOcr, useStartOcr, useUpdateOcrBlock } from "@/hooks/use-ocr";
 import { formatDateTime, resolveLocale } from "@/lib/format";
 import {
@@ -80,7 +81,7 @@ export function OcrDialog({
   const capabilitiesQuery = useOcrCapabilities();
   const capabilities = capabilitiesQuery.data;
   const metaQuery = useAppMeta();
-  const settingsQuery = useAppSettings();
+  const tasksQuery = useAiTasks();
   const latestQuery = useLatestOcr(projectId, page?.id ?? null, open);
   const startOcr = useStartOcr(projectId);
   const updateBlock = useUpdateOcrBlock(projectId);
@@ -102,8 +103,8 @@ export function OcrDialog({
   const blocks = useMemo(() => run?.blocks ?? [], [run]);
   const busy = startOcr.isPending || run?.status === "queued" || run?.status === "running";
   const aiAvailable = metaQuery.data?.capabilities.ai === true;
-  const aiModel = settingsQuery.data?.ai.text.model.trim() ?? "";
-  const aiConfigured = aiAvailable && aiModel.length > 0;
+  const cleanupTask = tasksQuery.data?.tasks.ocr_cleanup;
+  const aiConfigured = aiAvailable && cleanupTask?.configured === true;
 
   const languageOptions = useMemo(
     () => buildLanguageOptions(capabilities?.languages, t),
@@ -223,9 +224,8 @@ export function OcrDialog({
 
   const requestAiCleanup = async (block: OcrBlock) => {
     if (!page || !run || run.stale || !aiConfigured) return;
-    const textProfile = settingsQuery.data?.ai.text;
-    // A paid profile is approved per action, before anything is sent.
-    const approved = await paidAi.requestApproval(textProfile);
+    // A paid route is approved per action, before anything is sent.
+    const approved = await paidAi.requestApproval(cleanupTask);
     if (!approved) return;
     // The proposal must describe the text that is actually stored, so pending
     // local corrections are saved before the request.

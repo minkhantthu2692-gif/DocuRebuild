@@ -20,14 +20,19 @@ const mocks = vi.hoisted(() => ({
   visionCostClass: "local" as "local" | "free" | "paid",
 }));
 
-vi.mock("@/hooks/use-app", () => ({
-  useAppSettings: () => ({
+vi.mock("@/hooks/use-ai", () => ({
+  useAiTasks: () => ({
     data: {
-      ai: {
-        vision: {
-          model: mocks.visionModel,
-          base_url: mocks.visionBaseUrl,
-          cost_class: mocks.visionCostClass,
+      tasks: {
+        table_structure: {
+          configured: mocks.visionModel.length > 0,
+          connection_id: mocks.visionModel ? "conn-1" : null,
+          connection_name: mocks.visionModel ? "Local server" : null,
+          base_url: mocks.visionBaseUrl || null,
+          model_id: mocks.visionModel || null,
+          model_display_name: mocks.visionModel || null,
+          cost_class: mocks.visionModel ? mocks.visionCostClass : null,
+          warnings: [],
         },
       },
     },

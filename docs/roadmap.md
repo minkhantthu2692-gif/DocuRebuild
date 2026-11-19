@@ -14,7 +14,7 @@ presented in the UI until it actually works.
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates), deterministic figure suggestions from embedded PDF images and vector drawings, and a local CER/WER benchmark harness done; measured real-document accuracy pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, OCR-layout, embedded-PDF-image, vector-drawing and raster-page ink region suggestions with a named source in the extraction dialog, library, verification and figure/text insertion, reviewed equation crops inserted as real equations, and on-demand AI transcription of one equation crop into reviewable LaTeX done; structured table reconstruction pending |
-| 6. AI integration and free usage first | **In progress** | Local Ollama/OpenAI-compatible adapter, model discovery, settings with independent text and vision task profiles, encrypted per-task API keys, remote-consent boundary, user-declared local/free/paid cost classes with per-action approval, request limits, per-task usage breakdown, usage-history browser, bulk AI proposal review, reviewable persisted OCR text cleanup, optional vision region proposals and optional equation-crop transcription done; verified pricing/quotas and spending caps pending |
+| 6. AI integration and free usage first | **In progress** | Unified BYOK provider platform with local Ollama, custom OpenAI-compatible and 12 cloud adapters, dynamic model discovery, multiple connections and encrypted keys, key rotation/cooldown/failover, per-task routing with fallbacks, remote-consent and HTTPS boundary, daily/task/connection limits, verified-cost budget, metadata-only usage ledger and history, reviewable OCR cleanup, optional vision region proposals, equation-crop transcription and table-crop reading done; account-level billing/quota verification pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, merged cells from a PDF's drawn rules, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, inserting a reviewed equation crop as a real numbered equation, optional vision-model transcription of one saved equation crop into reviewable LaTeX, and faithful Markdown/TXT/Word/PDF export; vision tables, merged-cell detection for text-only tables and automatic page-wide equation recognition pending |
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, multi-line Word equations, footnotes, per-project page headers/footers, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
@@ -244,180 +244,99 @@ described as universally free or universally accurate.
 
 **Delivered**
 
-- Provider catalog with two local adapter kinds: `ollama` (default
-  `http://127.0.0.1:11434`) and `openai_compatible` (default
-  `http://127.0.0.1:1234/v1`). No cloud account, paid subscription or automatic paid
-  call is involved.
-- Settings → Local AI with an explicit, saved text profile (provider, base URL,
-  model, remote consent). Empty model keeps AI actions disabled. URL drafts are
-  validated and only saved on request, and the provider default is shown as a
-  placeholder.
-- Optional per-task provider API keys for a server that requires bearer
-  authentication. Each profile stores one key encrypted with Fernet in
-  `<data_dir>/secrets/ai_keys.enc`; the master key is generated locally. The key is
-  write-only: `PATCH /api/settings` accepts `api_key` or `clear_api_key`, the API
-  returns only `has_api_key`, and the value never enters `app.db`, the usage ledger,
-  logs or exports. A stored key is sent only when the request keeps the saved
-  provider and URL, so a per-request server override never receives it. A connection
-  test can reuse the saved key or test an unsaved one.
-- Loopback-only network boundary by default. `localhost`, `*.localhost` and loopback
-  IPs need no approval; any other host or IP returns `403 ai_remote_not_allowed` for
-  probes, cleanups and per-request overrides until the user enables remote endpoint
-  consent. Consent is stored with the profile and is never inferred from the URL.
-- User-triggered connection test and model discovery through Ollama `/api/tags` and
-  `/api/version`, or OpenAI-compatible `/models`. Discovered models populate a
-  manual-entry datalist, and the model's family and parameter size are shown when the
-  server reports them. A typed name that the last test did not list gets a
-  non-blocking warning instead of being silently treated as valid; a typed model name
-  always remains possible.
-- Reviewable OCR text cleanup. `POST .../ocr/blocks/{block_id}/ai-suggestions` sends
-  only that block's text to the configured server and stores an unverified
-  `ai_suggestion` with original text, proposed text, provider, model and base URL.
-- `GET .../pages/{page_id}/ai-suggestions?status=pending` exposes stored proposals.
-  The OCR dialog reloads pending proposals when it opens, so closing and reopening
-  the dialog no longer hides an unreviewed proposal. Proposals tied to an older OCR
-  run stay in the database but are not shown for the current run.
-- Per-block proposal history in the OCR dialog. Accepted and rejected proposals keep
-  their original text, proposed text, provider, model and decision time, so the AI's
-  influence stays auditable after later manual corrections. History is read-only and
-  does not change OCR text. The page list endpoint accepts `status` and `limit`
-  (default 200, maximum 500).
-- Project-wide review queue for pending cleanup proposals.
-  `GET /api/projects/{project_id}/ai-suggestions` returns proposals across every page
-  with `page_number`, newest first, and accepts the same `status`/`limit` filters.
-  The source toolbar opens a "Review AI proposals" dialog that shows the current and
-  proposed text side by side, with page, provider, model and time, and accept/reject
-  actions that reuse the existing decision endpoint. Accepting still revalidates the
-  block, so a proposal made stale by a later edit is refused rather than applied.
-- Local AI usage ledger in the application database. Every cleanup request that
-  actually contacts a provider is recorded with provider, model, task, outcome,
-  error code, project/page/block ids and a timestamp. Document text and model output
-  are never stored in this ledger. Validation failures and connection tests are not
-  counted.
-- Configurable rolling 24-hour request limit (`0` = unlimited, maximum 10,000),
-  enforced before the provider is contacted with `429 ai_request_limit_reached`.
-  Settings shows requests used in the last 24 hours, a per-task breakdown of that
-  budget (counts only, errors included because they also consume quota) and the five
-  most recent metadata-only entries through `GET /api/ai/usage`. **View full history**
-  opens a read-only ledger browser with 25-row pages and outcome/task filters through
-  `GET /api/ai/usage/history`; rows name their project and survive project deletion
-  with no name, so the ledger can be audited across projects and pages.
-- Accept/reject decisions through `PATCH .../ai-suggestions/{id}`. Accepting writes
-  the proposal through the normal OCR correction path, marks the block corrected
-  (not verified) and refuses when the block text changed after the proposal was
-  created. Rejecting keeps the OCR text and still works after the page changes.
-- Optional vision region proposals. `app_settings.ai.vision` is a separate task
-  profile with its own provider, base URL, model and remote-consent decision, so
-  image analysis can run on a different local server or device than text cleanup.
-  An empty model keeps image AI disabled and returns `409 ai_vision_not_configured`
-  before any request; settings stored by an older build are migrated from the
-  single `ai.vision_model` value on read. `POST .../pages/{page_id}/ai-region-proposals`
-  sends only the current page image (resized locally to a bounded JPEG) to the
-  configured Ollama or OpenAI-compatible vision server and asks for normalized
-  figure, table and equation rectangles. The backend validates and clamps the
-  coordinates, applies the same padding and dedupe rules as heuristic proposals,
-  drops regions that already have an extracted element, and returns low-confidence
-  proposals. Nothing is persisted: the source viewer overlays them for review, and
-  choosing one only prefills the normal extraction dialog. Per-request
-  provider/base URL/model overrides follow the same remote-consent rules, and each
-  attempt is recorded in the usage ledger with task `region_proposals`.
-- On-demand equation transcription. The equation-region formula dialog can send only
-  that saved crop to the saved vision profile and fills its LaTeX field with
-  the reply. Non-equation regions and missing crops are refused before any request;
-  code fences, math delimiters and wrapping quotes are stripped but the expression is
-  never rewritten, and an empty reply is reported instead of guessed at. The reply is
-  not persisted as a suggestion and is never inserted automatically; the dialog names
-  the proposing model, marks it unverified and keeps the manual typing path available
-  without a vision model. Each attempt is recorded with task `equation_transcription`.
-- On-demand AI table reading. A saved table region can be read by the vision
-  profile from the elements dialog, which sends only that crop and shows the reply
-  in the normal table review grid. The request refuses a non-table region, a missing
-  crop and an unconfigured vision model before any request, and a paid profile still
-  needs its one-action approval. Only a complete rectangle is accepted: a ragged,
-  empty, oversized or non-text reply is reported instead of being padded, truncated
-  or guessed at. Every cell is unscored (`no_confidence`), so insertion stays
-  disabled until the user acknowledges the grid, manual corrections are inserted
-  instead of the raw reply, and nothing is written back to the region. Each attempt
-  is recorded with task `table_structure`.
-- Per-block review UI showing the current OCR text beside the proposal, provider and
-  model badges, explicit accept/reject actions, a stale-proposal warning and a link
-  to Settings when no model is configured. The source viewer shows the vision
-  proposal count, provider/model and a review warning, and clears the overlay when
-  the page changes or rotates. Both review surfaces highlight the exact characters
-  the proposal changed: removed text is struck through in the current OCR text and
-  added text is underlined in the proposal. The comparison is computed locally,
-  works with unspaced scripts such as Burmese, falls back to a coarse whole-change
-  notice for a very large rewrite, and never alters either text.
-- Multi-select batch review in the project-wide queue. Checkboxes and a select-all
-  control choose pending proposals, and **Accept selected** / **Reject selected**
-  require a confirmation that names the count. The backend decides each proposal
-  separately with the same stale/run checks and reports per-item failures, so a stale
-  proposal is skipped while the rest still change; the list refreshes afterwards and
-  skipped proposals stay pending.
-- User-declared cost classes with per-action paid approval. Each profile is stored as
-  `local`, `free` or `paid`. Loopback inference is always local and a remote URL can
-  never stay marked local: saving one turns a `local` or unspecified class into paid,
-  and a profile saved by an older build is classified on read (loopback local,
-  anything else paid). Cleanup, region proposals, equation transcription and table
-  reading on a paid profile require `confirm_paid: true` and otherwise return
-  `409 ai_paid_confirmation_required` before the usage limit is checked and before any
-  network request, so a refused action costs nothing and leaves the ledger untouched.
-  A declared free tier is not asked again; connection tests never need approval. The
-  dialog names the model and server URL, states that DocuRebuild does not estimate
-  provider pricing, and sends nothing until the user confirms that one action.
-- SSRF guards for the configured URL: `http`/`https` only, no embedded credentials,
-  and the well-known cloud metadata addresses are rejected. Requests use short
-  connect/probe timeouts, bounded response size and no automatic paid fallback.
-- Provider error clarity without automatic retry. An HTTP 429 becomes
-  `ai_rate_limited`, 401/403 become `ai_auth_failed`, and any other status stays
-  `ai_http_error`. An integer `Retry-After` header is capped at 24 hours and shown as
-  an advisory wait on the connection test; HTTP-date values are ignored. A failed
-  generation is recorded in the usage ledger with the same code, still returns `502`,
-  and is never re-sent, slept on or rerouted to another provider.
-- Capability reporting: `ai` is `true` because the adapter and review workflow
-  exist, while Settings still requires a working local server and model before any
-  action can run. Backend tests use a loopback stub server and cover discovery,
-  timeouts, unreachable servers, invalid responses, remote consent, cost-class
-  inference and normalization, paid refusal without network access, free-tier
-  passthrough, provider rate-limit/auth classification and Retry-After parsing,
-  usage recording, the per-task usage breakdown, rolling-limit enforcement, stale
-  runs, stale text, rejection, validation, the table-grid reply parser and the AI
-  table endpoint. Frontend tests cover the cost-class settings, the paid confirmation
-  dialog, free-tier passthrough, the rate-limit hint, the inline proposal diff, the
-  usage breakdown, discovered model details, the unlisted-model warning, the AI table
-  review dialog, URL escalation and i18n key parity.
+- One unified bring-your-own-key platform replaced the earlier separate text and
+  vision profiles, local-only adapter, consent flags, per-task keys and probe
+  endpoint. The provider registry in `services.ai_providers` covers local Ollama, a
+  custom OpenAI-compatible server, and the OpenAI, Anthropic, Google Gemini,
+  OpenRouter, Groq, Mistral, DeepSeek, xAI, Together, Fireworks, Cerebras and
+  Perplexity APIs through modular adapters. `GET /api/ai/providers` is the source of
+  truth; the frontend does not hardcode providers or models.
+- Named connections in `ai_connections` store the provider, endpoint, remote consent,
+  cost class, enabled state, rotation strategy, attempt cap and optional request and
+  spend limits. Multiple connections can exist per provider, and each can hold
+  several API keys in `ai_connection_keys`.
+- Encrypted credential storage uses arbitrary vault ids (`connkey:<uuid>`) in
+  `<data_dir>/secrets/ai_keys.enc`, with a generated Fernet master key in
+  `secrets/ai_keys.key`. Keys are write-only: the API returns only metadata, and the
+  value never enters `app.db`, logs, exports, the usage ledger or Git. Keys can be
+  enabled, disabled, relabelled, limited, replaced or deleted without deleting the
+  connection.
+- Dynamic model discovery with the user's own credential through Ollama `/api/tags`
+  and `/api/version` or each provider's documented listing endpoint. Normalized model
+  metadata (input/output modalities, context, tools, streaming and reported pricing)
+  is cached in `ai_models`; discovery is refreshed on request. Providers without a
+  listing endpoint report `ai_model_discovery_unsupported` and allow manual model IDs
+  (`source = manual`). Model search, favorites and recent-use clearing are supported;
+  favorites survive a refresh.
+- Unified task routing in `ai_task_routes` for `ocr_cleanup`, `region_proposals`,
+  `equation_transcription` and `table_structure`, plus a `default` route. A route
+  stores its connection/model, optional fallback connection/model, temperature,
+  timeout and rolling 24-hour request limit. Saving a route validates the model
+  against the connection catalog and the task capability; unknown modality metadata
+  is allowed and flagged instead of blocking an otherwise usable model.
+- Key rotation and health handling in `services.ai_router`: `priority`, `failover`,
+  `round_robin`, `least_recent` and `least_usage` strategies; disabled, failed and
+  cooling-down keys are skipped; `max_attempts` bounds provider requests; a rate limit
+  puts the key into a cooldown; a fallback is tried only after the primary fails; a
+  connection with no usable key never sends an unauthenticated request.
+- Honest limit handling: a global daily request limit, per-task and per-connection
+  limits, and a verified-spend monthly budget. Provider quotas, prices and reset times
+  are never invented. A 429 is reported with the provider's advisory wait (capped at
+  24 hours) and is not bypassed; 401/403 marks the key as failed.
+- Remote-endpoint safety: HTTPS is required for remote hosts, HTTP is accepted only
+  for loopback, embedded credentials and cloud-metadata hosts are rejected, redirects
+  are not followed, and explicit remote consent is required when a connection is
+  created or updated. Provider defaults that point at a remote host also require
+  consent. Requests use bounded timeouts and response sizes.
+- Metadata-only usage ledger extended with connection/key labels, reported
+  input/output/total tokens, verified cost and cost source. Settings shows the rolling
+  window, token totals, cost, unpriced count, per-task and per-connection breakdowns
+  and recent entries; **View full history** pages the ledger with outcome/task
+  filters and project names. Document text, prompts, images, crops and replies are
+  never stored.
+- Reviewable workflows preserved: OCR cleanup is stored as an `ai_suggestion` and
+  accepted only when the block and run still match; region proposals remain
+  unpersisted low-confidence rectangles; equation transcription stays in the dialog;
+  table reading requires acknowledgement of every unscored cell. Every paid route asks
+  for one-action approval before sending anything.
+- One-time legacy migration converts the old text/vision profiles into connections,
+  copies their encrypted keys vault-to-vault, imports model names and creates task
+  routes. The legacy JSON stays as a backup, a failed migration retries later, and a
+  new database skips the migration. Migration `0003_ai_byok.py` adds the normalized
+  tables and usage columns without dropping existing data.
+- Backend tests cover provider adapters and discovery, remote consent and HTTPS,
+  URL/SSRF rules, cost classes, paid refusal, rate-limit/auth classification and
+  cooldowns, key rotation and failover, connection/task/global limits, budget
+  enforcement, token/cost accounting, capability validation, route persistence,
+  legacy migration, OCR cleanup review and stale checks, suggestion decisions and
+  bulk review, vision coordinate mapping, equation wrapper reduction and table-grid
+  parsing. Frontend tests cover the new Settings UI, connection/key flows, model
+  selection, route saving, usage breakdown, paid confirmation, dialog task status and
+  i18n key parity.
 
 **Remaining**
 
-- Text/reasoning profile separation beyond OCR cleanup, plus task routing.
-- Optional free-tier and paid providers behind the same adapter, with dynamic
-  model metadata, verified pricing/quotas and clearly marked costs. Remote profiles
-  can be classified today, but the app neither verifies a provider's current pricing
-  nor detects quota exhaustion beyond the provider's own error reply.
-- Spending limits, cost estimation, proactive quota tracking and provider
-  fallbacks. A provider 429 or 401/403 is classified and explained today, but the app
-  does not track quota over time, retry or switch providers, and a monetary cap needs
-  verified pricing data that it does not collect yet.
-- Account sign-in, server-side key validation against a provider account and
-  per-provider spending caps. The encrypted key store and write-only API are in
-  place, but a key is not verified against billing or quota.
-- Batch actions currently cover OCR cleanup proposals in the project-wide queue;
-  other future proposal types use their own review dialogs.
+- Account-level billing and quota verification. The app records what a provider
+  reports and stops at the configured local budget, but it cannot read an account's
+  remaining quota or verify a charge.
+- Proactive quota tracking and provider-specific advanced parameters. A 429 is
+  handled correctly, but the app does not predict a quota from historical usage, and
+  provider-specific knobs beyond temperature/timeout are not exposed.
+- Page-wide automatic equation/figure reconstruction and image generation remain out
+  of scope for this phase.
+- The cost class is a user declaration. A provider can still bill outside the app, and
+  a declared free tier can change without notice.
+- AI output can be wrong. Accepting an OCR proposal marks it corrected, not verified;
+  every vision and table reply still needs manual review.
 
-**Current limitation** — only an Ollama or OpenAI-compatible server that the user
-configures is supported; loopback is the default and a non-loopback endpoint requires
-explicit remote consent. Model quality, availability, memory use and licence terms
-come from the user's installation; "free" is never assumed to be permanent, and a
-free tier declared by the user is not verified against the provider's current terms.
-The cost class is a local gate, not a billing system: the app never estimates a price,
-never knows what the provider actually charges and cannot stop a provider from billing
-outside the application. A saved API key is protected by local file permissions and
-encryption, not by a remote account: anyone who can read the data folder can use it,
-and the app does not verify its quota or billing status. AI text
-can be wrong, so accepting a proposal does not mark it verified and manual review
-remains the source of truth. Vision proposals are rectangles with no extracted
-content and low confidence by design; their coordinates may still be imprecise, and
-the user must review every region before extracting it.
+**Current limitation** — the core application works without any provider, and local
+Ollama or a local OpenAI-compatible server keeps AI free and offline. A cloud
+connection requires the user's own key, an explicit remote-consent decision and a
+correct cost class. Model quality, availability, context limits and licence terms
+come from the provider. A saved key is protected by local file permissions and
+encryption, not by a remote account: anyone who can read the data folder can use it.
+Provider pricing and free-tier availability are not verified permanently; the app
+never claims a provider is free and never estimates a price it cannot support.
 
 ## Phase 7 — Tables, figures and equations (in progress)
 

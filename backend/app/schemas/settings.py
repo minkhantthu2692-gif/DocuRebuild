@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 from typing import Literal
-from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-from app.schemas.ai import AiProviderKind
+from pydantic import BaseModel, ConfigDict, Field
 
 ThemeMode = Literal["system", "light", "dark"]
 AccentName = Literal["indigo", "violet", "blue", "teal", "emerald", "amber", "rose"]
@@ -15,7 +12,6 @@ Density = Literal["comfortable", "compact"]
 FontSizePreset = Literal["sm", "md", "lg"]
 MotionPreference = Literal["full", "reduced"]
 LanguageCode = Literal["en", "my", "system"]
-AiCostClass = Literal["local", "free", "paid"]
 DocumentFont = Literal["serif", "sans"]
 PdfPageSize = Literal["a4", "letter"]
 PdfMargin = Literal["narrow", "normal", "wide"]
@@ -93,129 +89,19 @@ class BackupPatch(BaseModel):
     keep_copies: int | None = Field(default=None, ge=1, le=50)
 
 
-def _validate_base_url(value: str) -> str:
-    """Accept an empty value or a credential-free http(s) base URL."""
-    cleaned = value.strip().rstrip("/")
-    if not cleaned:
-        return ""
-    if len(cleaned) > 500:
-        raise ValueError("Base URL is too long.")
-    parsed = urlparse(cleaned)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("Base URL must be an http or https URL.")
-    if parsed.username or parsed.password:
-        raise ValueError("Base URL must not contain credentials.")
-    return cleaned
-
-
-class AiProfileSettings(BaseModel):
-    """One AI server profile for a task (text cleanup or image analysis)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    provider: AiProviderKind = "ollama"
-    # Empty uses the provider's documented local default.
-    base_url: str = ""
-    # Empty means no model is chosen, so AI actions stay disabled.
-    model: str = Field(default="", max_length=200)
-    # Explicit consent for a non-loopback server. Loopback needs no consent.
-    allow_remote: bool = False
-    # User-declared cost class of the server. "local" is loopback inference,
-    # "free" is a remote free tier and "paid" needs per-request approval. The
-    # application never guesses a price; it only gates paid requests.
-    cost_class: AiCostClass = "local"
-    # Derived from the encrypted secret store on read; never persisted with the
-    # rest of the settings and never returned as the key itself.
-    has_api_key: bool = False
-
-    @field_validator("base_url")
-    @classmethod
-    def _check_base_url(cls, value: str) -> str:
-        return _validate_base_url(value)
-
-    @field_validator("model")
-    @classmethod
-    def _check_model(cls, value: str) -> str:
-        return value.strip()
-
-
-def _validate_api_key(value: str | None) -> str | None:
-    if value is None:
-        return None
-    cleaned = value.strip()
-    if not cleaned:
-        raise ValueError("An API key cannot be empty; omit it or clear the saved key.")
-    if len(cleaned) > 1024:
-        raise ValueError("The API key is too long.")
-    if any(character.isspace() for character in cleaned) or "\x00" in cleaned:
-        raise ValueError("An API key must be one line without spaces.")
-    if not cleaned.isascii() or not cleaned.isprintable():
-        raise ValueError("An API key must use printable ASCII characters.")
-    return cleaned
-
-
-class AiProfilePatch(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    provider: AiProviderKind | None = None
-    base_url: str | None = None
-    model: str | None = Field(default=None, max_length=200)
-    allow_remote: bool | None = None
-    cost_class: AiCostClass | None = None
-    # Write-only: stored encrypted, never echoed back in any response.
-    api_key: str | None = None
-    # Explicitly remove the stored key for this task profile.
-    clear_api_key: bool | None = None
-
-    @field_validator("base_url")
-    @classmethod
-    def _check_base_url(cls, value: str | None) -> str | None:
-        return None if value is None else _validate_base_url(value)
-
-    @field_validator("model")
-    @classmethod
-    def _check_model(cls, value: str | None) -> str | None:
-        return None if value is None else value.strip()
-
-    @field_validator("api_key")
-    @classmethod
-    def _check_api_key(cls, value: str | None) -> str | None:
-        return _validate_api_key(value)
-
-    @model_validator(mode="after")
-    def _check_key_action(self) -> "AiProfilePatch":
-        if self.api_key is not None and self.clear_api_key:
-            raise ValueError("Set an API key or clear it, not both.")
-        return self
-
-
-class AiSettings(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    text: AiProfileSettings = Field(default_factory=AiProfileSettings)
-    # Image analysis is a separate task profile, so it can use its own local
-    # server, model and remote consent. Empty model keeps image AI disabled.
-    vision: AiProfileSettings = Field(default_factory=AiProfileSettings)
-    # Rolling 24-hour cap for AI request attempts. Zero means unlimited.
-    request_limit: int = Field(default=0, ge=0, le=10_000)
-
-
-class AiPatch(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    text: AiProfilePatch | None = None
-    vision: AiProfilePatch | None = None
-    request_limit: int | None = Field(default=None, ge=0, le=10_000)
-
-
 class AppSettings(BaseModel):
+    """Non-AI application preferences.
+
+    AI connections, task routes, usage limits and privacy settings are managed
+    by the BYOK service and its own endpoints, not in this JSON blob.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     language: LanguageCode = "en"
     appearance: AppearanceSettings = Field(default_factory=AppearanceSettings)
     editor: EditorSettings = Field(default_factory=EditorSettings)
     export: ExportSettings = Field(default_factory=ExportSettings)
-    ai: AiSettings = Field(default_factory=AiSettings)
     backups: BackupSettings = Field(default_factory=BackupSettings)
 
 
@@ -226,5 +112,4 @@ class SettingsUpdate(BaseModel):
     appearance: AppearancePatch | None = None
     editor: EditorPatch | None = None
     export: ExportPatch | None = None
-    ai: AiPatch | None = None
     backups: BackupPatch | None = None

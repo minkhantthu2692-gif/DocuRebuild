@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+﻿import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CircleAlert, Sigma, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/input";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
-import { useAppSettings } from "@/hooks/use-app";
+import { useAiTasks } from "@/hooks/use-ai";
 import { api } from "@/lib/api";
 import { renderEquationPreview } from "@/lib/editor-equation";
 import { usePaidAiGuard } from "./paid-ai-confirm-dialog";
@@ -57,8 +57,9 @@ export function RegionFormulaDialog({
   const { insertEquation } = useWorkspaceActions();
   const errorMessage = useApiErrorMessage();
   const queryClient = useQueryClient();
-  const settingsQuery = useAppSettings();
-  const visionModel = settingsQuery.data?.ai.vision.model?.trim() ?? "";
+  const tasksQuery = useAiTasks();
+  const equationTask = tasksQuery.data?.tasks.equation_transcription;
+  const visionModel = equationTask?.model_id ?? "";
   const paidAi = usePaidAiGuard();
 
   const [latex, setLatex] = useState("");
@@ -106,7 +107,7 @@ export function RegionFormulaDialog({
   const canTranscribe =
     Boolean(element) &&
     visionModel.length > 0 &&
-    !settingsQuery.isLoading &&
+    !tasksQuery.isLoading &&
     !transcribe.isPending;
   // A note may only credit the model while the source still matches its reply.
   const usesAiSource =
@@ -119,7 +120,7 @@ export function RegionFormulaDialog({
   const handleTranscribe = async () => {
     if (!element || !canTranscribe) return;
     // A paid vision profile must be approved for this transcription only.
-    const approved = await paidAi.requestApproval(settingsQuery.data?.ai.vision);
+    const approved = await paidAi.requestApproval(equationTask);
     if (!approved) return;
     transcribe.mutate({ elementId: element.id, confirmPaid: true });
   };
@@ -133,12 +134,12 @@ export function RegionFormulaDialog({
     if (includeNote) {
       note = usesAiSource
         ? t("elements.formula.aiSourceNote", {
-            page: pageNumber ?? "—",
+            page: pageNumber ?? "â€”",
             model: aiProposal?.model ?? "",
             status,
           })
         : t("elements.formula.sourceNote", {
-            page: pageNumber ?? "—",
+            page: pageNumber ?? "â€”",
             status,
           });
     }
@@ -154,7 +155,7 @@ export function RegionFormulaDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sigma className="size-icon-sm text-primary" aria-hidden="true" />
-            {t("elements.formula.title", { page: pageNumber ?? "—" })}
+            {t("elements.formula.title", { page: pageNumber ?? "â€”" })}
           </DialogTitle>
           <DialogDescription>{t("elements.formula.description")}</DialogDescription>
         </DialogHeader>

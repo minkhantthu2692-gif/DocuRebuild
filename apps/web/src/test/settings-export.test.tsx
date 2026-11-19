@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -22,11 +23,6 @@ const settings = {
   },
   editor: { document_font: "serif" as const },
   export: { pdf_page_size: "a4" as const, pdf_margin: "normal" as const },
-  ai: {
-    text: { provider: "ollama" as const, base_url: "", model: "", allow_remote: false },
-    vision: { provider: "ollama" as const, base_url: "", model: "", allow_remote: false },
-    request_limit: 0,
-  },
   backups: { auto_on_open: false, interval_hours: 24, keep_copies: 5 },
 };
 
@@ -38,10 +34,33 @@ vi.mock("@/hooks/use-app", () => ({
 }));
 
 vi.mock("@/hooks/use-ai", () => ({
-  useAiProviders: () => ({ data: undefined }),
+  useAiProviders: () => ({ data: undefined, isLoading: false }),
+  useAiConnections: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useAiConnection: () => ({ data: undefined }),
+  useAiOverview: () => ({ data: undefined }),
+  useAiPreferences: () => ({ data: undefined }),
   useAiUsage: () => ({ data: undefined, isError: false }),
+  useAiRoutes: () => ({ data: undefined, isLoading: false }),
+  useAiMigration: () => ({ data: undefined }),
+  useAiModels: () => ({ data: [], isLoading: false }),
   useAiUsageHistory: () => ({ data: undefined, isLoading: false, isError: false }),
-  useProbeAiProvider: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateAiConnection: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useUpdateAiConnection: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteAiConnection: () => ({ mutate: vi.fn(), isPending: false }),
+  useTestAiConnection: () => ({ mutate: vi.fn(), isPending: false }),
+  useAddAiKey: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateAiKey: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteAiKey: () => ({ mutate: vi.fn(), isPending: false }),
+  useAddAiModel: () => ({ mutate: vi.fn(), isPending: false }),
+  useFavoriteAiModel: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateAiRoute: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateAiPreferences: () => ({ mutate: vi.fn(), isPending: false }),
+  useClearAiUsage: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/hooks/use-ocr", () => ({
@@ -49,10 +68,15 @@ vi.mock("@/hooks/use-ocr", () => ({
 }));
 
 function renderPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   render(
-    <MemoryRouter>
-      <SettingsPage />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 

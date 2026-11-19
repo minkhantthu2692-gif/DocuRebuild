@@ -1,25 +1,41 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
+
+import type {
+  AiConnection,
+  AiConnectionDetail,
+  AiKey,
+  AiModel,
+  AiProviderInfo,
+  AiTaskRoute,
+  AiUsageResponse,
+} from "@docurebuild/shared-types";
 
 import { SettingsPage } from "@/pages/settings-page";
 import { i18n, initI18n } from "@/i18n";
 
 const mocks = vi.hoisted(() => ({
   update: vi.fn(),
-  probe: vi.fn(),
-  usage: {
-    current: null as null | {
-      window_hours: number;
-      request_limit: number;
-      used: number;
-      remaining: number | null;
-      successful: number;
-      failed: number;
-      by_task: Array<{ task: string; used: number }>;
-      recent: unknown[];
-    },
-  },
+  createConnection: vi.fn(),
+  updateConnection: vi.fn(),
+  testConnection: vi.fn(),
+  addKey: vi.fn(),
+  updateKey: vi.fn(),
+  deleteKey: vi.fn(),
+  addModel: vi.fn(),
+  favoriteModel: vi.fn(),
+  updateRoute: vi.fn(),
+  updatePreferences: vi.fn(),
+  clearUsage: vi.fn(),
+  connections: [] as AiConnection[],
+  connectionDetail: null as AiConnectionDetail | null,
+  providers: [] as AiProviderInfo[],
+  models: [] as AiModel[],
+  routes: [] as AiTaskRoute[],
+  preferences: { daily_request_limit: 0, monthly_budget_usd: null as number | null },
+  usage: null as AiUsageResponse | null,
 }));
 
 const settings = {
@@ -35,25 +51,6 @@ const settings = {
   },
   editor: { document_font: "serif" as const },
   export: { pdf_page_size: "a4" as const, pdf_margin: "normal" as const },
-  ai: {
-    text: {
-      provider: "openai_compatible" as const,
-      base_url: "http://127.0.0.1:1234/v1",
-      model: "local-model",
-      allow_remote: false,
-      cost_class: "local" as const,
-      has_api_key: true,
-    },
-    vision: {
-      provider: "ollama" as const,
-      base_url: "",
-      model: "",
-      allow_remote: false,
-      cost_class: "local" as const,
-      has_api_key: false,
-    },
-    request_limit: 0,
-  },
   backups: { auto_on_open: false, interval_hours: 24, keep_copies: 5 },
 };
 
@@ -65,21 +62,210 @@ vi.mock("@/hooks/use-app", () => ({
 }));
 
 vi.mock("@/hooks/use-ai", () => ({
-  useAiProviders: () => ({ data: undefined }),
-  useAiUsage: () => ({ data: mocks.usage.current, isError: false }),
+  useAiProviders: () => ({ data: { providers: mocks.providers }, isLoading: false }),
+  useAiConnections: () => ({
+    data: { connections: mocks.connections },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useAiConnection: () => ({ data: mocks.connectionDetail, isLoading: false }),
+  useAiOverview: () => ({
+    data: {
+      connection_count: mocks.connections.length,
+      enabled_connection_count: mocks.connections.filter((item) => item.enabled).length,
+      key_count: mocks.connections.reduce((total, item) => total + item.key_count, 0),
+      model_count: mocks.models.length,
+      configured_task_count: mocks.routes.filter((route) => route.configured).length,
+      task_count: 4,
+      preferences: mocks.preferences,
+    },
+  }),
+  useAiPreferences: () => ({ data: mocks.preferences }),
+  useAiUsage: () => ({ data: mocks.usage, isError: false }),
+  useAiRoutes: () => ({ data: { routes: mocks.routes, default_model: null }, isLoading: false }),
+  useAiMigration: () => ({ data: { needed: false, migrated: true, completed_at: null, detail: null } }),
+  useAiModels: () => ({ data: mocks.models, isLoading: false }),
   useAiUsageHistory: () => ({ data: undefined, isLoading: false, isError: false }),
-  useProbeAiProvider: () => ({ mutate: mocks.probe, isPending: false }),
+  useCreateAiConnection: () => ({
+    mutate: mocks.createConnection,
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useUpdateAiConnection: () => ({ mutate: mocks.updateConnection, isPending: false }),
+  useDeleteAiConnection: () => ({ mutate: vi.fn(), isPending: false }),
+  useTestAiConnection: () => ({ mutate: mocks.testConnection, isPending: false }),
+  useAddAiKey: () => ({ mutate: mocks.addKey, isPending: false }),
+  useUpdateAiKey: () => ({ mutate: mocks.updateKey, isPending: false }),
+  useDeleteAiKey: () => ({ mutate: mocks.deleteKey, isPending: false }),
+  useAddAiModel: () => ({ mutate: mocks.addModel, isPending: false }),
+  useFavoriteAiModel: () => ({ mutate: mocks.favoriteModel, isPending: false }),
+  useUpdateAiRoute: () => ({ mutate: mocks.updateRoute, isPending: false }),
+  useUpdateAiPreferences: () => ({ mutate: mocks.updatePreferences, isPending: false }),
+  useClearAiUsage: () => ({ mutate: mocks.clearUsage, isPending: false }),
 }));
 
 vi.mock("@/hooks/use-ocr", () => ({
   useOcrCapabilities: () => ({ data: undefined, isLoading: false, isFetching: false }),
 }));
 
+function provider(): AiProviderInfo {
+  return {
+    id: "openai",
+    name: "OpenAI",
+    kind: "openai",
+    default_base_url: "https://api.openai.com/v1",
+    requires_base_url: false,
+    supports_model_discovery: true,
+    allows_manual_models: false,
+    local_default: false,
+    requires_api_key: true,
+    docs_url: null,
+  };
+}
+
+function connection(patch: Partial<AiConnection> = {}): AiConnection {
+  return {
+    id: "conn-1",
+    provider: "openai",
+    provider_name: "OpenAI",
+    provider_kind: "openai",
+    name: "Personal OpenAI",
+    base_url: "https://api.openai.com/v1",
+    allow_remote: true,
+    cost_class: "paid",
+    enabled: true,
+    rotation_strategy: "priority",
+    max_attempts: 3,
+    request_limit: 0,
+    monthly_budget_usd: null,
+    settings: {},
+    status: "connected",
+    last_error_code: null,
+    last_http_status: null,
+    retry_after_seconds: null,
+    last_checked_at: "2026-11-19T09:00:00",
+    created_at: "2026-11-18T09:00:00",
+    updated_at: "2026-11-18T09:00:00",
+    key_count: 1,
+    enabled_key_count: 1,
+    model_count: 2,
+    requires_api_key: true,
+    ...patch,
+  };
+}
+
+function key(): AiKey {
+  return {
+    id: "key-1",
+    label: "Primary",
+    enabled: true,
+    priority: 100,
+    request_limit: 0,
+    auth_failed: false,
+    status: "ready",
+    has_secret: true,
+    last_used_at: null,
+    last_success_at: null,
+    last_error_at: null,
+    last_error_code: null,
+    cooldown_until: null,
+    created_at: "2026-11-18T09:00:00",
+  };
+}
+
+function model(patch: Partial<AiModel> = {}): AiModel {
+  return {
+    id: "model-1",
+    connection_id: "conn-1",
+    model_id: "gpt-4o",
+    display_name: "GPT-4o",
+    family: "gpt",
+    context_window: 128_000,
+    input_modalities: ["text", "image"],
+    output_modalities: ["text"],
+    supports_tools: true,
+    supports_streaming: true,
+    pricing: null,
+    metadata: null,
+    source: "discovered",
+    available: true,
+    favorite: false,
+    last_used_at: null,
+    discovered_at: "2026-11-18T09:00:00",
+    ...patch,
+  };
+}
+
+function route(patch: Partial<AiTaskRoute> = {}): AiTaskRoute {
+  return {
+    task: "default",
+    connection_id: "conn-1",
+    connection_name: "Personal OpenAI",
+    connection_status: "connected",
+    cost_class: "paid",
+    model_id: "gpt-4o",
+    model_display_name: "GPT-4o",
+    model_source: "discovered",
+    capability: "text",
+    fallback_connection_id: null,
+    fallback_connection_name: null,
+    fallback_model_id: null,
+    temperature: 0.2,
+    timeout_seconds: 60,
+    request_limit: 0,
+    configured: true,
+    warnings: [],
+    updated_at: "2026-11-18T09:00:00",
+    ...patch,
+  };
+}
+
+function usage(): AiUsageResponse {
+  return {
+    window_hours: 24,
+    request_limit: 10,
+    used: 4,
+    remaining: 6,
+    successful: 3,
+    failed: 1,
+    input_tokens: 1_200,
+    output_tokens: 400,
+    total_tokens: 1_600,
+    estimated_cost_usd: 0.42,
+    unpriced_requests: 1,
+    monthly_cost_usd: 1.2,
+    by_task: [
+      { task: "ocr_cleanup", used: 2 },
+      { task: "equation_transcription", used: 1 },
+      { task: "legacy_task", used: 1 },
+    ],
+    by_connection: [
+      {
+        connection_id: "conn-1",
+        connection_name: "Personal OpenAI",
+        provider: "openai",
+        used: 4,
+        input_tokens: 1_200,
+        output_tokens: 400,
+        estimated_cost_usd: 0.42,
+        unpriced_requests: 1,
+      },
+    ],
+    recent: [],
+  };
+}
+
 function renderPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   render(
-    <MemoryRouter>
-      <SettingsPage />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -90,211 +276,135 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mocks.update.mockReset();
-  mocks.probe.mockReset();
-  mocks.usage.current = null;
+  mocks.createConnection.mockReset();
+  mocks.updateConnection.mockReset();
+  mocks.testConnection.mockReset();
+  mocks.addKey.mockReset();
+  mocks.updateKey.mockReset();
+  mocks.deleteKey.mockReset();
+  mocks.addModel.mockReset();
+  mocks.favoriteModel.mockReset();
+  mocks.updateRoute.mockReset();
+  mocks.updatePreferences.mockReset();
+  mocks.clearUsage.mockReset();
+  mocks.connections = [connection()];
+  mocks.connectionDetail = { ...connection(), keys: [key()] };
+  mocks.providers = [provider()];
+  mocks.models = [model()];
+  mocks.routes = [route()];
+  mocks.preferences = { daily_request_limit: 0, monthly_budget_usd: null };
+  mocks.usage = null;
 });
 
-describe("AI API keys", () => {
-  it("shows that a key is saved and sends a replacement only on save", () => {
+describe("AI provider settings", () => {
+  it("lists a connection with its status and key/model counts", () => {
     renderPage();
 
-    expect(screen.getByText("Key saved")).toBeInTheDocument();
-    const input = screen.getByLabelText("Text cleanup server: API key");
-    fireEvent.change(input, { target: { value: "  sk-new-key  " } });
-
-    expect(mocks.update).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Save AI settings" }));
-
-    expect(mocks.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ai: expect.objectContaining({
-          text: expect.objectContaining({ api_key: "sk-new-key" }),
-        }),
-      }),
-      expect.any(Object),
-    );
-    const payload = mocks.update.mock.calls[0][0] as {
-      ai: { text: Record<string, unknown> };
-    };
-    expect(payload.ai.text).not.toHaveProperty("clear_api_key");
-  });
-
-  it("asks to remove the saved key on the next save", () => {
-    renderPage();
-
-    fireEvent.click(screen.getByRole("button", { name: "Remove key" }));
+    expect(screen.getByText("Personal OpenAI")).toBeInTheDocument();
+    expect(screen.getAllByText("Connected").length).toBeGreaterThan(0);
     expect(
-      screen.getByText("The saved key will be removed when you save."),
-    ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Save AI settings" }));
-
-    const payload = mocks.update.mock.calls[0][0] as {
-      ai: { text: Record<string, unknown> };
-    };
-    expect(payload.ai.text.clear_api_key).toBe(true);
-    expect(payload.ai.text).not.toHaveProperty("api_key");
+      screen.getAllByText(/2 model\(s\) · 1 key\(s\)/).length,
+    ).toBeGreaterThan(0);
   });
 
-  it("tests an unsaved key with the text task profile", () => {
+  it("adds an API key to the selected connection", () => {
     renderPage();
 
-    fireEvent.change(screen.getByLabelText("Text cleanup server: API key"), {
-      target: { value: "sk-probe" },
+    fireEvent.click(screen.getByRole("button", { name: "Add key" }));
+    fireEvent.change(screen.getByLabelText("Key label"), {
+      target: { value: "Backup key" },
     });
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Text cleanup server: Test connection",
-      }),
-    );
+    fireEvent.change(screen.getByLabelText("API key"), {
+      target: { value: "  sk-test-key  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save key" }));
 
-    expect(mocks.probe).toHaveBeenCalledWith(
-      expect.objectContaining({
-        task: "text",
-        api_key: "sk-probe",
-        provider: "openai_compatible",
-      }),
+    expect(mocks.addKey).toHaveBeenCalledWith(
+      {
+        label: "Backup key",
+        api_key: "sk-test-key",
+        priority: 100,
+        request_limit: 0,
+      },
       expect.any(Object),
     );
   });
 
-  it("saves the cost class chosen for a profile", () => {
-    renderPage();
-
-    const costClass = screen.getByLabelText("Text cleanup server: Cost class");
-    fireEvent.click(within(costClass).getByText("Paid"));
-    fireEvent.click(screen.getByRole("button", { name: "Save AI settings" }));
-
-    const payload = mocks.update.mock.calls[0][0] as {
-      ai: { text: Record<string, unknown> };
-    };
-    expect(payload.ai.text.cost_class).toBe("paid");
-  });
-
-  it("marks a remote URL as paid but keeps a declared free tier", () => {
-    renderPage();
-
-    fireEvent.change(screen.getByLabelText("Text cleanup server: Server URL"), {
-      target: { value: "https://api.example.com/v1" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save AI settings" }));
-
-    const escalated = mocks.update.mock.calls[0][0] as {
-      ai: { text: Record<string, unknown> };
-    };
-    expect(escalated.ai.text.base_url).toBe("https://api.example.com/v1");
-    expect(escalated.ai.text.cost_class).toBe("paid");
-
-    const visionCostClass = screen.getByLabelText(
-      "Image analysis server: Cost class",
-    );
-    fireEvent.click(within(visionCostClass).getByText("Free"));
-    fireEvent.change(screen.getByLabelText("Image analysis server: Server URL"), {
-      target: { value: "https://free.example.com/v1" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save AI settings" }));
-
-    const kept = mocks.update.mock.calls[1][0] as {
-      ai: { vision: Record<string, unknown> };
-    };
-    expect(kept.ai.vision.cost_class).toBe("free");
-  });
-
-  it("explains a provider rate limit and its advisory wait", () => {
-    mocks.probe.mockImplementation(
-      (
-        _payload: unknown,
-        options?: { onSuccess?: (result: unknown) => void },
-      ) => {
+  it("tests the connection and reports the discovered model count", async () => {
+    mocks.testConnection.mockImplementation(
+      (_payload: unknown, options?: { onSuccess?: (result: unknown) => void }) => {
         options?.onSuccess?.({
-          status: "http_error",
-          provider: "openai_compatible",
-          base_url: "http://127.0.0.1:1234/v1",
-          models: [],
-          version: null,
-          error_code: "ai_rate_limited",
-          http_status: 429,
-          retry_after_seconds: 30,
-        });
-      },
-    );
-    renderPage();
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Text cleanup server: Test connection",
-      }),
-    );
-
-    expect(screen.getByText(/rate limiting requests/)).toBeInTheDocument();
-    expect(screen.getByText(/wait 30 seconds/)).toBeInTheDocument();
-    expect(screen.getByText(/does not retry on its own/)).toBeInTheDocument();
-  });
-
-  it("describes a discovered model and warns about an unlisted one", () => {
-    mocks.probe.mockImplementation(
-      (
-        _payload: unknown,
-        options?: { onSuccess?: (result: unknown) => void },
-      ) => {
-        options?.onSuccess?.({
-          status: "ready",
-          provider: "openai_compatible",
-          base_url: "http://127.0.0.1:1234/v1",
-          models: [
-            { id: "local-model", family: "qwen2", parameter_size: "7.6B" },
-            { id: "small-model", family: "llama", parameter_size: "1.2B" },
-          ],
+          connection_id: "conn-1",
+          status: "connected",
+          provider: "openai",
+          base_url: "https://api.openai.com/v1",
+          models_found: 12,
+          cached: false,
           version: null,
           error_code: null,
-          http_status: null,
+          http_status: 200,
           retry_after_seconds: null,
+          last_checked_at: "2026-11-19T09:00:00",
+          message: null,
         });
       },
     );
     renderPage();
 
     fireEvent.click(
-      screen.getByRole("button", {
-        name: "Text cleanup server: Test connection",
-      }),
+      screen.getAllByRole("button", { name: "Test connection" })[0],
     );
 
-    expect(screen.getByText(/Listed by the server/)).toBeInTheDocument();
-    expect(screen.getByText(/Family: qwen2/)).toBeInTheDocument();
-    expect(screen.getByText(/Parameters: 7.6B/)).toBeInTheDocument();
-    expect(screen.queryByText(/did not list this model/)).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText("12 model(s) available")).toBeInTheDocument(),
+    );
+  });
 
-    const option = document.querySelector('option[value="small-model"]');
-    expect(option?.getAttribute("label")).toBe("llama · 1.2B");
+  it("saves the daily request limit and budget", () => {
+    renderPage();
 
-    fireEvent.change(screen.getByLabelText("Text model"), {
-      target: { value: "missing-model" },
+    fireEvent.change(screen.getByLabelText("Daily request limit"), {
+      target: { value: "25" },
     });
-    expect(screen.getByText(/did not list this model/)).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("Text model"), {
-      target: { value: "small-model" },
+    fireEvent.change(screen.getByLabelText("Monthly budget (USD)"), {
+      target: { value: "5.5" },
     });
-    expect(screen.getByText(/Family: llama/)).toBeInTheDocument();
-    expect(screen.queryByText(/did not list this model/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save limits" }));
+
+    expect(mocks.updatePreferences).toHaveBeenCalledWith(
+      { daily_request_limit: 25, monthly_budget_usd: 5.5 },
+      expect.any(Object),
+    );
+  });
+
+  it("saves a route with the full payload", () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.change(screen.getByLabelText("Default route: Temperature"), {
+      target: { value: "0.5" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save route" }));
+
+    expect(mocks.updateRoute).toHaveBeenCalledWith(
+      {
+        task: "default",
+        payload: {
+          connection_id: "conn-1",
+          model_id: "gpt-4o",
+          fallback_connection_id: null,
+          fallback_model_id: null,
+          temperature: 0.5,
+          timeout_seconds: 60,
+          request_limit: 0,
+        },
+      },
+      expect.any(Object),
+    );
   });
 
   it("breaks the rolling request budget down by task", () => {
-    mocks.usage.current = {
-      window_hours: 24,
-      request_limit: 10,
-      used: 4,
-      remaining: 6,
-      successful: 3,
-      failed: 1,
-      by_task: [
-        { task: "ocr_cleanup", used: 2 },
-        { task: "equation_transcription", used: 1 },
-        { task: "legacy_task", used: 1 },
-      ],
-      recent: [],
-    };
+    mocks.usage = usage();
     renderPage();
 
     expect(screen.getByText("By task, last 24 hours")).toBeInTheDocument();
@@ -302,23 +412,16 @@ describe("AI API keys", () => {
     expect(screen.getByText("Equation transcription: 1")).toBeInTheDocument();
     // A task name this build does not know is counted, not hidden.
     expect(screen.getByText("Other task: 1")).toBeInTheDocument();
+    expect(screen.getByText(/1 request\(s\) have no verified price/)).toBeInTheDocument();
   });
 
-  it("hides the breakdown before the first request", () => {
-    mocks.usage.current = {
-      window_hours: 24,
-      request_limit: 10,
-      used: 0,
-      remaining: 10,
-      successful: 0,
-      failed: 0,
-      by_task: [],
-      recent: [],
-    };
+  it("clears the local usage ledger after confirmation", () => {
+    mocks.usage = usage();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPage();
 
-    expect(
-      screen.queryByText("By task, last 24 hours"),
-    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear history" }));
+
+    expect(mocks.clearUsage).toHaveBeenCalled();
   });
 });
