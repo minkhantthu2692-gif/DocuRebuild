@@ -15,7 +15,7 @@ presented in the UI until it actually works.
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates), deterministic figure suggestions from embedded PDF images and vector drawings, and a local CER/WER benchmark harness done; measured real-document accuracy pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, OCR-layout, embedded-PDF-image, vector-drawing and raster-page ink region suggestions with a named source in the extraction dialog, library, verification and figure/text insertion, reviewed equation crops inserted as real equations, on-demand AI transcription of one equation crop into reviewable LaTeX, and structured table reconstruction from one saved crop locally (drawn rules or word boxes) and with AI done; page-wide table detection pending |
 | 6. AI integration and free usage first | **In progress** | Unified BYOK provider platform with local Ollama, custom OpenAI-compatible and 12 cloud adapters, dynamic model discovery, multiple connections and encrypted keys, key rotation/cooldown/failover, per-task routing with fallbacks, remote-consent and HTTPS boundary, daily/task/connection limits, verified-cost budget, metadata-only usage ledger and history, reviewable OCR cleanup, optional vision region proposals, equation-crop transcription and table-crop reading done; account-level billing/quota verification pending |
-| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, merged cells from a PDF's drawn rules and from a saved crop's visible cell borders, structured reading of one saved table crop with local OCR or an optional vision model, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, inserting a reviewed equation crop as a real numbered equation, optional vision-model transcription of one saved equation crop into reviewable LaTeX, and faithful Markdown/TXT/Word/PDF export; merged-cell detection for text-only tables and automatic page-wide equation recognition pending |
+| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, merged cells from a PDF's drawn rules and from a scanned page's or saved crop's visible cell borders, structured reading of one saved table crop with local OCR or an optional vision model, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, inserting a reviewed equation crop as a real numbered equation, optional vision-model transcription of one saved equation crop into reviewable LaTeX, and faithful Markdown/TXT/Word/PDF export; merged-cell detection for text-only tables and automatic page-wide equation recognition pending |
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, multi-line Word equations, footnotes, per-project page headers/footers, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
@@ -172,10 +172,10 @@ image processing uses Pillow with no OpenCV dependency.
   guesses a figure; Phase 5 approximates the band above a figure-like caption, but
   this phase does not mark figures itself.
 - Nested tables and page-wide automatic table reading. Cross-block grouping covers
-  vertically contiguous row blocks, a PDF page's drawn rules and a saved crop's
-  visible cell borders provide exact merged-cell spans, and one saved table crop can
-  also be read with a vision model on request, but a candidate with no drawn or
-  usable rules remains a plain grid, a nested table is not separated from its
+  vertically contiguous row blocks, a PDF page's drawn rules and a scanned page's or
+  saved crop's visible cell borders provide exact merged-cell spans, and one saved
+  table crop can also be read with a vision model on request, but a candidate with no
+  drawn or usable rules remains a plain grid, a nested table is not separated from its
   parent, and a hand-corrected block is a barrier instead of being bridged.
   Page-wide equation detection and transcription are still pending.
 - OCR accuracy benchmarks (CER/WER) for English, Burmese and mixed pages using
@@ -370,14 +370,16 @@ never claims a provider is free and never estimates a price it cannot support.
   capped at 60 rows / 20 columns / 600 cells.
 - Merged-cell table proposals from drawn rules. On a PDF page the endpoint extracts
   axis-aligned strokes and thin filled or stroked rectangles from the immutable PDF;
-  in a saved crop it finds long straight horizontal and vertical strokes in the crop
-  image. Either source is grouped into drawn grids, and a missing internal separator
-  becomes a `colspan`/`rowspan`. The review grid renders the merge, and insertion
-  writes the same spans into an ordinary Tiptap table. A rotated page, a geometry
-  edit or a stale run falls back to the word-box grid; a crop's rules are ignored
-  when they would leave a detected word outside the grid, so text is never dropped.
-  A closed, mostly filled grid is required so a chart's axis frame is not offered,
-  and a vector grid replaces an OCR candidate that lies at least 85% inside it.
+  on a scanned page and in a saved crop it finds long straight horizontal and vertical
+  strokes in the raster image, measured inside the candidate's own region so a small
+  table on a full page still has measurable borders. Either source is grouped into
+  drawn grids, and a missing internal separator becomes a `colspan`/`rowspan`. The
+  review grid renders the merge, and insertion writes the same spans into an ordinary
+  Tiptap table. A rotated page, a geometry edit or a stale run falls back to the
+  word-box grid; rules are ignored when they would leave a detected word outside the
+  grid, so text is never dropped. A closed, mostly filled grid is required so a chart's
+  axis frame is not offered, and a vector grid replaces an OCR candidate that lies at
+  least 85% inside it.
 - Side-by-side source comparison in the table review dialog. The backend reports
   the proposal's pixel box and the page dimensions, and the dialog crops the page
   image to that box next to the grid. The crop can be hidden, and it is read-only:

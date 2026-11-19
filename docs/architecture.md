@@ -53,8 +53,8 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout, raster-page ink, and embedded PDF raster-image placement and vector-drawing geometry |
 | `services.settings` | Persisted appearance, language, editor, export and backup settings, plus global AI limits (`ai_preferences`) |
 | `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness, and word-box extraction from a standalone crop |
-| `services.table_rules` | Bounded detection of long, straight horizontal and vertical strokes in a raster crop: dark/light thresholding, gap bridging, thick-stroke merging and original-pixel coordinates for the table builder |
-| `services.table_structure` | Reviewable table proposals: word-box row clustering and whitespace column bands, plus exact merged-cell grids from a PDF's drawn rules or a crop's visible borders; cell text/confidence/flags/alignment, page-level grouping of vertically contiguous row blocks, local reading of one saved crop, vector/OCR de-duplication, source pixel box, size caps and typed refusal errors |
+| `services.table_rules` | Bounded detection of long, straight horizontal and vertical strokes in a raster image: one decoded grayscale scan reused across regions, per-region dark/light thresholding, gap bridging, thick-stroke merging and original-pixel coordinates for the table builder |
+| `services.table_structure` | Reviewable table proposals: word-box row clustering and whitespace column bands, plus exact merged-cell grids from a PDF's drawn rules or a raster page's or crop's visible borders; cell text/confidence/flags/alignment, page-level grouping of vertically contiguous row blocks, local reading of one saved crop, vector/OCR de-duplication, source pixel box, size caps and typed refusal errors |
 | `app.ocr_benchmark` | Local CER/WER measurement against checked reference transcripts, by running the OCR adapter or scoring a stored transcript; validates fixtures and never uploads |
 | `services.ai_providers` | Modular provider registry and adapters (Ollama, OpenAI-compatible and 12 cloud APIs), model discovery, model metadata/pricing normalization, URL/HTTPS/SSRF and remote-consent validation, bounded requests and typed provider errors |
 | `services.ai_store` | Connection, key, model and task-route persistence; capability checks; task status; encrypted-secret wiring and connection health state |
@@ -418,6 +418,14 @@ src/
   re-lined per cell, because PDF line numbers are block-local. A candidate must
   contain at least two filled cells and a conservative share of filled cells, so an
   empty chart frame is not proposed.
+- Raster tables use their visible borders as well. A single-block proposal and a page
+  candidate both ask `services.table_rules` for the strokes around the expected
+  table, measured inside that table's own region. Measuring the region rather than
+  the whole page is what keeps a short cell border longer than the minimum stroke
+  once a scanned table fills only part of the page. One bounded grayscale copy of
+  the page is decoded per request and reused for every candidate. The rule grid is
+  accepted only when it holds every stored word of that block or group, so drawn
+  geometry replaces the word-box grid but never drops text.
 - Vector candidates are built before word-box candidates and sorted by source
   position. An OCR candidate whose source box is at least 85% inside a vector grid
   is dropped, because the vector grid already describes the same table with exact
@@ -431,11 +439,12 @@ src/
   `POST .../elements/{element_id}/table-proposal`.
   `services.ocr.extract_image_content` runs the same Tesseract path as page OCR
   but returns the crop's word boxes instead of only text. `services.table_structure`
-  first asks `services.table_rules` for the table's drawn borders. Detection runs on
-  a bounded grayscale copy, bridges scan gaps, merges the scan rows of one thick
-  stroke and maps coordinates back to crop pixels; a closed grid that contains every
-  detected word is used, so a merged cell keeps its exact span. A crop without usable
-  rules, or one whose rule grid would leave a word outside, falls back to clustering
+  first asks `services.table_rules` for the table's drawn borders. `load_scan`
+  decodes a bounded grayscale copy once, `scan_rules` measures a region of it by
+  bridging scan gaps and merging the scan rows of one thick stroke, and coordinates
+  are mapped back to crop pixels; a closed grid that contains every detected word is
+  used, so a merged cell keeps its exact span. A crop without usable rules, or one
+  whose rule grid would leave a word outside, falls back to clustering
   the word boxes into rows and whitespace column bands, rebasing each visual row's
   line number so words from different OCR blocks join correctly. Either way the
   source box is replaced with the saved region rectangle so the dialog can cut that

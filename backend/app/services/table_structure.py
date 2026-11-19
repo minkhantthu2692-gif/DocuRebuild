@@ -890,6 +890,10 @@ def propose_table(project_dir: Path, page_id: str, block_id: str) -> dict[str, A
                 "from the engine's word positions.",
             )
         words = _parse_words(block["words"])
+        source_asset_id = run["source_asset_id"] or (
+            page["display_asset_id"] or page["original_asset_id"]
+        )
+        image_path = _source_asset_path(conn, project_dir, source_asset_id)
 
     if not words:
         raise AppError(
@@ -900,6 +904,27 @@ def propose_table(project_dir: Path, page_id: str, block_id: str) -> dict[str, A
 
     heights = [word["height"] for word in words if word["height"] > 0]
     typical_height = median(heights) if heights else 1.0
+
+    # The run's own source image is still current (a stale run was refused
+    # above), so its drawn borders describe exactly the page the words came
+    # from. A grid that does not hold every stored word is ignored.
+    rule = _rule_candidate(
+        _load_scan(image_path),
+        [(block_id, word) for word in words],
+        bounds=_blocks_bounds([block]),
+        margin=max(typical_height * 2, 12.0),
+    )
+    if rule is not None:
+        return {
+            "page_id": page_id,
+            "block_id": block_id,
+            "run_id": run["id"],
+            "engine": run["engine"],
+            "page_width": page["width"],
+            "page_height": page["height"],
+            **_rule_payload(rule),
+        }
+
     rows = _cluster_rows(words)
     if len(rows) < MIN_ROWS:
         raise AppError(
@@ -940,34 +965,105 @@ def propose_table(project_dir: Path, page_id: str, block_id: str) -> dict[str, A
     )
 
 
-def _crop_rule_candidate(
-    image_path: Path, words: list[Word]
+def _holds_all_words(box: dict[str, float], words: list[Word]) -> bool:
+    """Return whether every word centre is inside ``box``."""
+    left = box["x"] - RULE_TOLERANCE
+    top = box["y"] - RULE_TOLERANCE
+    right = box["x"] + box["width"] + RULE_TOLERANCE
+    bottom = box["y"] + box["height"] + RULE_TOLERANCE
+    for word in words:
+        centre_x = word["x"] + word["width"] / 2
+        centre_y = _centre_y(word)
+        if not (left <= centre_x <= right and top <= centre_y <= bottom):
+            return False
+    return True
+
+
+def _blocks_bounds(blocks) -> tuple[float, float, float, float] | None:
+    """Return the union of the blocks' stored boxes, or ``None`` without one."""
+    boxes = [
+        (
+            float(block["x"]),
+            float(block["y"]),
+            float(block["x"]) + float(block["width"]),
+            float(block["y"]) + float(block["height"]),
+        )
+        for block in blocks
+        if block["x"] is not None
+        and block["y"] is not None
+        and block["width"]
+        and block["height"]
+    ]
+    if not boxes:
+        return None
+    return (
+        min(box[0] for box in boxes),
+        min(box[1] for box in boxes),
+        max(box[2] for box in boxes),
+        max(box[3] for box in boxes),
+    )
+
+
+def _load_scan(image_path: Path | None) -> table_rules.Scan | None:
+    """Load a crop or page image for rule detection, or ``None``."""
+    if image_path is None:
+        return None
+    try:
+        return table_rules.load_scan(image_path)
+    except Exception:  # pragma: no cover - loading already refuses bad images
+        return None
+
+
+def _rule_candidate(
+    scan: table_rules.Scan | None,
+    tagged_words: list[tuple[str, Word]],
+    *,
+    bounds: tuple[float, float, float, float] | None = None,
+    margin: float = 0.0,
 ) -> dict[str, Any] | None:
-    """Return a closed rule grid from the crop that contains every word.
+    """Return the tightest closed rule grid that holds every word.
 
     A scanned table usually keeps its cell borders, and those borders are the
     only reliable evidence for a merged cell: the word boxes see a merged cell as
-    two empty columns and a wrapped header as an extra row. Detection is
-    conservative and bounded, and any failure leaves the word-box path in
-    charge. A grid that would leave a detected word outside is rejected too, so
-    text is never dropped just because a partial rule set happened to look
-    closed.
+    two empty columns and a wrapped header as an extra row. Only the area around
+    the expected table is measured, so a page frame or a neighbouring table
+    cannot replace it, and the longest borders of that area set the minimum
+    stroke length. Any doubt leaves the word-box path in charge instead of
+    dropping text.
     """
-    try:
-        horizontals, verticals = table_rules.detect_table_rules(image_path)
-    except Exception:  # pragma: no cover - detection already refuses bad images
+    if scan is None or not tagged_words:
         return None
+    region: table_rules.Region | None = None
+    if bounds is not None:
+        region = (
+            bounds[0] - margin,
+            bounds[1] - margin,
+            bounds[2] + margin,
+            bounds[3] + margin,
+        )
+    horizontals, verticals = table_rules.scan_rules(scan, region)
     if not horizontals or not verticals:
         return None
 
-    candidates = _vector_candidates(
-        horizontals, verticals, [("crop", word) for word in words]
-    )
+    candidates = _vector_candidates(horizontals, verticals, tagged_words)
+    words = [word for _block_id, word in tagged_words]
     containing = [
         candidate
         for candidate in candidates
         if _holds_all_words(candidate["source"], words)
     ]
+    if bounds is not None:
+        left, top, right, bottom = bounds
+        containing = [
+            candidate
+            for candidate in containing
+            if candidate["source"]["x"] >= left - margin
+            and candidate["source"]["y"] >= top - margin
+            and candidate["source"]["x"] + candidate["source"]["width"]
+            <= right + margin
+            and candidate["source"]["y"] + candidate["source"]["height"]
+            <= bottom + margin
+        ]
     if not containing:
         return None
     # The tightest grid that still holds every word is the table itself; a page
@@ -981,18 +1077,39 @@ def _crop_rule_candidate(
     )
 
 
-def _holds_all_words(box: dict[str, float], words: list[Word]) -> bool:
-    """Return whether every word centre is inside ``box``."""
-    left = box["x"] - RULE_TOLERANCE
-    top = box["y"] - RULE_TOLERANCE
-    right = box["x"] + box["width"] + RULE_TOLERANCE
-    bottom = box["y"] + box["height"] + RULE_TOLERANCE
-    for word in words:
-        centre_x = word["x"] + word["width"] / 2
-        centre_y = _centre_y(word)
-        if not (left <= centre_x <= right and top <= centre_y <= bottom):
-            return False
-    return True
+def _rule_payload(candidate: dict[str, Any]) -> dict[str, Any]:
+    """Keep only the proposal fields a rule candidate shares with other grids."""
+    return {
+        key: candidate[key]
+        for key in (
+            "rows",
+            "columns",
+            "has_confidence",
+            "uncertain_cells",
+            "empty_cells",
+            "warnings",
+            "source",
+            "cells",
+        )
+    }
+
+
+def _source_asset_path(
+    conn, project_dir: Path, asset_id: str | None
+) -> Path | None:
+    """Resolve a run's image asset for rule detection, or ``None`` if missing."""
+    if not asset_id:
+        return None
+    asset = conn.execute(
+        "SELECT relative_path FROM assets WHERE id = ?", (asset_id,)
+    ).fetchone()
+    if asset is None:
+        return None
+    try:
+        path = resolve_within(project_dir, asset["relative_path"])
+    except ValueError:
+        return None
+    return path if path.exists() else None
 
 
 def propose_element_table(
@@ -1086,20 +1203,11 @@ def propose_element_table(
     # words. Use it when the crop's rules form a closed grid that holds every
     # word, so merged cells keep their exact span instead of becoming empty
     # cells.
-    rules = _crop_rule_candidate(image_path, words)
-    if rules is not None:
-        payload = {
-            key: rules[key]
-            for key in (
-                "rows",
-                "columns",
-                "has_confidence",
-                "uncertain_cells",
-                "empty_cells",
-                "warnings",
-                "cells",
-            )
-        }
+    rule = _rule_candidate(
+        _load_scan(image_path), [("crop", word) for word in words]
+    )
+    if rule is not None:
+        payload = _rule_payload(rule)
         # Rule coordinates are crop pixels; the review preview positions the
         # saved region on the page image, so the element rectangle stays the
         # honest source box.
@@ -1176,9 +1284,17 @@ def propose_page_tables(project_dir: Path, page_id: str) -> dict[str, Any]:
             "SELECT * FROM ocr_blocks WHERE run_id = ? ORDER BY block_index",
             (run["id"],),
         ).fetchall()
-        # Drawn rules are only read from the immutable PDF, so a rotated page or
-        # any geometry edit makes them unusable. The word-based detector still
-        # works in those cases.
+        # PDF vector rules are only read from the immutable PDF, so that exact
+        # path needs an unrotated page with no geometry edits. Raster rules are
+        # measured on the run's own current display asset, which already contains
+        # rotation and edits, so a scanned or edited page can use its visible
+        # borders too.
+        page_image_path = _source_asset_path(
+            conn,
+            project_dir,
+            run["source_asset_id"]
+            or (page["display_asset_id"] or page["original_asset_id"]),
+        )
         pdf_source: tuple[Path, int] | None = None
         if (
             page["source_kind"] == "pdf"
@@ -1213,6 +1329,7 @@ def propose_page_tables(project_dir: Path, page_id: str) -> dict[str, Any]:
 
     heights = [word["height"] for _block, words in eligible for word in words]
     typical_height = median(heights) if heights else 1.0
+    scan = _load_scan(page_image_path)
     candidates: list[dict[str, Any]] = []
 
     index = 0
@@ -1224,9 +1341,18 @@ def propose_page_tables(project_dir: Path, page_id: str) -> dict[str, Any]:
             index += 1
             continue
         if block["kind"] == "table":
-            grid = _build_grid(words)
-            if grid is not None:
-                candidates.append(_candidate([block], *grid))
+            rule = _rule_candidate(
+                scan,
+                [(block["id"], word) for word in words],
+                bounds=_blocks_bounds([block]),
+                margin=max(typical_height * 2, 12.0),
+            )
+            if rule is not None:
+                candidates.append(rule)
+            else:
+                grid = _build_grid(words)
+                if grid is not None:
+                    candidates.append(_candidate([block], *grid))
             index += 1
             continue
         if block["kind"] != "paragraph":
@@ -1263,7 +1389,16 @@ def propose_page_tables(project_dir: Path, page_id: str) -> dict[str, Any]:
             continue
 
         candidate_end, group, grid = chosen
-        candidates.append(_candidate([item[0] for item in group], *grid))
+        rule = _rule_candidate(
+            scan,
+            [(item[0]["id"], word) for item in group for word in item[1]],
+            bounds=_blocks_bounds([item[0] for item in group]),
+            margin=max(typical_height * 2, 12.0),
+        )
+        if rule is not None:
+            candidates.append(rule)
+        else:
+            candidates.append(_candidate([item[0] for item in group], *grid))
         index = candidate_end + 1
 
     vector_candidates: list[dict[str, Any]] = []

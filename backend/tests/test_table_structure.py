@@ -91,6 +91,16 @@ def _alignment_words() -> list[dict]:
     ]
 
 
+def _ruled_block_words() -> list[dict]:
+    """Words inside the 2-row, 3-column ruled table drawn by the tests below."""
+    return [
+        _word("Merged", 120, 100, width=60, line=0),
+        _word("A", 20, 150, width=20, line=1),
+        _word("B", 120, 150, width=20, line=1),
+        _word("C", 220, 150, width=20, line=1),
+    ]
+
+
 def _wait_for_run(
     client: TestClient, project_id: str, page_id: str, timeout: float = 5.0
 ) -> dict:
@@ -107,13 +117,20 @@ def _wait_for_run(
 
 
 def _run_table_ocr(
-    client: TestClient, project: dict, monkeypatch, result: dict
+    client: TestClient,
+    project: dict,
+    monkeypatch,
+    result: dict,
+    page_png: bytes | None = None,
 ) -> tuple[dict, dict]:
     from app.services import ocr
 
     monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
     monkeypatch.setattr(ocr, "_perform_ocr", lambda *args, **kwargs: result)
-    page = upload_pages(client, project["id"], ["table-page.png"])[0]
+    if page_png is None:
+        page = upload_pages(client, project["id"], ["table-page.png"])[0]
+    else:
+        page = _upload_png(client, project["id"], "table-rules.png", page_png)
     response = client.post(
         f"/api/projects/{project['id']}/pages/{page['id']}/ocr",
         json={"languages": ["eng"]},
@@ -162,6 +179,75 @@ def test_proposal_builds_a_reviewable_grid(
     # An empty cell is not "uncertain": there is simply no content to check.
     assert cells[(2, 1)]["uncertain"] is False
     assert cells[(2, 1)]["alignment"] is None
+
+
+def test_block_proposal_keeps_merged_cells_from_drawn_rules(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    # The fake block below covers 0,90 300x100, so the rules sit two pixels
+    # inside that box on the uploaded page.
+    page_png = _png_with_table_rules(
+        left=2, top=92, right=298, bottom=188, columns=3, merge_top_header=True
+    )
+    page, run = _run_table_ocr(
+        client,
+        project,
+        monkeypatch,
+        _table_result(_ruled_block_words()),
+        page_png=page_png,
+    )
+    block = run["blocks"][0]
+
+    response = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}"
+        f"/ocr/blocks/{block['id']}/table-proposal"
+    )
+    assert response.status_code == 200, response.text
+    proposal = response.json()
+
+    assert proposal["rows"] == 2
+    assert proposal["columns"] == 3
+    cells = {(cell["row"], cell["column"]): cell for cell in proposal["cells"]}
+    assert cells[(0, 1)]["text"] == "Merged"
+    assert cells[(0, 1)]["colspan"] == 2
+    assert cells[(1, 0)]["text"] == "A"
+    assert cells[(1, 1)]["text"] == "B"
+    assert cells[(1, 2)]["text"] == "C"
+    # The source is the drawn table, which starts left of the text-block box.
+    assert proposal["source"]["x"] < 5
+    assert proposal["source"]["width"] > 290
+
+
+def test_page_candidates_keep_merged_cells_from_drawn_rules(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    page_png = _png_with_table_rules(
+        left=2, top=92, right=298, bottom=188, columns=3, merge_top_header=True
+    )
+    page, run = _run_table_ocr(
+        client,
+        project,
+        monkeypatch,
+        _table_result(_ruled_block_words()),
+        page_png=page_png,
+    )
+
+    response = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/table-proposals"
+    )
+    assert response.status_code == 200, response.text
+    candidates = response.json()["candidates"]
+
+    # One table is one candidate: the ruled grid replaces the coarser word grid
+    # instead of being listed beside it.
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate["rows"] == 2
+    assert candidate["columns"] == 3
+    assert candidate["block_ids"] == [run["blocks"][0]["id"]]
+    cells = {(cell["row"], cell["column"]): cell for cell in candidate["cells"]}
+    assert cells[(0, 1)]["colspan"] == 2
+    assert cells[(1, 2)]["text"] == "C"
 
 
 def test_proposal_reports_only_observable_cell_alignment(
