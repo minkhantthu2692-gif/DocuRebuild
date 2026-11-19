@@ -585,8 +585,11 @@ are two entry points in the OCR dialog:
   layer stores one paragraph block per row. For an unrotated PDF page, the same
   endpoint also reads the table rules drawn in the document; on a scanned or
   photographed page it reads the visible cell borders of each candidate instead, so
-  merged cells keep their span there too. One dialog lists every candidate, so a page
-  with several tables is reviewed in one place.
+  merged cells keep their span there too. A contiguous group whose rows do not line
+  up is still offered when its drawn borders form a closed table, because the
+  borders describe the cells more reliably than the spacing; words outside that grid
+  keep their own blocks. One dialog lists every candidate, so a page with several
+  tables is reviewed in one place.
 
 Rules that keep a proposal honest:
 
@@ -623,8 +626,14 @@ Rules that keep a proposal honest:
   whose cells mostly contain text is accepted, so a chart's axis frame is not offered
   as a table, and an OCR candidate that lies inside a vector grid is dropped rather
   than shown twice. A rotated page, a geometry edit or a stale run falls back to the
-  word-box grid. A page candidate, block or crop whose rules do not enclose every
-  detected word also falls back to the word-box grid instead of dropping text.
+  word-box grid. A block or crop whose rules do not enclose every detected word also
+  falls back to the word-box grid instead of dropping text; a page group accepts the
+  words inside its grid and leaves the rest in their own blocks.
+- A drawn table is offered even when its rows do not line up. Word spacing alone must
+  still pass the layout classifier, but a closed ruled grid with at least two filled
+  rows and columns is accepted from the borders, so a table with a merged header or
+  uneven cells is not skipped. Only words inside the grid become cells; a
+  neighbouring prose block keeps its own text and is never absorbed.
 - Limits are 60 rows, 20 columns and 600 cells per candidate, and at most 20
   candidates per page. A larger or unusable grid is refused with a typed error
   instead of being truncated.
@@ -1108,10 +1117,11 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   are never presented as certain structure. Accuracy can be measured with the local
   benchmark harness, but no figures are published until fixtures from real documents
   have been scored. A table label only marks a text grid, and the optional cell-grid
-  proposal derives rows and columns from word-box geometry; merged cells come only
-  from drawn rules (a PDF's vector geometry or a scanned page's or saved crop's
-  visible borders), and nested tables or uneven spacing can still produce a wrong
-  shape, which is why every cell must be reviewed before insertion. Equations
+  proposal derives rows and columns from word-box geometry, or from the drawn borders
+  when the table is ruled; merged cells come only from drawn rules (a PDF's vector
+  geometry or a scanned page's or saved crop's visible borders), and nested tables or
+  uneven spacing can still produce a wrong shape, which is why every cell must be
+  reviewed before insertion. Equations
   are never transcribed automatically; one saved crop can be transcribed on request.
 - Region extraction itself does not use a vision model. Suggestions are deterministic
   heuristics over the latest OCR text layout, on PDF pages over embedded raster

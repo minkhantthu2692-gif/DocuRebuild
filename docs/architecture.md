@@ -423,9 +423,12 @@ src/
   table, measured inside that table's own region. Measuring the region rather than
   the whole page is what keeps a short cell border longer than the minimum stroke
   once a scanned table fills only part of the page. One bounded grayscale copy of
-  the page is decoded per request and reused for every candidate. The rule grid is
-  accepted only when it holds every stored word of that block or group, so drawn
-  geometry replaces the word-box grid but never drops text.
+  the page is decoded per request and reused for every candidate. A block or crop
+  must have every word inside the grid; a page-level group may hold surrounding prose
+  outside it, and only the words inside become cells. When word geometry refuses a
+  group as a table, for example rows whose wide gaps do not share a position, a
+  closed drawn grid is still offered, because the borders describe the cells more
+  reliably than the spacing.
 - Vector candidates are built before word-box candidates and sorted by source
   position. An OCR candidate whose source box is at least 85% inside a vector grid
   is dropped, because the vector grid already describes the same table with exact

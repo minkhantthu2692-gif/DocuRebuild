@@ -101,6 +101,53 @@ def _ruled_block_words() -> list[dict]:
     ]
 
 
+def _unaligned_ruled_words() -> list[dict]:
+    """Rows whose wide gaps sit at different places, so no table is inferred."""
+    return [
+        _word("Alpha", 20, 100, width=60, line=0),
+        _word("Beta", 220, 100, width=60, line=0),
+        _word("Gamma", 20, 150, width=60, line=1),
+        _word("Delta", 120, 150, width=60, line=1),
+    ]
+
+
+def _paragraph_group_result() -> dict:
+    """A paragraph block holding a ruled table, then a prose block below it."""
+    return {
+        "engine_version": "5.3.3",
+        "text": "Alpha Beta\nGamma Delta\nTail",
+        "mean_confidence": 90.0,
+        "blocks": [
+            {
+                "block_index": 1,
+                "kind": "paragraph",
+                "text": "Alpha Beta\nGamma Delta",
+                "confidence": 90.0,
+                "x": 0,
+                "y": 90,
+                "width": 300,
+                "height": 100,
+                "line_count": 2,
+                "word_count": 4,
+                "words": _unaligned_ruled_words(),
+            },
+            {
+                "block_index": 2,
+                "kind": "paragraph",
+                "text": "Tail",
+                "confidence": 90.0,
+                "x": 240,
+                "y": 196,
+                "width": 60,
+                "height": 20,
+                "line_count": 1,
+                "word_count": 1,
+                "words": [_word("Tail", 250, 200, width=40, line=0)],
+            },
+        ],
+    }
+
+
 def _wait_for_run(
     client: TestClient, project_id: str, page_id: str, timeout: float = 5.0
 ) -> dict:
@@ -248,6 +295,45 @@ def test_page_candidates_keep_merged_cells_from_drawn_rules(
     cells = {(cell["row"], cell["column"]): cell for cell in candidate["cells"]}
     assert cells[(0, 1)]["colspan"] == 2
     assert cells[(1, 2)]["text"] == "C"
+
+
+def test_page_candidates_read_a_ruled_group_without_clean_columns(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    # Each row has a wide gap, but the two gaps do not share a position, so the
+    # word geometry is not accepted as a table. The drawn borders still are.
+    page_png = _png_with_table_rules(
+        left=2, top=92, right=298, bottom=188, columns=3
+    )
+    page, run = _run_table_ocr(
+        client,
+        project,
+        monkeypatch,
+        _paragraph_group_result(),
+        page_png=page_png,
+    )
+
+    response = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/table-proposals"
+    )
+    assert response.status_code == 200, response.text
+    candidates = response.json()["candidates"]
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate["rows"] == 2
+    assert candidate["columns"] == 3
+    # The prose block below the table is outside the grid, so it contributes no
+    # cell and is not treated as table content.
+    assert candidate["block_ids"] == [run["blocks"][0]["id"]]
+    cells = {(cell["row"], cell["column"]): cell for cell in candidate["cells"]}
+    assert cells[(0, 0)]["text"] == "Alpha"
+    assert cells[(0, 1)]["empty"] is True
+    assert cells[(0, 2)]["text"] == "Beta"
+    assert cells[(1, 0)]["text"] == "Gamma"
+    assert cells[(1, 1)]["text"] == "Delta"
+    assert candidate["source"]["x"] < 5
+    assert candidate["source"]["height"] < 110
 
 
 def test_proposal_reports_only_observable_cell_alignment(

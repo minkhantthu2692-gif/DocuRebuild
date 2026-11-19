@@ -1020,8 +1020,9 @@ def _rule_candidate(
     *,
     bounds: tuple[float, float, float, float] | None = None,
     margin: float = 0.0,
+    require_all_words: bool = True,
 ) -> dict[str, Any] | None:
-    """Return the tightest closed rule grid that holds every word.
+    """Return the best closed rule grid for these words.
 
     A scanned table usually keeps its cell borders, and those borders are the
     only reliable evidence for a merged cell: the word boxes see a merged cell as
@@ -1030,6 +1031,12 @@ def _rule_candidate(
     cannot replace it, and the longest borders of that area set the minimum
     stroke length. Any doubt leaves the word-box path in charge instead of
     dropping text.
+
+    ``require_all_words`` is what a single block or a saved crop needs: a grid
+    that leaves one of their words outside is refused. A page-level group may
+    hold surrounding prose outside its drawn table, so it passes ``False`` and
+    the topmost grid inside the group is used instead; prose outside the grid is
+    not table content and is not lost.
     """
     if scan is None or not tagged_words:
         return None
@@ -1047,16 +1054,17 @@ def _rule_candidate(
 
     candidates = _vector_candidates(horizontals, verticals, tagged_words)
     words = [word for _block_id, word in tagged_words]
-    containing = [
-        candidate
-        for candidate in candidates
-        if _holds_all_words(candidate["source"], words)
-    ]
+    if require_all_words:
+        candidates = [
+            candidate
+            for candidate in candidates
+            if _holds_all_words(candidate["source"], words)
+        ]
     if bounds is not None:
         left, top, right, bottom = bounds
-        containing = [
+        candidates = [
             candidate
-            for candidate in containing
+            for candidate in candidates
             if candidate["source"]["x"] >= left - margin
             and candidate["source"]["y"] >= top - margin
             and candidate["source"]["x"] + candidate["source"]["width"]
@@ -1064,12 +1072,19 @@ def _rule_candidate(
             and candidate["source"]["y"] + candidate["source"]["height"]
             <= bottom + margin
         ]
-    if not containing:
+    if not candidates:
         return None
+    if not require_all_words:
+        # Reading order decides: the first drawn grid in the group is the next
+        # table to review, and the caller resumes after its blocks.
+        return min(
+            candidates,
+            key=lambda candidate: (candidate["source"]["y"], candidate["source"]["x"]),
+        )
     # The tightest grid that still holds every word is the table itself; a page
     # frame or a header rule that also encloses the words is larger and loses.
     return min(
-        containing,
+        candidates,
         key=lambda candidate: (
             candidate["source"]["width"] * candidate["source"]["height"],
             -len(candidate["cells"]),
@@ -1385,7 +1400,36 @@ def propose_page_tables(project_dir: Path, page_id: str) -> dict[str, Any]:
             break
 
         if chosen is None:
-            index += 1
+            # The layout classifier refuses irregular rows, but a drawn grid is
+            # stronger evidence than word spacing: a ruled table whose columns do
+            # not line up still has exact borders. Words outside the grid are
+            # surrounding prose, so they are not table content and are not lost;
+            # the next block after the table is reviewed on its own.
+            whole = eligible[index : end + 1]
+            group_bounds = _blocks_bounds([block for block, _words in whole])
+            if group_bounds is None:
+                # Without block geometry there is no area to search, and a
+                # whole-page scan could return a table from anywhere.
+                index += 1
+                continue
+            rule = _rule_candidate(
+                scan,
+                [(block["id"], word) for block, words in whole for word in words],
+                bounds=group_bounds,
+                margin=max(typical_height * 2, 12.0),
+                require_all_words=False,
+            )
+            if rule is None:
+                index += 1
+                continue
+            candidates.append(rule)
+            contributing = set(rule["block_ids"])
+            last = max(
+                position
+                for position, (block, _words) in enumerate(whole)
+                if block["id"] in contributing
+            )
+            index += last + 1
             continue
 
         candidate_end, group, grid = chosen

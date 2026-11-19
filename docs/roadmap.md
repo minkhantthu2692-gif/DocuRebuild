@@ -377,7 +377,10 @@ never claims a provider is free and never estimates a price it cannot support.
   review grid renders the merge, and insertion writes the same spans into an ordinary
   Tiptap table. A rotated page, a geometry edit or a stale run falls back to the
   word-box grid; rules are ignored when they would leave a detected word outside the
-  grid, so text is never dropped. A closed, mostly filled grid is required so a chart's
+  grid, so text is never dropped. A contiguous paragraph group that the layout
+  classifier refuses is still offered when its drawn borders form a closed grid,
+  because the borders describe the cells more reliably than the spacing; prose outside
+  the grid keeps its own block. A closed, mostly filled grid is required so a chart's
   axis frame is not offered, and a vector grid replaces an OCR candidate that lies at
   least 85% inside it.
 - Side-by-side source comparison in the table review dialog. The backend reports
