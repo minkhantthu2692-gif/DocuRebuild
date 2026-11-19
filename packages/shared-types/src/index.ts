@@ -912,6 +912,33 @@ export interface AiTableResponse {
   cells: TableProposalCell[];
 }
 
+/** Languages for a locally read crop. Empty means the application default. */
+export interface ElementTableRequest {
+  languages?: string[];
+}
+
+/**
+ * A table grid read by the local OCR engine from one saved crop. Confidence and
+ * uncertainty come from the engine, so weak cells can be flagged without AI.
+ */
+export interface ElementTableResponse {
+  element_id: string;
+  page_id: string;
+  engine: string;
+  engine_version: string | null;
+  languages: string[];
+  page_width: number | null;
+  page_height: number | null;
+  rows: number;
+  columns: number;
+  has_confidence: boolean;
+  uncertain_cells: number;
+  empty_cells: number;
+  warnings: TableProposalWarning[];
+  source: TableSourceBox;
+  cells: TableProposalCell[];
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                 Elements                                   */
 /* -------------------------------------------------------------------------- */

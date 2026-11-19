@@ -75,7 +75,8 @@ data on your device, and treats every AI result as a reviewable proposal.
   turned into a reviewable cell grid: rows and columns are derived from the stored
   word boxes, every cell keeps its OCR text and confidence, and nothing is inserted
   until you review and confirm the proposal. Uncertain cells are flagged and must be
-  acknowledged before insertion.
+  acknowledged before insertion. A table crop you saved as a region can be read the
+  same way, on this device, without any AI provider.
 - **Unified AI provider platform (BYOK)** — Settings → AI providers manages named
   connections to local Ollama, a custom OpenAI-compatible server, or the OpenAI,
   Anthropic, Google Gemini, OpenRouter, Groq, Mistral, DeepSeek, xAI, Together,
@@ -131,11 +132,13 @@ data on your device, and treats every AI result as a reviewable proposal.
   only that crop to the routed vision model and fills the review field with the
   returned LaTeX, marked with the proposing model and an unverified warning.
   Nothing is inserted until you compare it with the crop and confirm; manual typing
-  works without a vision model. A saved table region can be read the same way:
-  **Read table with AI** sends only that crop and shows the reply in the normal
-  table review grid. Every cell of that reply is unscored, so insertion waits for
-  your acknowledgement, manual cell corrections are used instead of the raw reply,
-  and the saved region is never modified.
+  works without a vision model. A saved table region can be read into the same
+  review grid: **Read locally (OCR)** builds the grid on this device from the crop's
+  own word boxes, and **Read with AI** is an optional second method that sends only
+  that crop to the routed vision model. The local result keeps per-cell confidence;
+  the AI result has none, so insertion waits for your acknowledgement. In both cases
+  manual cell corrections are used instead of the raw result and the saved region is
+  never modified.
 - **Document editor** — Tiptap rich text with headings, paragraphs, lists,
   blockquotes, code blocks, alignment, inline formatting, links, undo/redo, word
   and character counts, debounced autosave, and find/replace with match-case and
@@ -192,8 +195,10 @@ data on your device, and treats every AI result as a reviewable proposal.
   dialog can build a cell-grid proposal from the stored word boxes, either for one
   block labelled as a table or for the tables it detects across a whole page; when
   a PDF draws the table with vector rules, those rules give the exact grid and its
-  merged cells. The grid is shown for review with per-cell confidence and the
-  source crop beside it, and is only inserted after you confirm it. Tables are part
+  merged cells. A saved table region can also be read into a structured grid on
+  request, on this device or with the routed vision model. The grid is shown for
+  review with per-cell confidence and the source crop beside it, and is only
+  inserted after you confirm it. Tables are part
   of the saved document, version history, backups and Markdown/TXT/Word/PDF export.
 - **Equations** — insert a display equation or an inline formula from the toolbar
   dialog and check the local KaTeX preview before inserting it. Empty or invalid
@@ -246,10 +251,12 @@ reviewable cell grid derived from its word boxes, group vertically contiguous
 paragraph blocks into one page-level candidate, and read a PDF's drawn table rules so
 merged cells keep exactly the shape the document drew. It never inserts a grid on its
 own, never invents a cell, and does not transcribe equations across a page. A saved
-table crop can be read by a routed vision model on request, but nested tables and
-page-wide vision table detection are not implemented. Region extraction produces exact
-pixel crops and can read their plain text locally; it does not build structured table
-cells. Equation markup comes only from manual typing or the formula dialog's explicit,
+table crop can be read into a structured grid locally, or by a routed vision model
+as an optional second method, but nested tables, merged-cell detection for
+text-only tables and page-wide table detection are not implemented. Region
+extraction produces exact pixel crops and can read their plain text locally; the
+table reader is what turns a table crop into cells. Equation markup comes only from
+manual typing or the formula dialog's explicit,
 reviewed transcription of one saved crop. Deterministic region suggestions are
 heuristics over the OCR text layout, on PDF pages over the placement of embedded
 raster images and the shapes of vector drawings, and on a photographed page over ink
@@ -503,7 +510,8 @@ review, editing and export work without it.
    recorded in the local ledger and stops paid requests when it is reached.
 7. Use the workspace actions: **Ask AI to clean up** on an OCR block, **Ask AI for
    regions** in the source viewer, **Transcribe with AI** in the formula dialog, or
-   **Read table with AI** in the region library.
+   **Read with AI** in the table-region dialog. The same table dialog also offers
+   **Read locally (OCR)**, which needs no provider at all.
 
 Only the content the action needs is sent to the routed provider: the selected OCR
 block, the current page image, one saved equation crop or one saved table crop. The
@@ -1156,9 +1164,9 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 2. Main UI and workspace | Complete |
 | 3. Import and image processing | Complete |
 | 4. Local OCR and layout detection | In progress: OCR, layout hints, reviewable table proposals and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
-| 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
+| 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table reconstruction from one saved crop (local OCR or AI) done, page-wide table detection pending |
 | 6. AI integration and free usage first | In progress: unified BYOK provider platform with local Ollama, custom OpenAI-compatible and 12 cloud adapters, dynamic model discovery, multiple connections and encrypted keys, key rotation and cooldown, per-task routing with a fallback, remote-consent and HTTPS boundary, daily/task/connection limits, verified-cost budget, metadata-only usage ledger and history browser, reviewable OCR text cleanup, optional vision region proposals, one-crop equation transcription and one-crop table reading done; account-level billing/quota verification and page-wide automatic reconstruction pending |
-| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, reviewable automatic table proposals from OCR word boxes, merged-cell spans read from PDF vector rules, AI reading of one saved table crop, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; page-wide vision tables, nested tables and page-wide equation extraction pending |
+| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, reviewable automatic table proposals from OCR word boxes, merged-cell spans read from PDF vector rules, structured reading of one saved table crop with local OCR or an optional vision model, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; page-wide tables, nested tables and page-wide equation extraction pending |
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
 | 9. History, backup and recovery | **Complete**: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned |

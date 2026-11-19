@@ -50,6 +50,8 @@ import type {
   EditorSettings,
   ElementAssetRepairResult,
   ElementSummary,
+  ElementTableRequest,
+  ElementTableResponse,
   ExportSettings,
   HealthStatus,
   HistoryEvent,
@@ -451,6 +453,15 @@ export const api = {
   ) =>
     request<AiTableResponse>(
       `/projects/${projectId}/elements/${elementId}/ai-table`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  createElementTableProposal: (
+    projectId: string,
+    elementId: string,
+    payload: ElementTableRequest = {},
+  ) =>
+    request<ElementTableResponse>(
+      `/projects/${projectId}/elements/${elementId}/table-proposal`,
       { method: "POST", body: JSON.stringify(payload) },
     ),
 

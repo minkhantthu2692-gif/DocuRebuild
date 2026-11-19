@@ -339,6 +339,195 @@ def _row_table_rows() -> list[list[tuple[str, int, int]]]:
     ]
 
 
+def _crop_tsv(
+    rows: list[list[tuple[str, int, int, float]]],
+) -> str:
+    """Build engine TSV in crop coordinates, one block per visual row."""
+    header = (
+        "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\t"
+        "left\ttop\twidth\theight\tconf\ttext"
+    )
+    lines = [header]
+    for row_index, row in enumerate(rows):
+        top = 10 + row_index * 30
+        for column_index, (text, left, width, confidence) in enumerate(row):
+            lines.append(
+                f"5\t1\t{row_index + 1}\t1\t1\t{column_index + 1}\t"
+                f"{left}\t{top}\t{width}\t20\t{confidence}\t{text}"
+            )
+    return "\n".join(lines)
+
+
+def _fake_crop_ocr(tsv: str):
+    import subprocess
+
+    def run(args, timeout):
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout=tsv, stderr="")
+
+    return run
+
+
+def _create_table_element(
+    client: TestClient, project_id: str, page_id: str, **overrides
+) -> dict:
+    payload = {
+        "kind": "table",
+        "x": 40,
+        "y": 120,
+        "width": 300,
+        "height": 120,
+        "caption": "",
+    }
+    payload.update(overrides)
+    response = client.post(
+        f"/api/projects/{project_id}/pages/{page_id}/elements", json=payload
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _crop_rows() -> list[list[tuple[str, int, int, float]]]:
+    return [
+        [("Item", 10, 50, 90.0), ("Qty", 150, 30, 95.0)],
+        [("Green", 10, 50, 88.0), ("apples", 65, 55, 90.0), ("3", 150, 10, 40.0)],
+    ]
+
+
+def test_element_table_reads_a_saved_crop_locally(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(ocr, "_run_command", _fake_crop_ocr(_crop_tsv(_crop_rows())))
+    page = upload_pages(client, project["id"], ["crop-table.png"])[0]
+    element = _create_table_element(client, project["id"], page["id"])
+
+    response = client.post(
+        f"/api/projects/{project['id']}/elements/{element['id']}/table-proposal",
+        json={"languages": ["eng"]},
+    )
+    assert response.status_code == 200, response.text
+    proposal = response.json()
+
+    assert proposal["element_id"] == element["id"]
+    assert proposal["page_id"] == page["id"]
+    assert proposal["engine"] == "tesseract"
+    assert proposal["engine_version"] == "5.3.3"
+    assert proposal["languages"] == ["eng"]
+    assert proposal["rows"] == 2
+    assert proposal["columns"] == 2
+    assert proposal["has_confidence"] is True
+    assert proposal["uncertain_cells"] == 1
+    assert proposal["empty_cells"] == 0
+    assert proposal["warnings"] == ["low_confidence"]
+    # The preview positions the saved region on the page image, not the crop's
+    # own coordinates.
+    assert proposal["source"] == {"x": 40.0, "y": 120.0, "width": 300.0, "height": 120.0}
+    assert proposal["page_width"] == 1200
+    assert proposal["page_height"] == 800
+
+    cells = {(cell["row"], cell["column"]): cell for cell in proposal["cells"]}
+    assert cells[(0, 0)]["text"] == "Item"
+    assert cells[(0, 1)]["text"] == "Qty"
+    # Words that share a visual row are joined, even when OCR split them into
+    # different blocks.
+    assert cells[(1, 0)]["text"] == "Green apples"
+    assert cells[(1, 1)]["text"] == "3"
+    assert cells[(1, 1)]["confidence"] == 40.0
+    assert cells[(1, 1)]["uncertain"] is True
+
+    # Reading the crop is a proposal only: the element and document are untouched.
+    listed = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/elements"
+    ).json()
+    assert listed[0]["text"] == ""
+
+
+def test_element_table_requires_a_saved_table_region(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(ocr, "_run_command", _fake_crop_ocr(_crop_tsv(_crop_rows())))
+    page = upload_pages(client, project["id"], ["crop-figure.png"])[0]
+    element = _create_table_element(client, project["id"], page["id"], kind="figure")
+
+    response = client.post(
+        f"/api/projects/{project['id']}/elements/{element['id']}/table-proposal",
+        json={},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "table_element_required"
+
+
+def test_element_table_reports_an_empty_crop(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(ocr, "_run_command", _fake_crop_ocr(_crop_tsv([])))
+    page = upload_pages(client, project["id"], ["crop-empty.png"])[0]
+    element = _create_table_element(client, project["id"], page["id"])
+
+    response = client.post(
+        f"/api/projects/{project['id']}/elements/{element['id']}/table-proposal",
+        json={"languages": ["eng"]},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "table_crop_empty"
+
+
+def test_element_table_rejects_a_single_column_crop(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    rows = [
+        [("Name", 10, 50, 90.0)],
+        [("Mass", 10, 50, 90.0)],
+    ]
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(ocr, "_run_command", _fake_crop_ocr(_crop_tsv(rows)))
+    page = upload_pages(client, project["id"], ["crop-column.png"])[0]
+    element = _create_table_element(client, project["id"], page["id"])
+
+    response = client.post(
+        f"/api/projects/{project['id']}/elements/{element['id']}/table-proposal",
+        json={"languages": ["eng"]},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "table_crop_not_detected"
+
+
+def test_element_table_requires_the_local_engine(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(
+        ocr,
+        "detect_engine",
+        lambda force=False: {
+            **_engine_available(),
+            "available": False,
+            "languages": [],
+            "reason": "not_found",
+        },
+    )
+    page = upload_pages(client, project["id"], ["crop-no-engine.png"])[0]
+    element = _create_table_element(client, project["id"], page["id"])
+
+    response = client.post(
+        f"/api/projects/{project['id']}/elements/{element['id']}/table-proposal",
+        json={"languages": ["eng"]},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ocr_unavailable"
+
+
 def test_page_candidates_merge_adjacent_row_blocks(
     client: TestClient, project: dict, monkeypatch
 ) -> None:

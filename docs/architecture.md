@@ -52,8 +52,8 @@ to the same local API; the API is not intended to be exposed publicly.
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout, raster-page ink, and embedded PDF raster-image placement and vector-drawing geometry |
 | `services.settings` | Persisted appearance, language, editor, export and backup settings, plus global AI limits (`ai_preferences`) |
-| `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness |
-| `services.table_structure` | Reviewable table proposals: word-box row clustering and whitespace column bands, plus exact merged-cell grids from a PDF's drawn rules; cell text/confidence/flags/alignment, page-level grouping of vertically contiguous row blocks, vector/OCR de-duplication, source pixel box, size caps and typed refusal errors |
+| `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness, and word-box extraction from a standalone crop |
+| `services.table_structure` | Reviewable table proposals: word-box row clustering and whitespace column bands, plus exact merged-cell grids from a PDF's drawn rules; cell text/confidence/flags/alignment, page-level grouping of vertically contiguous row blocks, local reading of one saved crop, vector/OCR de-duplication, source pixel box, size caps and typed refusal errors |
 | `app.ocr_benchmark` | Local CER/WER measurement against checked reference transcripts, by running the OCR adapter or scoring a stored transcript; validates fixtures and never uploads |
 | `services.ai_providers` | Modular provider registry and adapters (Ollama, OpenAI-compatible and 12 cloud APIs), model discovery, model metadata/pricing normalization, URL/HTTPS/SSRF and remote-consent validation, bounded requests and typed provider errors |
 | `services.ai_store` | Connection, key, model and task-route persistence; capability checks; task status; encrypted-secret wiring and connection health state |
@@ -265,6 +265,7 @@ POST   /api/projects/{id}/elements/{element_id}/text
 PATCH  /api/projects/{id}/elements/{element_id}/text
 POST   /api/projects/{id}/elements/{element_id}/ai-equation
 POST   /api/projects/{id}/elements/{element_id}/ai-table
+POST   /api/projects/{id}/elements/{element_id}/table-proposal
 DELETE /api/projects/{id}/elements/{element_id}
 GET    /api/projects/{id}/assets/{asset_id}/file
 ```
@@ -425,9 +426,21 @@ src/
   `rowspan`/`colspan`; covered coordinates are not repeated. The review grid renders
   the anchors with those spans and insertion skips the covered coordinates, so the
   saved Tiptap table uses the same ordinary cell attributes as a manual merge.
+- A saved table crop can be read on this device through
+  `POST .../elements/{element_id}/table-proposal`.
+  `services.ocr.extract_image_content` runs the same Tesseract path as page OCR
+  but returns the crop's word boxes instead of only text. `services.table_structure`
+  clusters them into rows and whitespace column bands, rebases each visual row's
+  line number so words from different OCR blocks join correctly, and replaces the
+  source box with the saved region rectangle so the dialog can cut that region from
+  the page image. The region's `table` kind is the user's own declaration of intent;
+  the builder still requires at least two rows and two columns and applies the same
+  row/column/cell caps. The crop image and the element stay untouched. A vision
+  model remains an optional second reader through `POST .../ai-table`.
 - The proposal dialogs show the grid and its per-cell flags before anything is
-  inserted. A single-block proposal, a page candidate and an AI-read table share one
-  `TableReview` component, so a cell is presented identically in all of them. The API
+  inserted. A single-block proposal, a page candidate, a locally read crop and an
+  AI-read table share one `TableReview` component, so a cell is presented identically
+  in all of them. The API
   also returns the proposal's `source` pixel box and the page dimensions; the dialog
   crops the page
   image to that box by positioning it with percentages, so the source can be

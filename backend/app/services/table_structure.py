@@ -51,6 +51,7 @@ from app.core.errors import AppError
 from app.core.storage import resolve_within
 from app.db.project_schema import project_db
 from app.services import image_edits as edits_service
+from app.services import ocr as ocr_service
 from app.services import pdf as pdf_service
 from app.services.layout import classify_text_block
 
@@ -106,7 +107,11 @@ def _parse_words(raw: str | None) -> list[Word]:
         return []
     if not isinstance(data, list):
         return []
+    return _clean_words(data)
 
+
+def _clean_words(data: list[Any]) -> list[Word]:
+    """Normalise word entries, dropping any entry without usable geometry."""
     words: list[Word] = []
     for item in data:
         if not isinstance(item, dict):
@@ -932,6 +937,139 @@ def propose_table(project_dir: Path, page_id: str, block_id: str) -> dict[str, A
         rows=rows,
         bands=bands,
     )
+
+
+def propose_element_table(
+    project_dir: Path,
+    element_id: str,
+    languages: list[str] | None = None,
+) -> dict[str, Any]:
+    """Read one saved table crop with the local OCR engine into a proposal.
+
+    The crop is the user's own rectangle, so its kind label already declares the
+    intent; this module only checks that the words inside it form a usable grid.
+    The image never leaves the device. Every cell keeps the engine's confidence,
+    empty cells stay empty, and nothing is written to the element or document.
+    """
+    with project_db(project_dir) as conn:
+        element = conn.execute(
+            "SELECT * FROM elements WHERE id = ?", (element_id,)
+        ).fetchone()
+        if element is None:
+            raise AppError(404, "element_not_found", "Region not found.")
+        if element["kind"] != "table":
+            raise AppError(
+                422,
+                "table_element_required",
+                "Only a saved table region can be read as a table.",
+            )
+        if not element["asset_id"]:
+            raise AppError(
+                409,
+                "element_has_no_crop",
+                "This region has no saved crop image to read.",
+            )
+        asset = conn.execute(
+            "SELECT * FROM assets WHERE id = ?", (element["asset_id"],)
+        ).fetchone()
+        if asset is None:
+            raise AppError(
+                409,
+                "element_has_no_crop",
+                "This region has no saved crop image to read.",
+            )
+        try:
+            image_path = resolve_within(project_dir, asset["relative_path"])
+        except ValueError as exc:
+            raise AppError(500, "asset_path_invalid", "Asset path is invalid.") from exc
+        if not image_path.exists():
+            raise AppError(404, "asset_file_missing", "The asset file is missing.")
+
+        page = conn.execute(
+            "SELECT width, height FROM pages WHERE id = ?", (element["page_id"],)
+        ).fetchone()
+        source = {
+            "x": float(element["x"]),
+            "y": float(element["y"]),
+            "width": float(element["width"]),
+            "height": float(element["height"]),
+        }
+        page_width = int(page["width"] or 0) if page else 0
+        page_height = int(page["height"] or 0) if page else 0
+
+    # OCR can take seconds. Never hold the SQLite transaction open while the
+    # local engine runs.
+    content = ocr_service.extract_image_content(image_path, languages or [])
+
+    words = _clean_words(
+        [
+            word
+            for block in content.get("blocks", [])
+            for word in block.get("words", [])
+        ]
+    )
+    if not words:
+        raise AppError(
+            422,
+            "table_crop_empty",
+            "Local OCR did not find any words in this crop. Check that the region "
+            "covers the table and that the OCR language is installed.",
+        )
+
+    heights = [word["height"] for word in words if word["height"] > 0]
+    typical_height = median(heights) if heights else 1.0
+    rows = _cluster_rows(words)
+    if len(rows) < MIN_ROWS:
+        raise AppError(
+            422,
+            "table_crop_not_detected",
+            "The crop's text does not form a table with at least two rows.",
+        )
+
+    bands = _column_bands(rows, typical_height)
+    if len(bands) < MIN_COLUMNS:
+        raise AppError(
+            422,
+            "table_crop_not_detected",
+            "The crop's text does not form a table with at least two columns.",
+        )
+
+    if len(rows) > MAX_ROWS or len(bands) > MAX_COLUMNS:
+        raise AppError(
+            422,
+            "table_too_large",
+            f"The proposed table is larger than {MAX_ROWS} rows by {MAX_COLUMNS} columns.",
+        )
+    if len(rows) * len(bands) > MAX_CELLS:
+        raise AppError(
+            422,
+            "table_too_large",
+            f"The proposed table has more than {MAX_CELLS} cells.",
+        )
+
+    # Each visual row becomes one grid line, so words from different OCR blocks
+    # are joined with a space instead of being stacked by their block-local line
+    # number. A cell that wraps onto a second visual line still becomes a second
+    # row: the review grid never merges rows it did not observe.
+    for row_index, row in enumerate(rows):
+        for word in row:
+            word["line"] = row_index
+
+    payload = _grid_payload(rows, bands)
+    # OCR coordinates are relative to the crop; the review preview positions the
+    # box on the page image, so the saved region is the honest source rectangle.
+    payload["source"] = source
+
+    return {
+        "element_id": element_id,
+        "page_id": str(element["page_id"]),
+        "engine": content["engine"],
+        "engine_version": content["engine_version"],
+        "languages": content["languages"],
+        "page_width": page_width or None,
+        "page_height": page_height or None,
+        **payload,
+    }
 
 
 def propose_page_tables(project_dir: Path, page_id: str) -> dict[str, Any]:

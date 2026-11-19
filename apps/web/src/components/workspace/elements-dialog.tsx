@@ -56,7 +56,7 @@ import { api } from "@/lib/api";
 import { MIN_REGION_SIDE, type SourceRect } from "@/lib/element-region";
 import { buildLanguageOptions, confidenceVariant, languageLabel } from "@/lib/ocr-display";
 import { cn } from "@/lib/utils";
-import { AiTableDialog } from "./ai-table-dialog";
+import { TableCropDialog } from "./table-crop-dialog";
 import { RegionFormulaDialog } from "./region-formula-dialog";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
@@ -969,8 +969,8 @@ export function ElementsDialog({
                             className="gap-1"
                             onClick={() => setTableElement(element)}
                           >
-                            <Sparkles />
-                            {t("elements.table.aiOpen")}
+                            <ScanText />
+                            {t("elements.table.cropOpen")}
                           </Button>
                         ) : null}
                         <Button
@@ -1033,11 +1033,12 @@ export function ElementsDialog({
           </Button>
         </DialogFooter>
 
-        <AiTableDialog
+        <TableCropDialog
           key={tableElement?.id ?? "none"}
           projectId={projectId}
           element={tableElement}
           page={page}
+          languages={languageValue.split("+").filter(Boolean)}
           open={tableElement !== null}
           onOpenChange={(next) => {
             if (!next) setTableElement(null);

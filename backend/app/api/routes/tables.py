@@ -5,7 +5,12 @@ from typing import Any
 from fastapi import APIRouter
 
 from app.api.deps import ProjectDep
-from app.schemas.tables import PageTableProposalsOut, TableProposalOut
+from app.schemas.elements import ElementTextRequest
+from app.schemas.tables import (
+    ElementTableProposalOut,
+    PageTableProposalsOut,
+    TableProposalOut,
+)
 from app.services import projects as project_service
 from app.services import table_structure as table_service
 
@@ -32,3 +37,16 @@ def read_page_table_proposals(
 ) -> dict[str, Any]:
     directory = project_service.ensure_project_storage(project)
     return table_service.propose_page_tables(directory, page_id)
+
+
+@router.post(
+    "/projects/{project_id}/elements/{element_id}/table-proposal",
+    response_model=ElementTableProposalOut,
+)
+def read_element_table_proposal(
+    project: ProjectDep, element_id: str, payload: ElementTextRequest
+) -> dict[str, Any]:
+    directory = project_service.ensure_project_storage(project)
+    return table_service.propose_element_table(
+        directory, element_id, payload.languages
+    )

@@ -67,3 +67,23 @@ class PageTableProposalsOut(BaseModel):
     page_width: int | None
     page_height: int | None
     candidates: list[TableCandidateOut]
+
+
+class ElementTableProposalOut(BaseModel):
+    """A grid read locally from one saved table crop."""
+
+    element_id: str
+    page_id: str
+    engine: str
+    engine_version: str | None
+    languages: list[str]
+    page_width: int | None
+    page_height: int | None
+    rows: int
+    columns: int
+    has_confidence: bool
+    uncertain_cells: int
+    empty_cells: int
+    warnings: list[TableWarning]
+    source: TableSourceOut
+    cells: list[TableCellOut]

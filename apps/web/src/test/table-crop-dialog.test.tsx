@@ -5,10 +5,11 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AiTableResponse,
   ElementSummary,
+  ElementTableResponse,
   PageSummary,
 } from "@docurebuild/shared-types";
 
-import { AiTableDialog } from "@/components/workspace/ai-table-dialog";
+import { TableCropDialog } from "@/components/workspace/table-crop-dialog";
 import { useWorkspaceActions } from "@/components/workspace/workspace-actions-context";
 import { WorkspaceActionsProvider } from "@/components/workspace/workspace-actions";
 import { i18n, initI18n } from "@/i18n";
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   visionModel: "llava:7b",
   visionBaseUrl: "",
   visionCostClass: "local" as "local" | "free" | "paid",
+  ocrAvailable: true,
 }));
 
 vi.mock("@/hooks/use-ai", () => ({
@@ -40,6 +42,12 @@ vi.mock("@/hooks/use-ai", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-ocr", () => ({
+  useOcrCapabilities: () => ({
+    data: { available: mocks.ocrAvailable, languages: ["eng", "mya"] },
+  }),
+}));
+
 beforeAll(async () => {
   initI18n();
   await i18n.changeLanguage("en");
@@ -49,6 +57,7 @@ beforeEach(() => {
   mocks.visionModel = "llava:7b";
   mocks.visionBaseUrl = "";
   mocks.visionCostClass = "local";
+  mocks.ocrAvailable = true;
   vi.restoreAllMocks();
 });
 
@@ -98,6 +107,35 @@ function page(): PageSummary {
   };
 }
 
+function cells(confidence: number | null) {
+  return [
+    { row: 0, column: 0, text: "Item", confidence, uncertain: false, empty: false, alignment: null },
+    { row: 0, column: 1, text: "Qty", confidence, uncertain: false, empty: false, alignment: null },
+    { row: 1, column: 0, text: "Apples", confidence, uncertain: false, empty: false, alignment: null },
+    { row: 1, column: 1, text: "3", confidence, uncertain: false, empty: false, alignment: null },
+  ];
+}
+
+function localProposal(): ElementTableResponse {
+  return {
+    element_id: "element-1",
+    page_id: "page-1",
+    engine: "tesseract",
+    engine_version: "5.3.3",
+    languages: ["eng"],
+    page_width: 1200,
+    page_height: 800,
+    rows: 2,
+    columns: 2,
+    has_confidence: true,
+    uncertain_cells: 0,
+    empty_cells: 0,
+    warnings: [],
+    source: { x: 40, y: 120, width: 300, height: 90 },
+    cells: cells(92),
+  };
+}
+
 function proposal(): AiTableResponse {
   return {
     element_id: "element-1",
@@ -113,12 +151,7 @@ function proposal(): AiTableResponse {
     empty_cells: 0,
     warnings: ["no_confidence"],
     source: { x: 40, y: 120, width: 300, height: 90 },
-    cells: [
-      { row: 0, column: 0, text: "Item", confidence: null, uncertain: false, empty: false, alignment: null },
-      { row: 0, column: 1, text: "Qty", confidence: null, uncertain: false, empty: false, alignment: null },
-      { row: 1, column: 0, text: "Apples", confidence: null, uncertain: false, empty: false, alignment: null },
-      { row: 1, column: 1, text: "3", confidence: null, uncertain: false, empty: false, alignment: null },
-    ],
+    cells: cells(null),
   };
 }
 
@@ -135,10 +168,11 @@ function renderDialog() {
   render(
     <QueryClientProvider client={queryClient}>
       <WorkspaceActionsProvider>
-        <AiTableDialog
+        <TableCropDialog
           projectId="project-1"
           element={element()}
           page={page()}
+          languages={["eng"]}
           open
           onOpenChange={vi.fn()}
         />
@@ -152,26 +186,78 @@ function insertion() {
   return JSON.parse(screen.getByTestId("insertion").textContent ?? "null");
 }
 
-describe("AI table dialog", () => {
-  it("cannot read without a configured vision model", () => {
+describe("table crop dialog", () => {
+  it("reads a crop locally without requiring a vision model", async () => {
+    mocks.visionModel = "";
+    const readLocal = vi
+      .spyOn(api, "createElementTableProposal")
+      .mockResolvedValue(localProposal());
+    renderDialog();
+
+    // Local OCR is the free path and stays available without any AI setup.
+    expect(
+      screen.getByRole("button", { name: "Read with AI" }),
+    ).toBeDisabled();
+    const localButton = screen.getByRole("button", {
+      name: "Read locally (OCR)",
+    });
+    expect(localButton).toBeEnabled();
+
+    fireEvent.click(localButton);
+    await waitFor(() => expect(screen.getByText("Item")).toBeInTheDocument());
+
+    expect(readLocal).toHaveBeenCalledWith("project-1", "element-1", {
+      languages: ["eng"],
+    });
+    expect(screen.getByText("2 rows × 2 columns")).toBeInTheDocument();
+    expect(screen.getByText(/Local OCR · tesseract/)).toBeInTheDocument();
+
+    // Engine confidence exists, so no blanket acknowledgement is required.
+    const insert = screen.getByRole("button", { name: "Insert table" });
+    expect(insert).toBeEnabled();
+    fireEvent.click(insert);
+
+    const pending = insertion();
+    expect(pending).toMatchObject({ type: "table", headerRow: false });
+    expect(pending.rows).toEqual([
+      ["Item", "Qty"],
+      ["Apples", "3"],
+    ]);
+    expect(pending.note).toContain("table from local OCR");
+    expect(pending.note).not.toContain("proposed by");
+  });
+
+  it("disables the local read when no OCR engine is installed", () => {
+    mocks.ocrAvailable = false;
+    renderDialog();
+
+    expect(
+      screen.getByRole("button", { name: "Read locally (OCR)" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/Install a local OCR engine in Settings/),
+    ).toBeInTheDocument();
+  });
+
+  it("cannot read with AI without a configured vision model", () => {
     mocks.visionModel = "";
     renderDialog();
 
     expect(
-      screen.getByRole("button", { name: "Read table with AI" }),
+      screen.getByRole("button", { name: "Read with AI" }),
     ).toBeDisabled();
     expect(
       screen.getByText(/Choose a vision model in Settings/),
     ).toBeInTheDocument();
   });
 
-  it("requires acknowledgement before the read grid can be inserted", async () => {
+  it("requires acknowledgement before the AI grid can be inserted", async () => {
     const read = vi
       .spyOn(api, "createAiTableProposal")
       .mockResolvedValue(proposal());
     renderDialog();
 
-    fireEvent.click(screen.getByRole("button", { name: "Read table with AI" }));
+    fireEvent.click(screen.getByRole("button", { name: "Read with AI" }));
 
     await waitFor(() => expect(screen.getByText("Item")).toBeInTheDocument());
     expect(read).toHaveBeenCalledWith("project-1", "element-1", {
@@ -206,7 +292,7 @@ describe("AI table dialog", () => {
     vi.spyOn(api, "createAiTableProposal").mockResolvedValue(proposal());
     renderDialog();
 
-    fireEvent.click(screen.getByRole("button", { name: "Read table with AI" }));
+    fireEvent.click(screen.getByRole("button", { name: "Read with AI" }));
     await waitFor(() => expect(screen.getByText("Item")).toBeInTheDocument());
     fireEvent.click(
       screen.getByLabelText(
@@ -229,7 +315,7 @@ describe("AI table dialog", () => {
     vi.spyOn(api, "createAiTableProposal").mockResolvedValue(proposal());
     renderDialog();
 
-    fireEvent.click(screen.getByRole("button", { name: "Read table with AI" }));
+    fireEvent.click(screen.getByRole("button", { name: "Read with AI" }));
     await waitFor(() => expect(screen.getByText("Item")).toBeInTheDocument());
     fireEvent.click(
       screen.getByLabelText(
@@ -246,12 +332,29 @@ describe("AI table dialog", () => {
 
     // A second read replaces the grid; the old edit must not be re-applied at
     // the same coordinate.
-    fireEvent.click(screen.getByRole("button", { name: "Read table with AI" }));
+    fireEvent.click(screen.getByRole("button", { name: "Read with AI" }));
     await waitFor(() =>
       expect(screen.getByLabelText("Cell row 2, column 1")).toHaveValue(
         "Apples",
       ),
     );
+  });
+
+  it("switches from a local grid to an AI grid without stale edits", async () => {
+    vi.spyOn(api, "createElementTableProposal").mockResolvedValue(
+      localProposal(),
+    );
+    vi.spyOn(api, "createAiTableProposal").mockResolvedValue(proposal());
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Read locally (OCR)" }));
+    await waitFor(() => expect(screen.getByText(/Local OCR/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Read with AI" }));
+    await waitFor(() =>
+      expect(screen.getByText(/Proposed by llava:7b/)).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/Local OCR/)).not.toBeInTheDocument();
   });
 
   it("asks before sending a paid read", async () => {
@@ -262,7 +365,7 @@ describe("AI table dialog", () => {
       .mockResolvedValue(proposal());
     renderDialog();
 
-    fireEvent.click(screen.getByRole("button", { name: "Read table with AI" }));
+    fireEvent.click(screen.getByRole("button", { name: "Read with AI" }));
 
     const confirm = await screen.findByRole("button", {
       name: "Send paid request",

@@ -13,9 +13,9 @@ presented in the UI until it actually works.
 | 2. Main UI and workspace | **Complete** | Header navigation, dashboard, two-panel workspace, settings, i18n |
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
 | 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates), deterministic figure suggestions from embedded PDF images and vector drawings, and a local CER/WER benchmark harness done; measured real-document accuracy pending |
-| 5. Element extraction | **In progress** | Manual region crop, local region text extraction, OCR-layout, embedded-PDF-image, vector-drawing and raster-page ink region suggestions with a named source in the extraction dialog, library, verification and figure/text insertion, reviewed equation crops inserted as real equations, and on-demand AI transcription of one equation crop into reviewable LaTeX done; structured table reconstruction pending |
+| 5. Element extraction | **In progress** | Manual region crop, local region text extraction, OCR-layout, embedded-PDF-image, vector-drawing and raster-page ink region suggestions with a named source in the extraction dialog, library, verification and figure/text insertion, reviewed equation crops inserted as real equations, on-demand AI transcription of one equation crop into reviewable LaTeX, and structured table reconstruction from one saved crop both locally and with AI done; page-wide table detection pending |
 | 6. AI integration and free usage first | **In progress** | Unified BYOK provider platform with local Ollama, custom OpenAI-compatible and 12 cloud adapters, dynamic model discovery, multiple connections and encrypted keys, key rotation/cooldown/failover, per-task routing with fallbacks, remote-consent and HTTPS boundary, daily/task/connection limits, verified-cost budget, metadata-only usage ledger and history, reviewable OCR cleanup, optional vision region proposals, equation-crop transcription and table-crop reading done; account-level billing/quota verification pending |
-| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, merged cells from a PDF's drawn rules, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, inserting a reviewed equation crop as a real numbered equation, optional vision-model transcription of one saved equation crop into reviewable LaTeX, and faithful Markdown/TXT/Word/PDF export; vision tables, merged-cell detection for text-only tables and automatic page-wide equation recognition pending |
+| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, merged cells from a PDF's drawn rules, structured reading of one saved table crop with local OCR or an optional vision model, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, inserting a reviewed equation crop as a real numbered equation, optional vision-model transcription of one saved equation crop into reviewable LaTeX, and faithful Markdown/TXT/Word/PDF export; merged-cell detection for text-only tables and automatic page-wide equation recognition pending |
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, multi-line Word equations, footnotes, per-project page headers/footers, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
@@ -171,12 +171,13 @@ image processing uses Pillow with no OpenCV dependency.
 - Figure (image region) detection inside the OCR layout. The classifier never
   guesses a figure; Phase 5 approximates the band above a figure-like caption, but
   this phase does not mark figures itself.
-- Nested tables and page-wide vision-based table reading. Cross-block grouping covers
+- Nested tables and page-wide automatic table reading. Cross-block grouping covers
   vertically contiguous row blocks, a PDF page's drawn rules provide exact
-  merged-cell spans, and one saved table crop can be read on request, but a word-box
-  candidate remains a plain grid, a nested table is not separated from its parent,
-  and a hand-corrected block is a barrier instead of being bridged. Page-wide
-  equation detection and transcription are still pending.
+  merged-cell spans, and one saved table crop can be read locally or with a vision
+  model on request, but a word-box candidate remains a plain grid, a nested table
+  is not separated from its parent, and a hand-corrected block is a barrier instead
+  of being bridged. Page-wide equation detection and transcription are still
+  pending.
 - OCR accuracy benchmarks (CER/WER) for English, Burmese and mixed pages using
   fixtures from real documents. The local harness exists and is tested, but no
   fixtures are shipped and no accuracy figures are claimed yet.
@@ -215,6 +216,12 @@ described as universally free or universally accurate.
   provenance note. When a vision model is configured, the dialog can also ask it to
   transcribe the saved crop; the reply only prefills the review field, is shown as
   unverified model output and is never inserted automatically.
+- Structured table reconstruction from one saved crop. **Read locally (OCR)** runs
+  the same local engine over the crop, groups its words into rows and columns and
+  keeps per-cell confidence; **Read with AI** is an optional second method when a
+  vision route is configured. Both feed the normal review grid, and neither writes
+  to the element or document before insertion. The grid rules and limits are
+  described under Phase 7.
 - Reviewable region suggestions derived from the latest local OCR layout. Table
   and equation blocks are clustered into suggestions, and a figure band is
   suggested above figure-like captions. On imported PDF pages, raster images
@@ -237,8 +244,9 @@ described as universally free or universally accurate.
 
 - Drawings the PDF stores as an opaque page or form rather than readable paths;
   these currently require manual selection.
-- Structured table cells from a saved region, which belong to Phase 7 and are
-  delivered for one saved crop; unsaved regions and page-wide AI detection are not.
+- Unsaved region proposals and page-wide automatic table detection. A saved table
+  crop can already be read into a structured grid, locally or with a vision model,
+  and that delivery is described under Phase 7.
 
 ## Phase 6 — AI integration and free usage first (in progress)
 
@@ -424,14 +432,16 @@ never claims a provider is free and never estimates a price it cannot support.
   shows the model and an unverified warning, and still requires the local KaTeX
   preview to pass before insertion. The provenance note credits the model only while
   the field matches its reply; an edited formula falls back to the manual note.
-- A saved table crop can also be read on request when a vision profile is configured.
-  The elements dialog opens a review dialog that sends only the crop, shows it beside
-  the grid, and requires acknowledgement of every unscored cell before insertion.
-  Only a complete rectangle within the same row, column and cell caps as the local
-  proposal is accepted; a ragged, empty, oversized or non-text reply is refused
-  rather than padded or truncated, and empty source cells stay empty. The inserted
-  table credits the model in its source note and says so when cells were corrected by
-  hand; the region itself is never modified.
+- A saved table crop can be read into the normal review grid. **Read locally (OCR)**
+  runs the local engine on the crop, clusters its own word boxes into rows and
+  whitespace column bands, and keeps per-cell confidence so a weak cell is flagged
+  without AI. **Read with AI** remains an optional second method when a vision route
+  is configured: it sends only the crop and requires acknowledgement of every
+  unscored cell. Both paths accept only a complete grid within the same row, column
+  and cell caps, refuse an empty or non-table result instead of padding it, and keep
+  empty source cells empty. The inserted table credits the chosen method in its
+  source note and says so when cells were corrected by hand; the region itself is
+  never modified.
 - Figure cross-references: a numbered figure gets a stable id, and the toolbar can
   insert an inline citation that stores only that id. The editor resolves the current
   `Figure n` label from document order, so moving or renumbering the figure updates
@@ -454,11 +464,11 @@ never claims a provider is free and never estimates a price it cannot support.
 
 **Pending**
 
-- Automatic table extraction beyond deterministic word-box grouping, drawn PDF rules
-  and one saved vision-read crop: page-wide vision detection and nested tables remain
-  pending, always as a reviewable proposal that is never inserted without approval.
-  Cross-block grouping, merged-cell spans from a PDF's vector rules and AI reading of
-  a saved region are delivered.
+- Automatic table extraction beyond deterministic word-box grouping and one saved
+  crop: page-wide automatic detection and nested tables remain pending, always as a
+  reviewable proposal that is never inserted without approval. Cross-block grouping,
+  merged-cell spans from a PDF's vector rules, and local or AI reading of a saved
+  region are delivered.
 - Optional structured figure reconstruction with approval. Figure numbering, prose
   cross-references and inline images are delivered.
 - Automatic equation recognition from OCR or vision across a page as a reviewable

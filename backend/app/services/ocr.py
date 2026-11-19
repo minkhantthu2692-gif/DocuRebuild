@@ -793,13 +793,15 @@ def _perform_ocr(
     }
 
 
-def extract_image_text(image_path: Path, languages: list[str]) -> dict[str, Any]:
-    """Run the local engine on a standalone image, such as an extracted crop.
+def extract_image_content(
+    image_path: Path, languages: list[str]
+) -> dict[str, Any]:
+    """Run the local engine on a standalone image and keep its word boxes.
 
     This is the synchronous counterpart to ``_perform_ocr``: it keeps the same
     engine detection, language validation, preprocessing and TSV parsing, but it
-    does not create a page OCR run or block geometry. The caller stores the
-    result as an unverified proposal.
+    does not create a page OCR run. Word boxes stay in the crop image's own
+    coordinates, so a table proposal can group them without touching the page.
     """
     settings = get_settings()
     status = detect_engine()
@@ -858,13 +860,30 @@ def extract_image_text(image_path: Path, languages: list[str]) -> dict[str, Any]
             "Tesseract did not return structured text. Check the tessdata configuration.",
         )
 
-    text, _blocks, mean_confidence = _parse_tsv(result.stdout, scale)
+    text, blocks, mean_confidence = _parse_tsv(result.stdout, scale)
     return {
         "engine": ENGINE_NAME,
         "engine_version": status.get("version"),
         "languages": requested,
         "text": text,
+        "blocks": blocks,
         "confidence": mean_confidence,
+    }
+
+
+def extract_image_text(image_path: Path, languages: list[str]) -> dict[str, Any]:
+    """Read a standalone image, such as an extracted crop, as plain text.
+
+    The caller stores the result as an unverified proposal. Word boxes are
+    dropped here; use :func:`extract_image_content` when they are needed.
+    """
+    content = extract_image_content(image_path, languages)
+    return {
+        "engine": content["engine"],
+        "engine_version": content["engine_version"],
+        "languages": content["languages"],
+        "text": content["text"],
+        "confidence": content["confidence"],
     }
 
 
