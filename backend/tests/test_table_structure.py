@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import io
 import time
 
 import pymupdf
 from fastapi.testclient import TestClient
+from PIL import Image, ImageDraw
 
 from app.services import table_structure
 from tests.conftest import upload_pages
@@ -367,6 +369,69 @@ def _fake_crop_ocr(tsv: str):
     return run
 
 
+def _crop_word_tsv(
+    words: list[tuple[str, int, int, int, int, float]],
+) -> str:
+    """Build engine TSV at explicit crop coordinates.
+
+    Each tuple is ``(text, left, top, width, height, confidence)``. All words
+    share one block, which is the harsher case for joining a visual row.
+    """
+    header = (
+        "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\t"
+        "left\ttop\twidth\theight\tconf\ttext"
+    )
+    lines = [header]
+    for index, (text, left, top, width, height, confidence) in enumerate(words):
+        lines.append(
+            f"5\t1\t1\t1\t1\t{index + 1}\t{left}\t{top}\t{width}\t{height}\t"
+            f"{confidence}\t{text}"
+        )
+    return "\n".join(lines)
+
+
+def _png_with_table_rules(
+    *,
+    left: int,
+    top: int,
+    right: int,
+    bottom: int,
+    columns: int,
+    merge_top_header: bool = False,
+) -> bytes:
+    """Return a page PNG with a two-row table drawn as filled rules.
+
+    The caller positions the rectangle inside the region that
+    :func:`_create_table_element` crops, so every border survives the crop.
+    """
+    image = Image.new("RGB", (600, 400), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([left, top, right, bottom], outline="black", width=3)
+    middle = (top + bottom) // 2
+    draw.line([left, middle, right, middle], fill="black", width=3)
+    for index in range(1, columns):
+        x = left + round((right - left) * index / columns)
+        if merge_top_header and index == columns - 1:
+            # The top row omits this separator, so those two cells are merged.
+            draw.line([x, middle, x, bottom], fill="black", width=3)
+        else:
+            draw.line([x, top, x, bottom], fill="black", width=3)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _upload_png(
+    client: TestClient, project_id: str, name: str, content: bytes
+) -> dict:
+    response = client.post(
+        f"/api/projects/{project_id}/pages/import",
+        files=[("files", (name, content, "image/png"))],
+    )
+    assert response.status_code == 200, response.text
+    return response.json()[0]
+
+
 def _create_table_element(
     client: TestClient, project_id: str, page_id: str, **overrides
 ) -> dict:
@@ -526,6 +591,94 @@ def test_element_table_requires_the_local_engine(
     )
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "ocr_unavailable"
+
+
+def test_element_table_keeps_merged_cells_from_drawn_rules(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    # The rules sit two pixels inside the region cropped below: 40,120 300x120.
+    page_png = _png_with_table_rules(
+        left=42, top=122, right=338, bottom=238, columns=3, merge_top_header=True
+    )
+    tsv = _crop_word_tsv(
+        [
+            ("Merged", 170, 20, 70, 20, 90.0),
+            ("A", 30, 80, 20, 20, 90.0),
+            ("B", 130, 80, 20, 20, 90.0),
+            ("C", 230, 80, 20, 20, 90.0),
+        ]
+    )
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(ocr, "_run_command", _fake_crop_ocr(tsv))
+    page = _upload_png(client, project["id"], "crop-rules-merged.png", page_png)
+    element = _create_table_element(client, project["id"], page["id"])
+
+    response = client.post(
+        f"/api/projects/{project['id']}/elements/{element['id']}/table-proposal",
+        json={"languages": ["eng"]},
+    )
+    assert response.status_code == 200, response.text
+    proposal = response.json()
+
+    assert proposal["rows"] == 2
+    assert proposal["columns"] == 3
+    assert proposal["empty_cells"] == 1
+    assert proposal["source"] == {
+        "x": 40.0,
+        "y": 120.0,
+        "width": 300.0,
+        "height": 120.0,
+    }
+
+    # The top row's missing separator is the document's own merge, not a guess:
+    # the empty top-left cell is not borrowed by the merged header beside it.
+    cells = {(cell["row"], cell["column"]): cell for cell in proposal["cells"]}
+    assert len(cells) == 5
+    assert cells[(0, 0)]["empty"] is True
+    assert cells[(0, 1)]["text"] == "Merged"
+    assert cells[(0, 1)]["colspan"] == 2
+    assert cells[(1, 0)]["text"] == "A"
+    assert cells[(1, 1)]["text"] == "B"
+    assert cells[(1, 2)]["text"] == "C"
+
+
+def test_element_table_keeps_every_word_when_a_word_sits_outside_the_rules(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    # A closed 2x2 grid, but one detected word lies outside it. Using the rules
+    # would silently drop that word, so the word-box grid must take over.
+    page_png = _png_with_table_rules(
+        left=70, top=140, right=310, bottom=230, columns=2
+    )
+    tsv = _crop_word_tsv(
+        [
+            ("Stray", 5, 5, 20, 20, 90.0),
+            ("A", 45, 35, 20, 20, 90.0),
+            ("B", 150, 35, 20, 20, 90.0),
+            ("C", 45, 80, 20, 20, 90.0),
+            ("D", 150, 80, 20, 20, 90.0),
+        ]
+    )
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(ocr, "_run_command", _fake_crop_ocr(tsv))
+    page = _upload_png(client, project["id"], "crop-rules-stray.png", page_png)
+    element = _create_table_element(client, project["id"], page["id"])
+
+    response = client.post(
+        f"/api/projects/{project['id']}/elements/{element['id']}/table-proposal",
+        json={"languages": ["eng"]},
+    )
+    assert response.status_code == 200, response.text
+    proposal = response.json()
+
+    texts = [cell["text"] for cell in proposal["cells"]]
+    assert "Stray" in texts
+    assert all(cell.get("colspan", 1) == 1 for cell in proposal["cells"])
+    assert all(cell.get("rowspan", 1) == 1 for cell in proposal["cells"])
 
 
 def test_page_candidates_merge_adjacent_row_blocks(

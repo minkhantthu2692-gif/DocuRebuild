@@ -53,6 +53,7 @@ from app.db.project_schema import project_db
 from app.services import image_edits as edits_service
 from app.services import ocr as ocr_service
 from app.services import pdf as pdf_service
+from app.services import table_rules
 from app.services.layout import classify_text_block
 
 MAX_ROWS = 60
@@ -939,6 +940,61 @@ def propose_table(project_dir: Path, page_id: str, block_id: str) -> dict[str, A
     )
 
 
+def _crop_rule_candidate(
+    image_path: Path, words: list[Word]
+) -> dict[str, Any] | None:
+    """Return a closed rule grid from the crop that contains every word.
+
+    A scanned table usually keeps its cell borders, and those borders are the
+    only reliable evidence for a merged cell: the word boxes see a merged cell as
+    two empty columns and a wrapped header as an extra row. Detection is
+    conservative and bounded, and any failure leaves the word-box path in
+    charge. A grid that would leave a detected word outside is rejected too, so
+    text is never dropped just because a partial rule set happened to look
+    closed.
+    """
+    try:
+        horizontals, verticals = table_rules.detect_table_rules(image_path)
+    except Exception:  # pragma: no cover - detection already refuses bad images
+        return None
+    if not horizontals or not verticals:
+        return None
+
+    candidates = _vector_candidates(
+        horizontals, verticals, [("crop", word) for word in words]
+    )
+    containing = [
+        candidate
+        for candidate in candidates
+        if _holds_all_words(candidate["source"], words)
+    ]
+    if not containing:
+        return None
+    # The tightest grid that still holds every word is the table itself; a page
+    # frame or a header rule that also encloses the words is larger and loses.
+    return min(
+        containing,
+        key=lambda candidate: (
+            candidate["source"]["width"] * candidate["source"]["height"],
+            -len(candidate["cells"]),
+        ),
+    )
+
+
+def _holds_all_words(box: dict[str, float], words: list[Word]) -> bool:
+    """Return whether every word centre is inside ``box``."""
+    left = box["x"] - RULE_TOLERANCE
+    top = box["y"] - RULE_TOLERANCE
+    right = box["x"] + box["width"] + RULE_TOLERANCE
+    bottom = box["y"] + box["height"] + RULE_TOLERANCE
+    for word in words:
+        centre_x = word["x"] + word["width"] / 2
+        centre_y = _centre_y(word)
+        if not (left <= centre_x <= right and top <= centre_y <= bottom):
+            return False
+    return True
+
+
 def propose_element_table(
     project_dir: Path,
     element_id: str,
@@ -1016,6 +1072,40 @@ def propose_element_table(
             "covers the table and that the OCR language is installed.",
         )
 
+    base = {
+        "element_id": element_id,
+        "page_id": str(element["page_id"]),
+        "engine": content["engine"],
+        "engine_version": content["engine_version"],
+        "languages": content["languages"],
+        "page_width": page_width or None,
+        "page_height": page_height or None,
+    }
+
+    # A drawn cell border is stronger evidence than the whitespace between
+    # words. Use it when the crop's rules form a closed grid that holds every
+    # word, so merged cells keep their exact span instead of becoming empty
+    # cells.
+    rules = _crop_rule_candidate(image_path, words)
+    if rules is not None:
+        payload = {
+            key: rules[key]
+            for key in (
+                "rows",
+                "columns",
+                "has_confidence",
+                "uncertain_cells",
+                "empty_cells",
+                "warnings",
+                "cells",
+            )
+        }
+        # Rule coordinates are crop pixels; the review preview positions the
+        # saved region on the page image, so the element rectangle stays the
+        # honest source box.
+        payload["source"] = source
+        return {**base, **payload}
+
     heights = [word["height"] for word in words if word["height"] > 0]
     typical_height = median(heights) if heights else 1.0
     rows = _cluster_rows(words)
@@ -1060,16 +1150,7 @@ def propose_element_table(
     # box on the page image, so the saved region is the honest source rectangle.
     payload["source"] = source
 
-    return {
-        "element_id": element_id,
-        "page_id": str(element["page_id"]),
-        "engine": content["engine"],
-        "engine_version": content["engine_version"],
-        "languages": content["languages"],
-        "page_width": page_width or None,
-        "page_height": page_height or None,
-        **payload,
-    }
+    return {**base, **payload}
 
 
 def propose_page_tables(project_dir: Path, page_id: str) -> dict[str, Any]:
