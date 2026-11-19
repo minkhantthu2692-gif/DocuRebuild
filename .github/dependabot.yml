@@ -1,11 +1,17 @@
 version: 2
 updates:
+  # Patch and minor updates are grouped into one PR per ecosystem. Major versions
+  # change behaviour and are upgraded deliberately by a maintainer, not by a bot.
+  # Security updates are configured separately on the repository and are unaffected.
   - package-ecosystem: npm
     directory: "/"
     schedule:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       npm-minor:
         patterns: ["*"]
@@ -17,6 +23,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       pip-minor:
         patterns: ["*"]
@@ -27,3 +36,6 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
