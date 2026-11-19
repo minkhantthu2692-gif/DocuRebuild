@@ -11,7 +11,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 > image adjustments, the rich-text editor, local Tesseract OCR, manual region
 > extraction, an optional local-AI OCR text cleanup, optional vision region
 > proposals, optional on-demand transcription of a saved equation crop into
-> reviewable LaTeX, local Markdown/TXT/Word/PDF document export and document version history
+> reviewable LaTeX, optional AI reading of a saved table crop into a reviewable grid,
+> local Markdown/TXT/Word/PDF document export and document version history
 > are implemented. Imports run
 > as background jobs with page-level progress, cancellation and localized failures.
 > PDF pages are rendered locally and embedded text layers are stored as reviewable
@@ -22,12 +23,14 @@ data on your device, and treats every AI result as a reviewable proposal.
 > consent. An optional bearer token can be saved for a provider that requires one; it
 > is encrypted on this device and never returned by the API. Every result is a
 > proposal that must be accepted or rejected. Cloud
-> providers, free-tier adapters, paid usage, image generation and automatic
+> providers, free-tier adapters, paid usage, image generation and page-wide automatic
 > equation/figure reconstruction are **not implemented yet** and are clearly marked
 > as unavailable in the UI. Table cells can be proposed from stored OCR word boxes,
 > including table rows that a PDF stored as separate text blocks; merged cells are
 > also taken from a PDF's own drawn table lines, and raster images embedded in a PDF
 > can be proposed as figure regions — but only as reviewed, user-confirmed content.
+> A saved table crop can also be read by the vision model on request into a
+> reviewable grid whose every cell must be checked before insertion.
 > Nothing in this repository fakes those features.
 
 ---
@@ -126,7 +129,11 @@ data on your device, and treats every AI result as a reviewable proposal.
   dialog sends only that crop to the vision model and fills the review field with
   the returned LaTeX, marked with the proposing model and an unverified warning.
   Nothing is inserted until you compare it with the crop and confirm; manual
-  typing works without a vision model.
+  typing works without a vision model. A saved table region can be read the same
+  way: **Read table with AI** sends only that crop and shows the reply in the normal
+  table review grid. Every cell of that reply is unscored, so insertion waits for
+  your acknowledgement, manual cell corrections are used instead of the raw reply,
+  and the saved region is never modified.
 - **Document editor** — Tiptap rich text with headings, paragraphs, lists,
   blockquotes, code blocks, alignment, inline formatting, links, undo/redo, word
   and character counts, debounced autosave, and find/replace with match-case and
@@ -236,7 +243,8 @@ layout labels as a table into a reviewable cell grid derived from its word boxes
 group vertically contiguous paragraph blocks into one page-level candidate, and read a
 PDF's drawn table rules so merged cells keep exactly the shape the document drew. It
 never inserts a grid on its own, never invents a cell, and does not transcribe
-equations. Nested tables and vision-based table reading are not implemented.
+equations across a page. A saved table crop can be read by a vision model on
+request, but nested tables and page-wide vision table detection are not implemented.
 Region extraction produces exact pixel crops and can read their plain text locally;
 it does not build structured table cells. Equation markup comes only from manual
 typing or the formula dialog's explicit, reviewed transcription of one saved crop.
@@ -247,8 +255,9 @@ page over ink that the text layout does not explain,
 not a vision model: they cover OCR table/equation blocks, embedded images, vector
 artwork, unexplained ink and the empty band above a figure-like caption, and they are
 skipped when no suitable signal exists. The
-optional vision path only proposes rectangles for review; it does not read their
-text, invent content or change the document. The local AI workflow does not switch
+optional vision path only proposes rectangles for review; apart from the explicit
+transcription of one saved equation or table crop, it does not read their text,
+invent content or change the document. The local AI workflow does not switch
 providers silently or use any remote service without consent.
 See [`docs/roadmap.md`](docs/roadmap.md).
 
@@ -480,11 +489,12 @@ application, and OCR review works without it.
    Connection tests are not counted.
 5. Optionally configure **Image analysis server** (provider, URL, consent, an
    optional **API key** and a **Vision model** such as `llava:7b`) if you want AI
-   region proposals or equation-crop transcription. It is a separate task profile,
-   so it can use a different server, key or device than text cleanup. Leave the
-   model empty to keep image AI disabled.
+   region proposals, equation-crop transcription or saved table-crop reading. It is a
+   separate task profile, so it can use a different server, key or device than text
+   cleanup. Leave the model empty to keep image AI disabled.
 6. Open **Extract text** on a page and select **Ask local AI** on one text block.
-   For region proposals, use **Ask AI for regions** in the source viewer.
+   For region proposals, use **Ask AI for regions** in the source viewer. For a saved
+   table region, use **Read table with AI** in the region library.
 
 Only that block's text is sent, to the URL you configured. The reply is stored as an
 unverified proposal with provider, model, URL and the original text. The OCR text
@@ -507,9 +517,19 @@ low-confidence figure, table and equation rectangles. Nothing is saved until you
 choose a rectangle and confirm the normal extraction dialog, so the proposal can
 never silently become a document element.
 
-Each cleanup or region-proposal attempt is recorded in the local application database
+A saved table crop can also be read on request from the region library. Only that
+crop is sent, and the reply must be a complete grid within the same 60 × 20 × 600
+limits as a local table proposal; a ragged, empty, oversized or non-text reply is
+refused instead of being padded or truncated. The reply is shown in the normal table
+review grid with no confidence scores, so every cell must be acknowledged and
+checked against the crop before insertion. Nothing is written back to the region or
+stored as a proposal.
+
+Each cleanup, region-proposal, equation-transcription or table-reading attempt is
+recorded in the local application database
 as metadata only: provider, model, task, outcome, error code and time. The selected
-document text, page image and model output are never written to that usage history.
+document text, page image, crop and model output are never written to that usage
+history.
 Settings shows the requests from the last 24 hours and the most recent entries; when
 a configured limit is reached, the backend refuses the next request before contacting
 the server. **View full history** pages the whole local ledger with outcome and task
@@ -600,7 +620,8 @@ Rules that keep a proposal honest:
 - Limits are 60 rows, 20 columns and 600 cells per candidate, and at most 20
   candidates per page. A larger or unusable grid is refused with a typed error
   instead of being truncated.
-- Nested tables and vision-based table reading are still not implemented. A
+- AI reading of one saved table crop returns text only: merged cells are not
+  reconstructed from a model reply, and nested tables are not supported. A
   word-box proposal remains a plain grid the user can edit after insertion.
 
 ### Document export
@@ -1004,7 +1025,8 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   number out of the caption when you enable it. Deleting or unnumbering a cited
   figure leaves an explicit `Figure (missing)` marker that can be fixed by hand or
   by restoring the figure.
-- Equations are typed as LaTeX; OCR and AI do not transcribe or suggest them.
+- Equations are typed as LaTeX; OCR never transcribes them, and AI only transcribes
+  one saved crop when you ask it to.
   Invalid LaTeX is refused before insertion, but the editor cannot verify that the
   equation matches the source page. Display equations can be numbered per equation;
   the number is a position-derived `(n)` label, and numbered display equations can be
@@ -1068,8 +1090,8 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
   proposal derives rows and columns from word-box geometry; merged cells come only
   from a PDF's drawn rules, and nested tables or uneven spacing can still produce a
   wrong shape, which is why every cell must be reviewed before insertion. Equations
-  are not transcribed.
-- Region extraction does not use a vision model. Suggestions are deterministic
+  are never transcribed automatically; one saved crop can be transcribed on request.
+- Region extraction itself does not use a vision model. Suggestions are deterministic
   heuristics over the latest OCR text layout, on PDF pages over embedded raster
   images and vector drawings, and on a photographed page over ink that the text
   layout does not explain: OCR table/equation blocks, uncaptioned artwork and the
@@ -1136,8 +1158,8 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 3. Import and image processing | Complete |
 | 4. Local OCR and layout detection | In progress: OCR, layout hints, reviewable table proposals and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table/equation reconstruction pending |
-| 6. AI integration and free usage first | In progress: local AI providers, separate text and vision task profiles, optional encrypted per-task API keys, remote-consent boundary, request limits, usage-history browser, bulk AI proposal review, reviewable persisted OCR text cleanup and optional vision region proposals done; free-tier/paid adapters and cost controls pending |
-| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, reviewable automatic table proposals from OCR word boxes, merged-cell spans read from PDF vector rules, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; vision tables, nested tables and automatic equation extraction pending |
+| 6. AI integration and free usage first | In progress: local AI providers, separate text and vision task profiles, optional encrypted per-task API keys, remote-consent boundary, request limits, usage-history browser, bulk AI proposal review, reviewable persisted OCR text cleanup, optional vision region proposals, one-crop equation transcription and one-crop table reading done; free-tier/paid adapters and automatic provider fallback pending |
+| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, reviewable automatic table proposals from OCR word boxes, merged-cell spans read from PDF vector rules, AI reading of one saved table crop, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; page-wide vision tables, nested tables and page-wide equation extraction pending |
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
 | 9. History, backup and recovery | **Complete**: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop, PWA and mobile distribution | Planned |

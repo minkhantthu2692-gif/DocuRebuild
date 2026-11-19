@@ -171,11 +171,12 @@ image processing uses Pillow with no OpenCV dependency.
 - Figure (image region) detection inside the OCR layout. The classifier never
   guesses a figure; Phase 5 approximates the band above a figure-like caption, but
   this phase does not mark figures itself.
-- Nested tables and vision-based table reading. Cross-block grouping covers
-  vertically contiguous row blocks, and a PDF page's drawn rules provide exact
-  merged-cell spans, but a word-box candidate remains a plain grid, a nested table
-  is not separated from its parent, and a hand-corrected block is a barrier instead
-  of being bridged. Equation transcription is still pending.
+- Nested tables and page-wide vision-based table reading. Cross-block grouping covers
+  vertically contiguous row blocks, a PDF page's drawn rules provide exact
+  merged-cell spans, and one saved table crop can be read on request, but a word-box
+  candidate remains a plain grid, a nested table is not separated from its parent,
+  and a hand-corrected block is a barrier instead of being bridged. Page-wide
+  equation detection and transcription are still pending.
 - OCR accuracy benchmarks (CER/WER) for English, Burmese and mixed pages using
   fixtures from real documents. The local harness exists and is tested, but no
   fixtures are shipped and no accuracy figures are claimed yet.
@@ -236,7 +237,8 @@ described as universally free or universally accurate.
 
 - Drawings the PDF stores as an opaque page or form rather than readable paths;
   these currently require manual selection.
-- Structured table cells, which belong to Phase 7.
+- Structured table cells from a saved region, which belong to Phase 7 and are
+  delivered for one saved crop; unsaved regions and page-wide AI detection are not.
 
 ## Phase 6 — AI integration and free usage first (in progress)
 
@@ -476,7 +478,8 @@ the user must review every region before extracting it.
   shows `Figure n.` from a CSS counter in document order, and every export adds the
   same number after the marker (`[Figure 1: caption]`) or before the caption in Word
   (`Figure 1. caption`). The caption text is never rewritten, so no number is
-  injected into the stored document. Cross-references to a figure are still pending.
+  injected into the stored document. Numbered figures can be cited from the text as
+  described below.
 - Display and inline equations typed as LaTeX: a toolbar dialog previews the
   equation locally with KaTeX, refuses empty or invalid source, and inserts or
   updates a `blockMath` or `inlineMath` node that stores only the source. Inline
