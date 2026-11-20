@@ -1,0 +1,961 @@
+MASTER AGENTIC CODING PROMPT
+
+Complete AI Architecture Replacement — Secure BYOK System
+
+1. ROLE & OBJECTIVE
+
+Act as a Senior Software Architect, Principal Full-Stack Engineer, AI Infrastructure Engineer, Application Security Engineer, and Technical Documentation Engineer.
+
+Your task is to completely analyze and replace the application's existing AI configuration and integration architecture with a unified, secure, extensible, production-ready BYOK (Bring Your Own Key) System.
+
+This is an architectural replacement, NOT a simple UI redesign.
+
+The existing AI configuration system contains multiple independent or overlapping configurations, such as:
+
+- Local AI
+- Text Cleanup Server
+- Image Analysis Server
+- Ollama Provider
+- OpenAI-Compatible Provider
+- Server URL configuration
+- Remote Endpoint Consent
+- Cost Class (Local / Free / Paid)
+- Text Model
+- Vision Model
+- Per-task Models
+- API Key
+- AI Request Limits
+- Recent AI Requests
+- Separate AI connection tests
+- Other legacy AI provider and model configuration mechanisms
+
+These existing AI configurations must be thoroughly investigated and then replaced by a unified BYOK architecture.
+
+The final application must have ONE centralized AI provider management system and ONE unified AI integration layer.
+
+Do not simply hide old settings or leave legacy implementations running in the background.
+
+---
+
+2. PHASE 0 — COMPLETE PROJECT AUDIT
+
+Before modifying anything, thoroughly inspect the entire repository.
+
+Investigate:
+
+1. Project architecture and application entry points.
+2. Frontend framework and UI component structure.
+3. Backend architecture and API communication.
+4. Desktop application architecture, if applicable.
+5. Database and persistence mechanisms.
+6. Existing AI service implementations.
+7. Existing OCR and document-processing pipelines.
+8. All AI-related settings and configuration schemas.
+9. Existing API key storage and encryption mechanisms.
+10. Model selection and AI task routing.
+11. Usage tracking and request limits.
+12. Error handling and logging.
+13. Existing automated tests.
+14. GitHub workflows and development conventions.
+15. All Markdown documentation files.
+
+Search the entire repository for:
+
+- AI provider implementations
+- API key handling
+- Model identifiers
+- AI endpoint URLs
+- Local AI configuration
+- Ollama integrations
+- OpenAI-compatible integrations
+- Vision model configuration
+- Text cleanup configuration
+- AI request history
+- AI cost tracking
+- AI-related database migrations
+- Environment variables
+- AI-specific UI components
+
+Identify every dependency on the legacy AI architecture.
+
+Create an internal migration plan before implementation.
+
+IMPORTANT:
+
+- Preserve unrelated application functionality.
+- Do not break existing OCR, document editing, document reconstruction, export, storage, backup, or project management features.
+- Preserve existing document-processing capabilities while migrating their AI integration points.
+- Do not delete functionality merely because it is connected to the old AI system.
+- Replace its AI backend with the new unified BYOK service.
+
+---
+
+3. TARGET ARCHITECTURE
+
+Implement a centralized architecture similar to:
+
+AI Management
+|
++-- Provider Registry
+|
++-- Provider Connections
+|       |
+|       +-- API Credentials
+|       +-- Multiple API Keys
+|       +-- Connection Testing
+|       +-- Provider Configuration
+|
++-- Dynamic Model Registry
+|       |
+|       +-- API Model Discovery
+|       +-- Model Metadata
+|       +-- Model Capabilities
+|       +-- Search
+|       +-- Filters
+|       +-- Recently Used
+|       +-- Recommended Models
+|
++-- AI Task Router
+|       |
+|       +-- OCR Text Cleanup
+|       +-- Document Analysis
+|       +-- Image Analysis
+|       +-- Region Proposals
+|       +-- Equation Transcription
+|       +-- Table Recognition
+|       +-- Other Existing AI Tasks
+|
++-- Key Management & Rotation
+|
++-- Usage & Rate Limit Management
+|
++-- Security & Audit Layer
+
+All AI-powered application features must communicate through this centralized architecture.
+
+No feature should independently implement provider API calls or manage API keys.
+
+---
+
+4. PROVIDER ECOSYSTEM
+
+Implement a modular Provider Adapter architecture.
+
+Support commonly used AI providers, including:
+
+1. OpenAI
+2. Anthropic
+3. Google Gemini
+4. OpenRouter
+5. Groq
+6. Mistral AI
+7. DeepSeek
+8. xAI
+9. Together AI
+10. Fireworks AI
+11. Cerebras
+12. Perplexity
+
+Also support:
+
+13. OpenAI-Compatible Custom Providers
+
+The provider architecture must be extensible so additional providers can be added without rewriting the AI core.
+
+Each provider adapter should define the operations it actually supports:
+
+- Authentication
+- Model discovery
+- Model metadata normalization
+- Connection testing
+- Text generation
+- Vision/image input
+- Streaming, where supported
+- Usage metadata extraction
+- Error normalization
+
+Do not assume every provider supports every operation.
+
+Provider-specific API formats must be handled by their respective adapters.
+
+For OpenAI-Compatible providers, allow configuration of:
+
+- Provider display name
+- Base URL
+- API key
+- Models API endpoint, where necessary
+- Authentication header configuration, where supported
+- Additional provider-specific settings only when justified
+
+Validate custom endpoints and reject unsafe destinations according to the application's deployment and security model.
+
+Do not assume that every OpenAI-compatible service implements every OpenAI API feature.
+
+---
+
+5. DYNAMIC MODEL DISCOVERY — NO HARDCODED MODEL CATALOG
+
+This is one of the most important requirements.
+
+NEVER hardcode a static catalog of AI model IDs as the application's source of truth.
+
+Model lists must be dynamically retrieved from the configured provider's official API using the user's API credentials.
+
+Examples:
+
+- OpenAI: provider-supported models listing endpoint.
+- Anthropic: provider-supported models listing endpoint.
+- Google Gemini: provider-supported model listing endpoint.
+- OpenRouter: provider model catalog endpoint.
+- Other providers: their respective official model discovery endpoints.
+
+Follow each provider's current API documentation and authentication requirements.
+
+Implement:
+
+5.1 Model Discovery
+
+- Fetch available models dynamically.
+- Normalize provider-specific model responses.
+- Preserve original provider model IDs.
+- Retrieve model metadata where available.
+- Retrieve display names where available.
+- Detect supported modalities.
+- Detect context-window information where available.
+- Detect input/output capabilities where available.
+- Retrieve pricing metadata only when reliably available.
+- Track model availability and discovery timestamps.
+
+Never fabricate missing metadata.
+
+5.2 Model Catalog UI
+
+Build a professional model selector with the following sections:
+
+Recently Used
+
+- Display recently selected models.
+- Track usage timestamps.
+- Support clearing recent history.
+
+Recommended
+
+- Display recommended models based on actual task requirements.
+- Consider model capabilities, availability, context window, and verified pricing information.
+- Explain why a model is recommended.
+- Do not rely on hardcoded model IDs.
+
+All Models
+
+- Display the dynamically discovered models.
+- Group models by provider or capability.
+- Support pagination or virtualization for large catalogs.
+
+Favorites
+
+- Allow users to favorite models.
+- Persist their preferences.
+
+5.3 Search
+
+Implement:
+
+- Model name search.
+- Model ID search.
+- Provider search.
+- Capability search.
+
+Search must be responsive and support large model catalogs.
+
+5.4 Filters
+
+Provide filters for:
+
+- Provider
+- Text generation
+- Vision / Image input
+- Image generation, if supported by the application
+- Tool calling, if supported
+- Streaming support
+- Context window
+- Free / Paid, only when reliable pricing information exists
+- Favorites
+- Available / Unavailable
+
+Do not show misleading filters when metadata is unavailable.
+
+5.5 Model Refresh
+
+Provide:
+
+- Refresh model list.
+- Automatic refresh with configurable intervals.
+- Manual refresh.
+- Last updated timestamp.
+- Loading state.
+- Empty state.
+- Error state.
+- Retry action.
+
+Cache model metadata appropriately.
+
+A cached list may be displayed temporarily when the provider is unavailable, but clearly indicate that it is cached and may be outdated.
+
+Model discovery must never trigger model downloads or generation requests.
+
+---
+
+6. PROVIDER MANAGEMENT UI
+
+Replace the old Local AI configuration interface with a unified AI Provider Management interface.
+
+Create a modern, clean, professional interface.
+
+6.1 Provider Overview
+
+Display:
+
+- Connected providers.
+- Active provider connections.
+- Number of configured API keys.
+- Number of available models.
+- Recent connection status.
+- Recent request activity.
+
+6.2 Add Provider
+
+Provide a guided provider setup process:
+
+1. Select provider.
+2. Enter provider API key.
+3. Configure Base URL when applicable.
+4. Validate credentials.
+5. Fetch available models.
+6. Test connection.
+7. Save provider connection.
+
+Never consider a provider successfully connected merely because the user entered an API key.
+
+6.3 Multiple Provider Connections
+
+Allow users to create multiple connections for the same provider.
+
+Example:
+
+OpenAI
+
+- Personal Account
+- Work Account
+- Backup Account
+
+OpenRouter
+
+- Main Key
+- Secondary Key
+
+Custom OpenAI-Compatible
+
+- Local Server
+- Remote Server
+
+Each connection must have its own credentials, configuration, status, and usage tracking.
+
+Support meaningful connection names.
+
+6.4 Provider Status
+
+Display:
+
+- Connected
+- Authentication Failed
+- Rate Limited
+- Quota Exhausted
+- Temporarily Unavailable
+- Configuration Required
+- Disabled
+
+Statuses must reflect actual API responses or verified local state.
+
+---
+
+7. MULTIPLE API KEY MANAGEMENT & ROTATION
+
+Implement a robust multi-key management system.
+
+Users must be able to register multiple API keys for a provider or connection group.
+
+Example:
+
+Provider: OpenAI
+
+Key A — Primary
+Key B — Secondary
+Key C — Backup
+
+Implement configurable rotation strategies:
+
+1. Round Robin
+2. Failover
+3. Least Recently Used
+4. Least Usage, when reliable usage data is available
+5. Manual Priority
+
+Support:
+
+- Primary key selection.
+- Key priority.
+- Enable / Disable individual keys.
+- Per-key usage tracking.
+- Per-key request counts.
+- Last successful request.
+- Last error.
+- Rate-limit state.
+- Cooldown period.
+- Key health status.
+
+7.1 Intelligent Rotation
+
+Handle provider errors intelligently.
+
+Examples:
+
+- HTTP 401: Mark the key as authentication-failed; do not repeatedly retry it.
+- HTTP 403: Distinguish permission errors from other failures.
+- HTTP 429: Respect Retry-After and provider rate-limit information; temporarily defer the affected key.
+- HTTP 5xx: Apply bounded retry and backoff where appropriate.
+- Network errors: Use bounded retries and eligible fallback keys.
+
+Do not rotate blindly.
+
+Do not retry non-idempotent requests without appropriate safeguards.
+
+Do not treat different keys as independent quotas unless the provider actually guarantees independent limits.
+
+IMPORTANT:
+
+Key rotation must be used for legitimate account management, resilience, and user-configured quota handling.
+
+Never implement mechanisms intended to evade provider restrictions, bypass account-level usage limits, or circumvent billing policies.
+
+Never guarantee that key rotation will bypass provider rate limits or usage limits.
+
+Provide a clear explanation when all available keys are exhausted.
+
+---
+
+8. UNIFIED AI TASK ROUTER
+
+Create one centralized AI Task Router.
+
+All existing AI-related application functionality must use it.
+
+Examples:
+
+- OCR text cleanup.
+- Document text correction.
+- Image analysis.
+- Region proposals.
+- Equation transcription.
+- Table reading.
+- Other existing AI-assisted operations.
+
+Each task should have a model configuration that references a valid provider connection and discovered model.
+
+Support:
+
+- Default model.
+- Task-specific model overrides.
+- Provider fallback configuration.
+- Capability validation.
+- Task-specific parameters.
+- Request timeout.
+- Cancellation.
+- Streaming where applicable.
+
+A model must not be assigned to a task if it lacks the required capability.
+
+For example, image analysis requires a compatible vision model.
+
+Preserve existing user-facing document workflows.
+
+AI responses must remain proposals until the existing application review and acceptance workflow approves them, wherever that workflow currently applies.
+
+Never silently overwrite original document content with unreviewed AI output.
+
+---
+
+9. USAGE, LIMITS & COST CONTROL
+
+Implement a unified usage management system.
+
+Track:
+
+- Request count.
+- Input tokens, when reported.
+- Output tokens, when reported.
+- Total tokens, when reported.
+- Estimated cost.
+- Provider.
+- Connection.
+- Key identifier.
+- Model.
+- Task type.
+- Request status.
+- Timestamp.
+- Error category.
+
+Support:
+
+Request Limits
+
+- Global daily request limit.
+- Provider-level request limit.
+- Connection-level request limit.
+- API-key-level request limit.
+- Rolling 24-hour request limits.
+- Optional monthly spending limits.
+- Optional task-specific limits.
+
+Cost Management
+
+- Cost estimation using verified pricing metadata.
+- Manual pricing configuration when appropriate.
+- Clear distinction between estimated and provider-reported cost.
+- Warning before exceeding configured budgets.
+- Stop or require confirmation when limits are reached.
+
+Never invent token usage or pricing.
+
+Do not store full document text or sensitive prompts in request history by default.
+
+Usage tracking should continue to work even when some providers do not expose token usage or pricing information.
+
+---
+
+10. SECURITY — CRITICAL REQUIREMENTS
+
+Security must be implemented as part of the architecture, not added later.
+
+10.1 API Key Storage
+
+Never store API keys as plaintext in:
+
+- localStorage
+- sessionStorage
+- IndexedDB without appropriate encryption
+- Unencrypted database columns
+- Logs
+- Error messages
+- Analytics events
+- Git repository files
+
+Use the strongest secure storage mechanism supported by the actual application architecture.
+
+Examples:
+
+- Desktop applications: OS credential vault / secure keychain integration.
+- Backend applications: encrypted server-side secret storage with appropriate access controls.
+- Local-first applications: platform-protected credential storage or an audited encrypted vault.
+
+Use authenticated encryption with sound key management.
+
+Never hardcode encryption keys into source code.
+
+Do not create custom cryptographic algorithms.
+
+If the current architecture cannot securely protect credentials, explicitly document the limitation and implement the safest viable design.
+
+10.2 Credential Handling
+
+- Mask secrets in the UI.
+- Reveal secrets only through an explicit user action when supported.
+- Never return stored secrets through ordinary API responses.
+- Avoid copying secrets into frontend state unnecessarily.
+- Prevent accidental secret exposure in crash reports.
+- Redact secrets from logs.
+- Use secure credential deletion.
+- Avoid unnecessary secret duplication.
+
+10.3 Network Security
+
+- Require HTTPS for remote provider endpoints.
+- Permit HTTP only for explicitly trusted local/loopback configurations where appropriate.
+- Validate custom provider URLs.
+- Prevent SSRF and access to unintended internal network destinations.
+- Apply network restrictions appropriate to the desktop or server deployment.
+- Validate redirects and destination changes.
+- Set request timeouts and response-size limits.
+
+10.4 Data Privacy
+
+- Never transmit document content without an explicit AI action.
+- Explain which provider receives the selected content.
+- Clearly identify external data transmission.
+- Avoid collecting unnecessary telemetry.
+- Keep document contents out of AI request history by default.
+- Do not transmit unrelated application data.
+
+10.5 GitHub Security
+
+- Never commit API keys.
+- Never commit personal credentials.
+- Audit environment files and configuration examples.
+- Add suitable .gitignore entries.
+- Add secret scanning where available.
+- Add dependency security checks.
+- Add security-focused tests.
+
+---
+
+11. AI SETTINGS INFORMATION ARCHITECTURE
+
+Create a centralized settings structure.
+
+Suggested layout:
+
+AI Settings
+|
++-- Providers
+|   +-- Connected Providers
+|   +-- Add Provider
+|   +-- Custom OpenAI-Compatible
+|
++-- Models
+|   +-- Recently Used
+|   +-- Recommended
+|   +-- Favorites
+|   +-- All Models
+|
++-- Task Configuration
+|   +-- Default Model
+|   +-- OCR Cleanup
+|   +-- Image Analysis
+|   +-- Region Proposals
+|   +-- Equation Transcription
+|   +-- Table Reading
+|
++-- API Keys & Rotation
+|   +-- Key Management
+|   +-- Rotation Strategy
+|   +-- Priority
+|   +-- Failover
+|
++-- Usage & Limits
+|   +-- Usage Overview
+|   +-- Request Limits
+|   +-- Cost Management
+|
++-- Privacy & Security
+|   +-- Credential Storage
+|   +-- Remote Data Transmission
+|   +-- Privacy Controls
+|
++-- Request History
+|   +-- Recent Requests
+|   +-- Errors
+|   +-- Usage Details
+
+Adapt this structure to the application's existing design system.
+
+Do not unnecessarily create an excessively complicated navigation system.
+
+---
+
+12. DATABASE & MIGRATION
+
+Analyze the existing database before implementing new schemas.
+
+Design normalized data structures for:
+
+- Provider definitions.
+- Provider connections.
+- Encrypted credentials.
+- API key groups.
+- API key metadata.
+- Model catalog cache.
+- Favorite models.
+- Recently used models.
+- Task-to-model assignments.
+- Rotation configuration.
+- Usage records.
+- Request history.
+- User preferences.
+
+Requirements:
+
+- Use stable internal IDs.
+- Avoid using provider model IDs as globally unique identifiers.
+- Preserve provider-specific identifiers.
+- Add proper indexes.
+- Use transactions where needed.
+- Implement database migrations.
+- Preserve unrelated application data.
+- Provide safe rollback or recovery procedures where practical.
+
+Legacy AI configuration migration must be explicit.
+
+Do not automatically transfer plaintext legacy credentials into the new system without a secure migration path and appropriate user consent.
+
+If old settings cannot be safely migrated, provide a clear migration notice and allow users to configure the new BYOK system.
+
+Remove obsolete database fields and legacy code only after verifying that no active functionality depends on them.
+
+---
+
+13. DOCUMENTATION — UPDATE ALL MARKDOWN FILES
+
+This is a mandatory requirement.
+
+Search the entire repository for all relevant Markdown files:
+
+- README.md
+- CONTRIBUTING.md
+- ARCHITECTURE.md
+- SECURITY.md
+- CHANGELOG.md
+- docs/**/*.md
+- development guides
+- installation guides
+- setup instructions
+- feature documentation
+- AI-related documentation
+- deployment instructions
+- troubleshooting guides
+- API documentation
+- project specifications
+- agent instruction files
+- other Markdown files containing references to the old AI system
+
+Update every affected document to reflect the new BYOK architecture.
+
+Do not simply add a new BYOK document while leaving outdated documentation untouched.
+
+Documentation must cover:
+
+1. BYOK architecture.
+2. Supported providers.
+3. Custom OpenAI-Compatible setup.
+4. API key setup.
+5. Dynamic model discovery.
+6. Model selection and filters.
+7. Multiple connections.
+8. Multiple API keys.
+9. Rotation strategies.
+10. AI task routing.
+11. Usage tracking.
+12. Request limits.
+13. Security model.
+14. Credential storage.
+15. Privacy and external data transmission.
+16. Database schema.
+17. Migration instructions.
+18. Development setup.
+19. Testing.
+20. Troubleshooting.
+
+Update diagrams and examples where necessary.
+
+Remove obsolete Local AI and legacy AI configuration instructions unless they describe functionality intentionally preserved for another purpose.
+
+Do not claim support for a feature that has not actually been implemented.
+
+---
+
+14. GITHUB REPOSITORY PREPARATION
+
+Prepare the repository for professional open-source development.
+
+Review and update:
+
+- README.md
+- CONTRIBUTING.md
+- SECURITY.md
+- LICENSE, if required and currently missing
+- CHANGELOG.md
+- .gitignore
+- .env.example
+- GitHub Actions workflows
+- Pull request templates
+- Issue templates
+- Code ownership rules, if appropriate
+- Dependency security workflows
+
+Implement appropriate CI checks:
+
+- Formatting.
+- Linting.
+- Type checking.
+- Unit tests.
+- Integration tests.
+- Build verification.
+- Security/dependency auditing.
+- Secret scanning where available.
+
+Ensure GitHub Actions never expose credentials.
+
+Do not publish real API keys, personal configuration files, local databases, or private project data.
+
+Check that documentation matches the actual application.
+
+Do not create fake releases, fake badges, or unsupported compatibility claims.
+
+Do not force-push, overwrite remote history, or publish changes without explicit authorization.
+
+---
+
+15. TESTING REQUIREMENTS
+
+Implement comprehensive tests.
+
+Provider Tests
+
+- Provider registration.
+- Authentication.
+- Invalid API keys.
+- Model discovery.
+- Provider-specific error normalization.
+- Connection testing.
+
+Model Tests
+
+- Dynamic model fetching.
+- Empty model lists.
+- Search.
+- Filters.
+- Recently used.
+- Favorites.
+- Model metadata normalization.
+- Cached model lists.
+- Refresh failures.
+
+Key Rotation Tests
+
+- Round Robin.
+- Failover.
+- Priority.
+- Disabled keys.
+- Authentication failures.
+- Rate-limit cooldown.
+- Exhausted keys.
+- Concurrent requests.
+- Retry limits.
+
+Security Tests
+
+- Credential encryption.
+- Credential redaction.
+- No secret leakage in logs.
+- Unauthorized credential access.
+- Unsafe custom endpoints.
+- SSRF protection.
+- Data transmission consent.
+- Database migration safety.
+
+Integration Tests
+
+- OCR cleanup through BYOK.
+- Image analysis through BYOK.
+- Task-specific model selection.
+- Provider fallback.
+- Usage tracking.
+- Limit enforcement.
+
+Use mocked provider APIs for automated tests.
+
+Never require real API keys in CI.
+
+---
+
+16. IMPLEMENTATION RULES
+
+Work incrementally and systematically.
+
+1. Audit the repository.
+2. Document the existing architecture.
+3. Design the target architecture.
+4. Create migration specifications.
+5. Implement secure credential storage.
+6. Implement provider adapters.
+7. Implement dynamic model discovery.
+8. Implement provider management UI.
+9. Implement model selector and filters.
+10. Implement key management and rotation.
+11. Implement unified AI task routing.
+12. Integrate all existing AI-powered features.
+13. Implement usage and limit controls.
+14. Remove legacy AI configuration and implementations.
+15. Migrate database schemas.
+16. Update all affected Markdown files.
+17. Update GitHub repository configuration.
+18. Implement and execute tests.
+19. Perform security review.
+20. Perform final regression testing.
+
+Do not stop after generating an architecture document or a UI mockup.
+
+Actually implement the working system in the repository.
+
+Do not replace working application features with placeholders.
+
+Do not silently skip difficult integrations.
+
+When a provider's capabilities differ, implement explicit capability detection and communicate limitations.
+
+If an architectural decision is uncertain, inspect the actual codebase and choose the safest solution consistent with the existing application.
+
+Preserve unrelated user changes and inspect Git status before modifying files.
+
+---
+
+17. DEFINITION OF DONE
+
+The task is complete only when:
+
+- The old AI configuration architecture has been fully audited and replaced.
+- There is one centralized BYOK architecture.
+- Supported providers are implemented through modular adapters.
+- Custom OpenAI-Compatible providers work.
+- Model lists are dynamically fetched from provider APIs.
+- No hardcoded model catalog is used as the source of truth.
+- Recently Used, Recommended, Favorites, Search, and Filters work.
+- Multiple provider connections work.
+- Multiple API keys work.
+- Rotation strategies work correctly.
+- Rate-limit and quota errors are handled safely.
+- All existing AI-powered document workflows use the unified AI service.
+- Credential storage meets the application's security requirements.
+- Usage and limits work.
+- Database migrations are safe.
+- All affected Markdown documentation is updated.
+- GitHub repository configuration is reviewed and prepared.
+- Automated tests pass.
+- Existing unrelated functionality remains operational.
+- No secrets are exposed in source code, logs, or repository history.
+
+---
+
+18. FINAL DELIVERY REPORT
+
+At the end, provide a detailed implementation report containing:
+
+1. Previous AI architecture analysis.
+2. New BYOK architecture.
+3. Implemented provider adapters.
+4. Dynamic model discovery implementation.
+5. Model selector features.
+6. API key management and rotation.
+7. Security improvements.
+8. Database changes and migrations.
+9. AI-powered features migrated.
+10. Legacy code removed.
+11. Markdown documentation updated.
+12. GitHub configuration changes.
+13. Tests executed and their results.
+14. Known limitations.
+15. Remaining tasks, if any.
+
+For every incomplete requirement, explain why it remains incomplete.
+
+Never report an unimplemented feature as completed.
+
+FINAL PRINCIPLE: Build a secure, maintainable, provider-independent BYOK platform that makes AI configuration simple for users while keeping the underlying architecture extensible, reliable, and production-ready.
