@@ -894,6 +894,7 @@ def propose_table(project_dir: Path, page_id: str, block_id: str) -> dict[str, A
             page["display_asset_id"] or page["original_asset_id"]
         )
         image_path = _source_asset_path(conn, project_dir, source_asset_id)
+        pdf_source = _pdf_rule_source(conn, project_dir, page)
 
     if not words:
         raise AppError(
@@ -904,15 +905,25 @@ def propose_table(project_dir: Path, page_id: str, block_id: str) -> dict[str, A
 
     heights = [word["height"] for word in words if word["height"] > 0]
     typical_height = median(heights) if heights else 1.0
+    tagged = [(block_id, word) for word in words]
+    block_bounds = _blocks_bounds([block])
+    margin = max(typical_height * 2, 12.0)
 
-    # The run's own source image is still current (a stale run was refused
-    # above), so its drawn borders describe exactly the page the words came
-    # from. A grid that does not hold every stored word is ignored.
-    rule = _rule_candidate(
+    # The document's own vector rules are exact, so they are tried first; the
+    # run's current image comes next. Both are limited to this block's area and
+    # must hold every stored word, so a neighbouring table or a page frame cannot
+    # replace the block's own grid, and a grid that would leave a word outside is
+    # refused instead of dropping text.
+    rule = _choose_rule_candidate(
+        _pdf_vector_candidates(pdf_source, page["width"], tagged),
+        words,
+        bounds=block_bounds,
+        margin=margin,
+    ) or _rule_candidate(
         _load_scan(image_path),
-        [(block_id, word) for word in words],
-        bounds=_blocks_bounds([block]),
-        margin=max(typical_height * 2, 12.0),
+        tagged,
+        bounds=block_bounds,
+        margin=margin,
     )
     if rule is not None:
         return {
@@ -1052,43 +1063,12 @@ def _rule_candidate(
     if not horizontals or not verticals:
         return None
 
-    candidates = _vector_candidates(horizontals, verticals, tagged_words)
-    words = [word for _block_id, word in tagged_words]
-    if require_all_words:
-        candidates = [
-            candidate
-            for candidate in candidates
-            if _holds_all_words(candidate["source"], words)
-        ]
-    if bounds is not None:
-        left, top, right, bottom = bounds
-        candidates = [
-            candidate
-            for candidate in candidates
-            if candidate["source"]["x"] >= left - margin
-            and candidate["source"]["y"] >= top - margin
-            and candidate["source"]["x"] + candidate["source"]["width"]
-            <= right + margin
-            and candidate["source"]["y"] + candidate["source"]["height"]
-            <= bottom + margin
-        ]
-    if not candidates:
-        return None
-    if not require_all_words:
-        # Reading order decides: the first drawn grid in the group is the next
-        # table to review, and the caller resumes after its blocks.
-        return min(
-            candidates,
-            key=lambda candidate: (candidate["source"]["y"], candidate["source"]["x"]),
-        )
-    # The tightest grid that still holds every word is the table itself; a page
-    # frame or a header rule that also encloses the words is larger and loses.
-    return min(
-        candidates,
-        key=lambda candidate: (
-            candidate["source"]["width"] * candidate["source"]["height"],
-            -len(candidate["cells"]),
-        ),
+    return _choose_rule_candidate(
+        _vector_candidates(horizontals, verticals, tagged_words),
+        [word for _block_id, word in tagged_words],
+        bounds=bounds,
+        margin=margin,
+        require_all_words=require_all_words,
     )
 
 
@@ -1125,6 +1105,114 @@ def _source_asset_path(
     except ValueError:
         return None
     return path if path.exists() else None
+
+
+def _pdf_rule_source(
+    conn, project_dir: Path, page
+) -> tuple[Path, int] | None:
+    """Return the immutable PDF and page index when its rules are exact.
+
+    PDF rules describe the document itself, so they are used only for an
+    unrotated page with no geometry edits. A rotated or edited page keeps the
+    raster path, which measures the page as it is currently displayed.
+    """
+    if (
+        page["source_kind"] != "pdf"
+        or not page["original_asset_id"]
+        or int(page["rotation"]) != 0
+        or not page["width"]
+        or edits_service.has_edits(edits_service.decode_edits(page["edits"]))
+    ):
+        return None
+    asset = conn.execute(
+        "SELECT relative_path FROM assets WHERE id = ?",
+        (page["original_asset_id"],),
+    ).fetchone()
+    if asset is None:
+        return None
+    try:
+        pdf_path = resolve_within(project_dir, asset["relative_path"])
+    except ValueError:
+        return None
+    if not pdf_path.exists():
+        return None
+    return pdf_path, max(0, int(page["pdf_page_number"] or 1) - 1)
+
+
+def _pdf_vector_candidates(
+    pdf_source: tuple[Path, int] | None,
+    page_width,
+    tagged_words: list[tuple[str, Word]],
+) -> list[dict[str, Any]]:
+    """Return the exact rule grids drawn in the document, or none.
+
+    An unreadable rule layer leaves the caller's other paths in charge instead
+    of failing the whole request.
+    """
+    if pdf_source is None or not page_width:
+        return []
+    pdf_path, pdf_index = pdf_source
+    document = None
+    try:
+        document = pdf_service.open_document(pdf_path)
+        horizontals, verticals = pdf_service.table_lines(
+            document, pdf_index, int(page_width)
+        )
+        return _vector_candidates(horizontals, verticals, tagged_words)
+    except Exception:  # pragma: no cover - depends on the document's rule layer
+        return []
+    finally:
+        if document is not None:
+            document.close()
+
+
+def _choose_rule_candidate(
+    candidates: list[dict[str, Any]],
+    words: list[Word],
+    *,
+    bounds: tuple[float, float, float, float] | None = None,
+    margin: float = 0.0,
+    require_all_words: bool = True,
+) -> dict[str, Any] | None:
+    """Limit drawn grids to the expected area and order them for review."""
+    if not candidates:
+        return None
+    if require_all_words:
+        candidates = [
+            candidate
+            for candidate in candidates
+            if _holds_all_words(candidate["source"], words)
+        ]
+    if bounds is not None:
+        left, top, right, bottom = bounds
+        candidates = [
+            candidate
+            for candidate in candidates
+            if candidate["source"]["x"] >= left - margin
+            and candidate["source"]["y"] >= top - margin
+            and candidate["source"]["x"] + candidate["source"]["width"]
+            <= right + margin
+            and candidate["source"]["y"] + candidate["source"]["height"]
+            <= bottom + margin
+        ]
+    if not candidates:
+        return None
+    if not require_all_words:
+        # Reading order decides: the first drawn grid in the group is the next
+        # table to review, and the caller resumes after its blocks.
+        return min(
+            candidates,
+            key=lambda candidate: (candidate["source"]["y"], candidate["source"]["x"]),
+        )
+    # The tightest grid that still holds every word is the table itself; a page
+    # frame or a header rule that also encloses the words is larger and loses.
+    return min(
+        candidates,
+        key=lambda candidate: (
+            candidate["source"]["width"] * candidate["source"]["height"],
+            -len(candidate["cells"]),
+        ),
+    )
 
 
 def propose_element_table(
@@ -1310,27 +1398,7 @@ def propose_page_tables(project_dir: Path, page_id: str) -> dict[str, Any]:
             run["source_asset_id"]
             or (page["display_asset_id"] or page["original_asset_id"]),
         )
-        pdf_source: tuple[Path, int] | None = None
-        if (
-            page["source_kind"] == "pdf"
-            and int(page["rotation"]) == 0
-            and page["width"]
-            and not edits_service.has_edits(edits_service.decode_edits(page["edits"]))
-        ):
-            asset = conn.execute(
-                "SELECT relative_path FROM assets WHERE id = ?",
-                (page["original_asset_id"],),
-            ).fetchone()
-            if asset is not None:
-                try:
-                    pdf_path = resolve_within(project_dir, asset["relative_path"])
-                except ValueError:
-                    pdf_path = None
-                if pdf_path is not None and pdf_path.exists():
-                    pdf_source = (
-                        pdf_path,
-                        max(0, int(page["pdf_page_number"] or 1) - 1),
-                    )
+        pdf_source = _pdf_rule_source(conn, project_dir, page)
 
     eligible: list[tuple[Any, list[Word]]] = []
     for block in blocks:
@@ -1445,24 +1513,7 @@ def propose_page_tables(project_dir: Path, page_id: str) -> dict[str, Any]:
             candidates.append(_candidate([item[0] for item in group], *grid))
         index = candidate_end + 1
 
-    vector_candidates: list[dict[str, Any]] = []
-    if pdf_source is not None and page["width"]:
-        pdf_path, pdf_index = pdf_source
-        document = None
-        try:
-            document = pdf_service.open_document(pdf_path)
-        except Exception:
-            document = None
-        if document is not None:
-            try:
-                horizontals, verticals = pdf_service.table_lines(
-                    document, pdf_index, int(page["width"])
-                )
-                vector_candidates = _vector_candidates(
-                    horizontals, verticals, tagged_words
-                )
-            finally:
-                document.close()
+    vector_candidates = _pdf_vector_candidates(pdf_source, page["width"], tagged_words)
 
     # A vector grid is exact where it exists, so an OCR candidate that lies
     # inside one is dropped instead of showing the same table twice with a

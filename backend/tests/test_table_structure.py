@@ -169,15 +169,17 @@ def _run_table_ocr(
     monkeypatch,
     result: dict,
     page_png: bytes | None = None,
+    page: dict | None = None,
 ) -> tuple[dict, dict]:
     from app.services import ocr
 
     monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
     monkeypatch.setattr(ocr, "_perform_ocr", lambda *args, **kwargs: result)
-    if page_png is None:
-        page = upload_pages(client, project["id"], ["table-page.png"])[0]
-    else:
-        page = _upload_png(client, project["id"], "table-rules.png", page_png)
+    if page is None:
+        if page_png is None:
+            page = upload_pages(client, project["id"], ["table-page.png"])[0]
+        else:
+            page = _upload_png(client, project["id"], "table-rules.png", page_png)
     response = client.post(
         f"/api/projects/{project['id']}/pages/{page['id']}/ocr",
         json={"languages": ["eng"]},
@@ -1176,12 +1178,107 @@ def test_page_candidates_prefer_the_drawn_grid_with_merged_cells(
     assert (0, 2) not in cells
     assert (2, 0) not in cells
 
-    # The single-block proposal path is unchanged: it still describes a plain
-    # grid from word boxes and never invents a span.
+    # These blocks are paragraphs, so only the page path may group them into a
+    # table; the single-block path refuses an unlabelled block.
     block = candidate["block_ids"][0]
     single = client.get(
         f"/api/projects/{project['id']}/pages/{page['id']}"
         f"/ocr/blocks/{block}/table-proposal"
     )
-    if single.status_code == 200:
-        assert all(cell["rowspan"] == 1 for cell in single.json()["cells"])
+    assert single.status_code == 422
+
+
+def _merged_block_pdf() -> bytes:
+    """A PDF whose rules merge column 0 across its two data rows.
+
+    The grid is drawn at 50-500 x 80-320 points on a 600x800 page, so a page
+    imported at 2x places it at 100-1000 x 160-640 display pixels.
+    """
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=600, height=800)
+        black = (0, 0, 0)
+        xs = (50.0, 200.0, 350.0, 500.0)
+        ys = (80.0, 160.0, 240.0, 320.0)
+        for y in (ys[0], ys[1], ys[3]):
+            page.draw_line((xs[0], y), (xs[3], y), color=black, width=0.8)
+        # Column 0 has no separator between its two data rows, so they merge.
+        page.draw_line((xs[1], ys[2]), (xs[3], ys[2]), color=black, width=0.8)
+        for x in xs:
+            page.draw_line((x, ys[0]), (x, ys[3]), color=black, width=0.8)
+        page.insert_text((60, 110), "Group 1.2 3.4", fontsize=10)
+        page.insert_text((60, 190), "A 5.6 7.8", fontsize=10)
+        page.insert_text((60, 270), "B 9.1 2.3", fontsize=10)
+        return document.tobytes()
+    finally:
+        document.close()
+
+
+def _ruled_pdf_result() -> dict:
+    """An OCR stub whose words sit inside the grid of ``_merged_block_pdf``."""
+    words = [
+        _word("Group", 120, 180, width=60, line=0),
+        _word("1.2", 430, 180, width=30, line=0),
+        _word("3.4", 730, 180, width=30, line=0),
+        _word("A", 120, 350, width=20, line=1),
+        _word("5.6", 430, 350, width=30, line=1),
+        _word("7.8", 730, 350, width=30, line=1),
+        _word("B", 120, 510, width=20, line=2),
+        _word("9.1", 430, 510, width=30, line=2),
+        _word("2.3", 730, 510, width=30, line=2),
+    ]
+    return {
+        "engine_version": "5.3.3",
+        "text": "Group 1.2 3.4\nA 5.6 7.8\nB 9.1 2.3",
+        "mean_confidence": 90.0,
+        "blocks": [
+            {
+                "block_index": 1,
+                "kind": "table",
+                "text": "Group 1.2 3.4\nA 5.6 7.8\nB 9.1 2.3",
+                "confidence": 90.0,
+                "x": 90,
+                "y": 150,
+                "width": 920,
+                "height": 520,
+                "line_count": 3,
+                "word_count": len(words),
+                "words": words,
+            }
+        ],
+    }
+
+
+def test_block_proposal_reads_the_pdf_drawn_grid(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    page = upload_pdf(client, project["id"], "ruled.pdf", _merged_block_pdf())[0]
+    page, run = _run_table_ocr(
+        client, project, monkeypatch, _ruled_pdf_result(), page=page
+    )
+    block = run["blocks"][0]
+    assert block["kind"] == "table"
+
+    response = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}"
+        f"/ocr/blocks/{block['id']}/table-proposal"
+    )
+    assert response.status_code == 200, response.text
+    proposal = response.json()
+
+    assert proposal["rows"] == 3
+    assert proposal["columns"] == 3
+    cells = {(cell["row"], cell["column"]): cell for cell in proposal["cells"]}
+    assert cells[(0, 0)]["text"] == "Group"
+    assert cells[(0, 1)]["text"] == "1.2"
+    assert cells[(0, 2)]["text"] == "3.4"
+    assert cells[(1, 0)]["rowspan"] == 2
+    assert cells[(1, 0)]["text"] == "A\nB"
+    assert cells[(1, 1)]["text"] == "5.6"
+    assert cells[(2, 1)]["text"] == "9.1"
+    assert cells[(2, 2)]["text"] == "2.3"
+    assert (2, 0) not in cells
+    # The drawn grid is wider than the words, so the source comes from the PDF
+    # rules rather than from the word-box extent.
+    assert proposal["source"]["x"] < 105
+    assert proposal["source"]["width"] > 890

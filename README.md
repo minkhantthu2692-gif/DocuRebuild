@@ -577,7 +577,8 @@ are two entry points in the OCR dialog:
 - **Propose table** (on a block labelled as a table) sends only the block id to the
   local API. The backend reads the word boxes stored with the block, clusters them
   into rows, finds whitespace bands between columns, and returns the cells with
-  their text and confidence.
+  their text and confidence. When the block comes from an unrotated PDF, the rules
+  drawn inside it are tried first, so a merge inside the block keeps its span.
 - **Detect tables** asks the page endpoint for every candidate on the page. It
   includes single blocks already labelled `table` and groups vertically contiguous
   paragraph blocks whose merged visual rows still pass the same deterministic layout

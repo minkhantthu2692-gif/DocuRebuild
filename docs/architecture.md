@@ -397,9 +397,11 @@ src/
   by centre containment, so embedded-text blocks also carry geometry. PyMuPDF
   often emits one block per row, so a single block is rarely labelled `table`.
 - `GET .../pages/{page_id}/table-proposals` therefore returns every reviewable
-  table on a page. Single blocks already labelled `table` are built directly.
-  Vertically contiguous paragraph blocks are grouped when their merged visual rows
-  still pass the same deterministic classifier (`classify_text_block` plus the
+  table on a page. Single blocks already labelled `table` are built directly; a PDF
+  block also tries the document's drawn rules before its word boxes, so a merge
+  inside that block is not lost. Vertically contiguous paragraph blocks are grouped
+  when their merged visual rows still pass the same deterministic classifier
+  (`classify_text_block` plus the
   wide-gap test) used for one block, and only a `table` label is accepted. Visual
   rows are rebuilt from word boxes rather than stored line indices, because
   PyMuPDF splits same-row words into separate lines. A hand-corrected block is a

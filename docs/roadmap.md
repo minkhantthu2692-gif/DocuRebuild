@@ -374,8 +374,10 @@ never claims a provider is free and never estimates a price it cannot support.
   strokes in the raster image, measured inside the candidate's own region so a small
   table on a full page still has measurable borders. Either source is grouped into
   drawn grids, and a missing internal separator becomes a `colspan`/`rowspan`. The
-  review grid renders the merge, and insertion writes the same spans into an ordinary
-  Tiptap table. A rotated page, a geometry edit or a stale run falls back to the
+  same PDF rules are tried for a single block labelled as a table, so a merge inside
+  that block is not lost to its word boxes. The review grid renders the merge, and
+  insertion writes the same spans into an ordinary Tiptap table. A rotated page, a
+  geometry edit or a stale run falls back to the
   word-box grid; rules are ignored when they would leave a detected word outside the
   grid, so text is never dropped. A contiguous paragraph group that the layout
   classifier refuses is still offered when its drawn borders form a closed grid,
