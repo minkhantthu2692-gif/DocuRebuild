@@ -23,6 +23,35 @@ Both processes run on the user's machine. Vite proxies `/api` to the FastAPI
 server during development. The production web build is a static bundle that talks
 to the same local API; the API is not intended to be exposed publicly.
 
+### Desktop runtime
+
+The 1.0 Windows build wraps the same two processes:
+
+```text
+DocuRebuild.exe (Electron)
+  └─ docurebuild-backend.exe (PyInstaller one-folder) → 127.0.0.1:<random port>
+       ├─ serves the built web client from DOCUREBUILD_WEB_DIST
+       ├─ reads projects from %LOCALAPPDATA%\DocuRebuild\DocuRebuild
+       └─ runs tesseract.exe from resources\tesseract
+```
+
+- The shell asks the OS for a free port and generates a 32-byte token per launch.
+- The token reaches the renderer only through the context-isolated preload bridge
+  (`window.docurebuild.apiToken`), and `lib/api.ts` sends it as a bearer token on
+  every request.
+- The backend requires that token for every `/api` request when
+  `DOCUREBUILD_API_TOKEN` is set. Without the variable (development and tests) the
+  API stays open on loopback, which preserves the existing workflow.
+- The built SPA is served by the API process, so desktop mode is same-origin: no
+  CORS exception and no second server to manage.
+- The renderer runs with `sandbox`, `contextIsolation`, `nodeIntegration: false`
+  and a strict Content-Security-Policy; navigation stays on the local origin and
+  external links open in the system browser. Downloads go through the normal save
+  dialog.
+- The static payload lives in `dist/desktop` (web, backend, tesseract) and is
+  produced by `scripts/build-desktop.mjs`; electron-builder wraps it as a per-user
+  NSIS installer.
+
 ## Backend modules
 
 | Module | Responsibility |
@@ -284,7 +313,7 @@ src/
   components/projects/    project dialogs and cards
   components/workspace/   SourcePanel, EditorPanel, OcrDialog, ElementsDialog, workspace actions
   components/ui/          reusable Radix-based primitives
-  hooks/                  React Query data hooks and breakpoints
+  hooks/                  React Query data hooks and OCR job state
   lib/                    API client, formatting, appearance, layout, validation
   providers/              appearance/language synchronization
   i18n/                   namespaces and locale resources
@@ -294,8 +323,8 @@ src/
 
 - Two-panel layout with a persisted, resizable split.
 - Panels can be collapsed; the split ratio is stored locally.
-- Below the `lg` breakpoint, a segmented control switches between Source and
-  Document as a single-panel mobile workflow.
+- The window targets desktop sizes (`minWidth: 1024`, `minHeight: 700`). There is no
+  mobile panel switch: 1.0 is a desktop application.
 - The editor loads the document once (`staleTime: Infinity`), enables editing
   without emitting a synthetic update, and autosaves 900 ms after the last
   change.
@@ -1418,6 +1447,11 @@ src/
 - No mandatory accounts, cloud database or cloud storage.
 - API binds to loopback by default; CORS allows only the local Vite origins unless
   configured.
+- The desktop shell never exposes the API to another machine: the sidecar binds
+  loopback only and every `/api` request needs a random token generated for that
+  launch. The token is kept in memory, passed to the sidecar through its
+  environment (never the command line), delivered to the renderer by preload, and
+  a test scans the built client to prove it is not embedded in the bundle.
 - Security headers (`nosniff`, `DENY`, `no-referrer`, `same-origin`) are applied
   to every response.
 - No secret is persisted or logged by the frontend: a typed key lives only in

@@ -6,15 +6,17 @@ DocuRebuild turns scans, photographs and PDF documents into accurate, structured
 and editable documents. It keeps original source files immutable, keeps project
 data on your device, and treats every AI result as a reviewable proposal.
 
-> **Project status — early development (Phase 6 of 12).**
-> The workspace, local project storage, image and PDF import, non-destructive
-> image adjustments, the rich-text editor, local Tesseract OCR, manual region
-> extraction, the unified AI provider platform, local Markdown/TXT/Word/PDF
-> document export and document version history are implemented. Imports run as
-> background jobs with page-level progress, cancellation and localized failures.
-> PDF pages are rendered locally and embedded text layers are stored as reviewable
-> proposals; image-only PDF pages can be processed with OCR. OCR and PDF import are
-> only advertised when their local dependencies actually work.
+> **Project status — 1.0 desktop release.**
+> DocuRebuild installs as a Windows desktop application and needs no Node.js,
+> Python or development tools. The installer bundles the local API, the web
+> client, Tesseract OCR with English and Burmese language data, and every Python
+> dependency. Projects, source files, databases and backups stay in a local
+> folder; the local API listens only on loopback and requires a per-launch token
+> that never leaves the app. The workspace, local project storage, image and PDF
+> import, non-destructive image adjustments, the rich-text editor, local
+> Tesseract OCR, manual region extraction, the unified AI provider platform,
+> local Markdown/TXT/Word/PDF export, document version history, verified project
+> backups and encrypted local backup copies are implemented.
 >
 > AI is bring-your-own-key and optional. One platform supports local Ollama, a
 > custom OpenAI-compatible server, and the OpenAI, Anthropic, Google Gemini,
@@ -30,6 +32,33 @@ data on your device, and treats every AI result as a reviewable proposal.
 > Image generation and page-wide automatic equation/figure reconstruction are
 > **not implemented yet** and are marked as unavailable in the UI. Nothing in this
 > repository fakes those features.
+
+---
+
+## Install the desktop app
+
+1. Run `DocuRebuild-1.0.0-setup.exe`.
+2. The installer creates a per-user installation and a Start menu shortcut. It
+   does not require administrator rights and does not install a system service.
+3. Start DocuRebuild. The first launch creates the local data folder at
+   `%LOCALAPPDATA%\DocuRebuild\DocuRebuild`.
+
+What the installer bundles:
+
+- the Electron shell and Chromium runtime;
+- the local API and its Python runtime (PyInstaller one-folder build);
+- the built web client;
+- Tesseract 5.4 with `eng` and `mya` language data.
+
+The download is about 202 MB and installs about 643 MB, because the OCR engine
+and the Python runtime ship offline. Projects, backups and the vault stay in
+`%LOCALAPPDATA%\DocuRebuild\DocuRebuild`, so reinstalling keeps them.
+
+Upgrading keeps the existing data folder. Uninstalling removes the application
+but deliberately leaves projects and backups in place.
+
+The application has no account system and no telemetry. An internet connection
+is needed only for optional cloud AI providers; everything else works offline.
 
 ---
 
@@ -244,8 +273,9 @@ data on your device, and treats every AI result as a reviewable proposal.
 ### Not available yet
 
 Automatic page-wide equation transcription, generative figure detection, provider
-billing/quota verification against an account, image generation, desktop packaging and
-PWA install support are planned but not implemented. Provider pricing is not invented:
+billing/quota verification against an account and image generation are planned but
+not implemented. DocuRebuild 1.0 is a Windows desktop application; mobile, PWA and
+device pairing are out of scope rather than pending. Provider pricing is not invented:
 a cost is recorded only when the provider reports a price or token counts that the
 app can verify, and a monthly budget is a local gate on that recorded spend, not a
 provider-side billing control. OCR extracts text blocks, reading order and
@@ -341,9 +371,15 @@ Local runtime data is **never** stored in this repository. See
 
 ## Requirements
 
+Using the Windows installer requires no development tools: Node.js, Python,
+Tesseract, and the Python packages are all bundled.
+
+Building from source requires:
+
 - Node.js **20 or newer** (Node 24 tested) and npm 10+
 - Python **3.11 or newer** (3.12 tested)
 - Optional: Tesseract 5+ for local OCR, with `eng` and/or `mya` traineddata
+  (the desktop build script downloads and bundles it)
 - Optional: Ollama or an OpenAI-compatible local server (for example LM Studio) for
   free local AI, or an API key for one of the supported providers. AI is optional; no
   account or paid subscription is required for the rest of the application.
@@ -395,7 +431,9 @@ the backend virtual environment and run `npm run dev` instead.
 
 ### Optional local OCR
 
-OCR is free and local, but it needs a working Tesseract installation:
+The desktop installer bundles Tesseract 5.4 with `eng` and `mya` language data, so
+no separate installation is needed there. A source checkout needs a working
+Tesseract installation:
 
 1. Install Tesseract (Windows builds are available from UB Mannheim; macOS and
    Linux packages are also available).
@@ -416,6 +454,11 @@ The Settings page and the OCR dialog inspect the engine at runtime and report th
 resolved executable path. If it cannot be found, they show setup guidance instead
 of a fake OCR result. OCR jobs run in a bounded local worker and never contact a
 remote service.
+
+Each OCR run also chooses a page layout. Automatic is the general default;
+Burmese pages use sparse text automatically because Tesseract's automatic layout
+analysis merges their lines. The choice is shown in the OCR dialog and can be
+changed per run.
 
 If the Tesseract install directory is read-only (for example `Program Files` on
 Windows), keep a user-writable copy of the `tessdata` folder containing the
@@ -470,6 +513,7 @@ cd backend
 .venv/Scripts/python.exe -m app.ocr_benchmark path/to/fixtures
 .venv/Scripts/python.exe -m app.ocr_benchmark path/to/fixtures --json
 .venv/Scripts/python.exe -m app.ocr_benchmark path/to/fixtures --case english-page-1
+.venv/Scripts/python.exe -m app.ocr_benchmark path/to/fixtures --segmentation-mode 11
 ```
 
 Text is normalised to NFC with collapsed whitespace before scoring. Case,
@@ -480,8 +524,14 @@ weighted by reference length, so one long page is not given the same weight as
 one short line. A case that cannot be scored (for example a missing language
 file) is reported and excluded from the totals instead of aborting the run. Exit
 codes are `0` when every case was scored, `1` when a case could not be scored and
-`2` for an invalid manifest or argument. The project does not publish accuracy
-numbers until fixtures from real documents have been measured.
+`2` for an invalid manifest or argument.
+
+`--segmentation-mode` selects the Tesseract page layout to score (3 automatic,
+4 single column, 6 single block, 11 sparse text). The bundled baseline report is
+in [`docs/ocr-benchmark.md`](docs/ocr-benchmark.md): on the committed synthetic
+pages, sparse text gives 2.19% overall CER (English 0.28%, Burmese 5.56%,
+mixed 0.88%), while automatic layout gives 85.60% CER on the Burmese page. Those
+pages are synthetic; a corpus of redacted real scans is still the next step.
 
 ### AI providers (bring your own key)
 
@@ -967,6 +1017,30 @@ on Node 20. CodeQL analysis and weekly Dependabot updates are configured separat
 CI needs no AI credential; tests use a local stub server and never contact a real
 provider.
 
+### Build the desktop application
+
+```bash
+# Web client + Python sidecar + Tesseract payload in dist/desktop
+npm run desktop:build
+
+# Installer in dist/desktop-installer
+npm run desktop:dist
+```
+
+`scripts/build-desktop.mjs` builds the web client, bundles the API with
+PyInstaller (one folder, not one file, so startup stays fast), and unpacks
+Tesseract 5.4 plus `eng`/`mya` language data into `dist/desktop/tesseract` without
+needing administrator rights. Downloads are cached in `dist/.cache`, so later
+builds work offline. Pass `--skip-web`, `--skip-backend` or `--skip-tesseract`
+to reuse an existing part.
+
+The Electron shell (`apps/desktop`) starts the sidecar on a free loopback port
+with a random per-launch token, waits for `/api/health`, and loads the built
+client from the same origin. The token is delivered through a context-isolated
+preload bridge, every `/api` request carries it, the window runs with
+`sandbox`, `contextIsolation` and no `nodeIntegration`, and navigation and
+downloads are restricted to local origins and the system browser.
+
 ---
 
 ## Data and privacy
@@ -1190,14 +1264,14 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 1. Local storage and project management | Complete |
 | 2. Main UI and workspace | Complete |
 | 3. Import and image processing | Complete |
-| 4. Local OCR and layout detection | In progress: OCR, layout hints, reviewable table proposals and a local CER/WER benchmark harness done; figure detection and measured real-document accuracy pending |
+| 4. Local OCR and layout detection | In progress: OCR, layout hints, reviewable table proposals, a local CER/WER benchmark with committed synthetic fixtures and measured results in `docs/ocr-benchmark.md`, and user-selectable page segmentation done; figure detection in the OCR layout and a redacted real-document corpus pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table reconstruction from one saved crop (local OCR or AI) done, page-wide table detection pending |
 | 6. AI integration and free usage first | In progress: unified BYOK provider platform with local Ollama, custom OpenAI-compatible and 12 cloud adapters, dynamic model discovery, multiple connections and encrypted keys, key rotation and cooldown, per-task routing with a fallback, remote-consent and HTTPS boundary, daily/task/connection limits, verified-cost budget, metadata-only usage ledger and history browser, reviewable OCR text cleanup, optional vision region proposals, one-crop equation transcription and one-crop table reading done; account-level billing/quota verification and page-wide automatic reconstruction pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, reviewable automatic table proposals from OCR word boxes, merged-cell spans read from PDF vector rules or a scanned page's or saved crop's drawn borders, structured reading of one saved table crop with local OCR or an optional vision model, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; page-wide tables, nested tables and page-wide equation extraction pending |
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
 | 9. History, backup and recovery | **Complete**: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
-| 10. Desktop, PWA and mobile distribution | Planned |
-| 11. Final QA and production release | Planned |
+| 10. Desktop distribution | **Complete for Windows**: Electron shell with a bundled Python sidecar, loopback-only API with a per-launch token, bundled Tesseract, and a per-user NSIS installer. Mobile, PWA and device pairing are out of scope |
+| 11. Final QA and production release | In progress: desktop smoke tests, version 1.0.0, AGPL-3.0 licensing and third-party notices done; remaining release checks are tracked in `PROJECT_COMPLETION_REPORT.md` |
 
 Detailed criteria and design decisions are in [`docs/roadmap.md`](docs/roadmap.md)
 and [`docs/architecture.md`](docs/architecture.md).

@@ -1,8 +1,10 @@
 # DocuRebuild - Project Completion Report
 
 **Report date:** 20 November 2026
-**Repository state:** `main` at `26b9263` (4 commits ahead of `origin/main`; not pushed)
-**Working tree:** clean except the untracked note `AiSessionRedesign.txt`
+**Report state:** audit snapshot at `26b9263`, followed by the 1.0 desktop
+delivery recorded in section 13
+**Working tree:** the desktop shell, packaging, OCR baseline and licensing
+changes from section 13 are not yet committed
 **Scope of this report:** audit of implemented behaviour, not a plan for new features
 
 ---
@@ -18,28 +20,32 @@ is implemented end to end, with automated coverage on both sides of the stack.
 
 | Measure | Estimate | Basis |
 | --- | --- | --- |
-| Overall project (all 12 phases incl. distribution and final QA) | **approx. 78%** | Phase-weighted, see section 3 |
+| Overall project (all 12 phases incl. distribution and final QA) | **approx. 90%** | Phase-weighted, see section 3, revised after section 13 |
 | Core local-first MVP scope (phases 0-9) | **approx. 90%** | Functional coverage, verified by tests and code inspection |
-| Production-release readiness | **approx. 65%** | Packaging, accuracy validation, accessibility/performance QA and release hygiene are incomplete |
+| Production-release readiness | **approx. 84%** | Desktop packaging, licensing, the OCR baseline, installed-app QA, performance and security drills are delivered; real-scan accuracy and assistive-technology testing remain |
 
 The application is usable today by a technical user who runs the one-click local
-launcher. It is not yet a production release: there is no packaged desktop build
-or installable PWA, no measured OCR accuracy baseline, and no final QA/release
-process. None of those gaps require re-architecting the product.
+launcher, and as an installed Windows application since the work in section 13.
+The remaining production gaps are a redacted real-document OCR corpus,
+screen-reader testing and sustained-load measurement. None of them require
+re-architecting the product.
 
 **Strongest areas:** project/storage model, import pipeline (including PDFs and
 background jobs), non-destructive image editing, editor/export, version history
-and backup/restore, and the bring-your-own-key AI platform with encrypted keys.
+and backup/restore, the bring-your-own-key AI platform with encrypted keys, and
+the packaged desktop shell with a private local API.
 
-**Weakest areas:** distribution (phase 10), measured accuracy (phase 4), final QA
-(phase 11), and documentation that still describes some delivered behaviour as
-pending.
+**Weakest areas:** measured accuracy on real scans (phase 4), final QA
+(phase 11), and the remaining page-wide reconstruction work.
 
 ---
 
 ## 2. Verification performed
 
 All checks were run against the current working tree, not inferred from docs.
+This section is the **pre-delivery snapshot** taken during the audit; section 13
+records the final numbers after the 1.0 work (414 backend tests, 290 web tests,
+the rebuilt installer and the installed-application drills).
 
 | Check | Command | Result |
 | --- | --- | --- |
@@ -258,20 +264,25 @@ Two caveats on that number:
 ## 7. Release blockers
 
 Ordered by impact on an initial public release. "Blocker" means it prevents
-calling the product production-ready, not that the app fails to run.
+calling the product production-ready, not that the app fails to run. The status
+column records what section 13 delivered after the audit.
 
-| # | Blocker | Impact | Evidence |
-| --- | --- | --- | --- |
-| 1 | **No release vehicle.** No installer/packaged desktop build or installable PWA. | Non-technical users cannot install it; spec requires Web/PWA and desktop distribution. | Phase 10 planned; `start-docurebuild.bat` only; no `apps/desktop`, no manifest/service worker |
-| 2 | **Unmeasured OCR accuracy.** No fixtures or CER/WER results. | The product's first principle is accuracy; shipping without a baseline risks silent quality failures, especially Burmese. | Roadmap phase 4 "Remaining"; no `backend/ocr-fixtures` content |
-| 3 | **Final QA not performed.** Accessibility, responsiveness, performance, security and restore drills are unverified as end-to-end journeys. | Production-quality claims are unsupported; hidden regressions likely on mobile and assistive tech. | Phase 11 planned; no E2E/axe tooling |
-| 4 | **Stale documentation contradicts code.** README and roadmap still call page-wide table detection pending, though `/pages/{page_id}/table-proposals` and page-wide grouping are delivered. | Erodes trust and misleads contributors/reviewers; violates "keep docs and behaviour synchronized". | README "Not available yet" and status table; roadmap phase 5 "Remaining" |
-| 5 | **No release hygiene.** Version stays 0.1.0, no tag, changelog, release notes or upgrade test. | Users cannot identify builds or assess upgrade risk. | `package.json` 0.1.0; `git tag` empty; no CHANGELOG |
-| 6 | **Distribution licensing review.** PyMuPDF is AGPL/commercial dual-licensed by Artifex. | Packaging and distributing a desktop build may require a commercial licence or compliance work. | README licensing note; `backend/requirements.txt` uses PyMuPDF |
-| 7 | **Tesseract is an external prerequisite** with language packs not bundled. | OCR is invisible until the user installs and configures it; Burmese adds traineddata setup. | Capability reporting and setup guidance exist, but no bundling |
+| # | Blocker | Impact | Evidence at audit | Status |
+| --- | --- | --- | --- | --- |
+| 1 | **No release vehicle.** No installer/packaged desktop build or installable PWA. | Non-technical users cannot install it; spec requires Web/PWA and desktop distribution. | Phase 10 planned; `start-docurebuild.bat` only; no `apps/desktop` | **Resolved.** Electron shell + PyInstaller sidecar + per-user NSIS installer in `apps/desktop` and `scripts/build-desktop.mjs` |
+| 2 | **Unmeasured OCR accuracy.** No fixtures or CER/WER results. | The product's first principle is accuracy; shipping without a baseline risks silent quality failures, especially Burmese. | Roadmap phase 4 "Remaining"; no `backend/ocr-fixtures` content | **Partially resolved.** Committed synthetic English/Burmese/mixed fixtures and a reproducible baseline in `docs/ocr-benchmark.md`; a redacted real-scan corpus is still missing |
+| 3 | **Final QA not performed.** Accessibility, responsiveness, performance, security and restore drills are unverified as end-to-end journeys. | Production-quality claims are unsupported; hidden regressions likely. | Phase 11 planned; no E2E/axe tooling | **Partially resolved.** Install/launch/OCR/export/backup/restore, performance, security and contrast audits are recorded in section 13; screen-reader testing and sustained-load drills remain |
+| 4 | **Stale documentation contradicts code.** README and roadmap still call page-wide table detection pending. | Erodes trust and misleads contributors/reviewers. | README "Not available yet" and status table; roadmap phase 5 "Remaining" | **Resolved** (documentation truth pass, section 13) |
+| 5 | **No release hygiene.** Version stays 0.1.0, no tag, changelog, release notes or upgrade test. | Users cannot identify builds or assess upgrade risk. | `package.json` 0.1.0; no CHANGELOG | **Resolved.** Version 1.0.0 across packages, `CHANGELOG.md`, upgrade test over an existing data folder |
+| 6 | **Distribution licensing review.** PyMuPDF is AGPL/commercial dual-licensed. | Packaging a desktop build needs a licence decision or compliance work. | README licensing note; `backend/requirements.txt` uses PyMuPDF | **Resolved.** The project is licensed AGPL-3.0, `LICENSE` and `THIRD_PARTY_NOTICES.md` ship in the installer |
+| 7 | **Tesseract is an external prerequisite** with language packs not bundled. | OCR is invisible until the user installs and configures it; Burmese adds traineddata setup. | Capability reporting and setup guidance exist, but no bundling | **Resolved.** Tesseract 5.4 with `eng`/`mya`/`osd` is bundled and auto-detected |
 
-Non-blocking known issue: a moderate, development-only `minimatch` advisory via
-ESLint tooling. Runtime dependencies are reported clean of critical advisories.
+Non-blocking known issues at audit: a moderate, development-only `minimatch`
+advisory via ESLint tooling (runtime dependencies were clean), and a low-severity
+KaTeX prototype-pollution advisory in the production dependency tree. KaTeX is
+used with `trust: false` and only ever renders user-entered equation source, so
+the advisory is not reachable from imported document content; see section 13 for
+the recorded decision.
 
 ---
 
@@ -436,3 +447,214 @@ With those steps, the existing implementation is strong enough for an initial
 production release. Page-wide equations, nested tables, camera import, richer
 OCR engines and provider quota introspection are credible post-1.0 work and
 should not delay it.
+
+---
+
+## 13. The 1.0 desktop delivery - what was actually done and verified
+
+This section records the work performed after the audit above. Every claim here
+was checked on this machine; anything that was not checked is listed as a
+limitation instead of an achievement.
+
+### 13.1 Scope decision
+
+1.0 is a **Windows x64 desktop application**. Mobile, PWA and device pairing were
+removed from scope: the workspace no longer carries a breakpoint hook or a mobile
+panel switch, and nothing in the interface advertises a phone layout.
+
+### 13.2 Release vehicle
+
+| Piece | Implementation |
+| --- | --- |
+| Shell | Electron 45 with `sandbox`, `contextIsolation`, `nodeIntegration: false`, a strict CSP and a context-isolated preload bridge |
+| Local API | The existing FastAPI app frozen with PyInstaller as a one-folder `docurebuild-backend.exe` |
+| Web client | The Vite production build, served by the local API so desktop mode is same-origin |
+| OCR | Tesseract 5.4.0 with `eng`, `mya` and `osd` traineddata, unpacked from the UB Mannheim installer at build time |
+| Installer | electron-builder NSIS, per-user (no administrator rights), Start menu and desktop shortcuts |
+| Build entry points | `npm run desktop:build` (web, sidecar, Tesseract, verify) and `npm run desktop:dist` (installer) |
+
+The data folder is `%LOCALAPPDATA%\DocuRebuild\DocuRebuild`, which is exactly what
+`platformdirs.user_data_dir("DocuRebuild", "DocuRebuild")` returns, so a source
+checkout and the installed app read the same projects. Window state and logs live
+in Electron's `%APPDATA%\DocuRebuild` directory and never mix with project data.
+
+Uninstalling removes the application directory and shortcuts only. Projects,
+backups and the vault stay in `%LOCALAPPDATA%`, and a reinstall picks them up
+unchanged.
+
+### 13.3 Keeping the local API private
+
+- The shell asks the OS for a free port, generates a 32-byte random token, and
+  passes it to the sidecar through the environment.
+- The sidecar binds `127.0.0.1` only. With `DOCUREBUILD_API_TOKEN` set, every
+  `/api` request must send `Authorization: Bearer <token>`; anything else gets
+  `401`.
+- The token reaches the renderer only through the preload bridge, and
+  `apps/web/src/lib/api.ts` attaches it to each request.
+- When the variable is unset (development, CI, the test suite) the API keeps its
+  previous loopback-only behaviour, so existing workflows and tests are
+  unaffected.
+- The built client is scanned during verification to prove the token is not
+  embedded in any asset.
+- Path traversal, unknown `/api` paths, non-GET SPA routes and asset requests
+  were exercised against the packaged sidecar: `404` JSON for unknown API paths,
+  `404` for traversal attempts, and `index.html` for client routes.
+
+### 13.4 OCR accuracy - measured, and what it changed
+
+`backend/tests/fixtures/ocr-synthetic` holds three 300 DPI pages (English,
+Burmese, mixed) rendered with Windows GDI+ shaping plus their exact reference
+transcripts; `scripts/generate-ocr-fixtures.ps1` regenerates them.
+
+The first measurement exposed a real defect, not a cosmetic one. With
+Tesseract's automatic page segmentation (mode 3) the Burmese page scored **85.60%
+CER** - the layout analyser merged text rows and read the band as noise. Sparse
+text segmentation (mode 11) scores **5.56% CER** on the same page. Overall CER
+across the three pages: 35.93% (mode 3) versus **2.19%** (mode 11).
+
+That result drove a product change rather than a footnote:
+
+- Tesseract page segmentation is now a user-visible setting (Automatic, Single
+  column, Single block, Sparse text) carried as `page_segmentation_mode`.
+- Unsupported values are rejected with `ocr_invalid_segmentation_mode` instead of
+  being replaced silently.
+- Choosing a language combination that includes Burmese preselects sparse text
+  until the user changes it.
+- The benchmark gained `--segmentation-mode` so the same comparison can be
+  repeated.
+
+Full methodology, per-case tables, reproduction commands and limitations are in
+`docs/ocr-benchmark.md`. The limitations are explicit: the fixtures are synthetic
+and deterministic, so they measure the engine and language data, **not** skew,
+noise or faded print. A redacted real-document corpus is still the honest next
+step and remains open work.
+
+### 13.5 Licensing
+
+PyMuPDF 1.28.2 is AGPL-3.0, so the application is licensed **AGPL-3.0**. `LICENSE`
+holds the full text and `THIRD_PARTY_NOTICES.md` lists every bundled runtime
+component - Electron/Chromium, the web dependencies, the Python packages
+(including PyMuPDF), Tesseract, Leptonica and the traineddata files - with their
+licences, plus the build-only tools that are not redistributed. Both files are
+copied into the installed application by electron-builder's `extraResources`.
+
+### 13.6 Verification performed
+
+| Check | Result |
+| --- | --- |
+| Backend suite | 414 tests passed (desktop, OCR, segmentation and benchmark coverage included) |
+| Web suite | 290 tests in 47 files passed, including the design-token contrast guard |
+| Typecheck, ESLint, production build | clean |
+| Packaged sidecar auth | `401` without a token and with a wrong token, `200` with the correct one |
+| Packaged sidecar routing | SPA at `/`, hashed assets, client routes; `404` JSON for unknown `/api`; `404` for traversal |
+| Packaged OCR | Bundled engine reports 5.4.0.20240606 with `eng`, `mya`, `osd`; a Burmese page returns 75.6 mean confidence |
+| End-to-end PDF run | Two-page PDF imported, pages rendered 1240x1755, OCR text matched the reference apart from one capitalisation difference |
+| Installer | `DocuRebuild-1.0.0-setup.exe`, 211,528,454 bytes (201.7 MB), SHA-256 `F40F12DE04451EAA995ED2E85181B861907192AE160F0D360C7C75B08719AB12`, built by electron-builder NSIS |
+| Install | Silent per-user install exits 0 in 37 s; `%LOCALAPPDATA%\Programs\DocuRebuild` holds the shell, sidecar, web client and Tesseract, with `LICENSE` and `THIRD_PARTY_NOTICES.md` under `resources\`; Start menu and desktop shortcuts are created; no administrator prompt |
+| Installed launch | The window opens, the sidecar listens on loopback (`127.0.0.1:57914` in the final drill), and `/api/health` reports `version: 1.0.0`, `database: ok` |
+| Installed UI | Driven over the DevTools protocol: the document reaches `complete`, the dashboard renders the heading, **8 project cards** and the `v1.0.0` status bar, the saved dark theme and teal accent resolve to their token values, there is no horizontal overflow at 1426x779, and no console error or warning is logged |
+| Existing data | The installed app listed every project that already existed in `%LOCALAPPDATA%\DocuRebuild\DocuRebuild` (8 at the time of the drill), so the upgrade keeps projects and schema |
+| Installed API isolation | No token and a wrong token both return `401`; `/projects/abc` returns the SPA; the installed hashed asset returns `200` and a missing asset returns `404` |
+| Installed OCR and export | Using the installed sidecar directly: Tesseract 5.4.0.20240606 with `eng`/`mya`/`osd`; English page OCR 96.4 confidence, Burmese page (mode 11) 82.3; Markdown, TXT, DOCX and PDF exports all return the document body (a 0-byte Markdown file only when the document itself is empty) |
+| Installed backup and restore | A vault copy was created, then restored as a new project. The archived source PDF extracts with an identical MD5 to the original and opens as 2 pages, so the backup is byte-faithful |
+| Clean shutdown | Closing the window ends the shell **and** the sidecar; no orphaned backend or Tesseract process remains |
+| Uninstall | Removes the application directory, both shortcuts and the uninstall registry entry; the data folder and all 8 projects and `app.db` survive |
+| Reinstall over existing data | Reinstalling from the same installer exits 0 in 25 s, recreates both shortcuts and the registry entry, and the launched app reads the same 8 projects |
+| Installed footprint | 643 MB on disk (Electron 356 MB, Tesseract 178 MB, Python sidecar 105 MB, web client 3 MB). Size is the cost of bundling an offline OCR engine and a Python runtime |
+| Version consistency | 1.0.0 in the root/web/desktop packages, the backend `__version__`, the health endpoint, the installer registry entry and the UI status bar |
+
+### 13.7 Desktop QA: performance and memory
+
+Measured on the installed sidecar, the same build the installer ships, on the
+N100 reference machine (4 cores, 16 GB RAM, Windows 11):
+
+| Journey | Measurement |
+| --- | --- |
+| Sidecar cold start to healthy `/api/health` | 5.9 s |
+| Idle backend working set | 147 MB |
+| Import a 24-page scanned PDF (1240x1755 pages) | 3.66 s total, **0.15 s per page**, peak working set 193 MB |
+| OCR one page (English) | 1.4 s cold, 0.9 s warm, 96.4 mean confidence |
+| OCR one Burmese page, sparse text | 1.3 s, 78.2 mean confidence |
+| OCR the same Burmese page, automatic layout | 1.7 s, 41.3 mean confidence (confirms the segmentation finding at 150 DPI too) |
+| Write a 168,490-character document (300 paragraphs) | 0.08 s |
+| Read the same document | 0.04 s |
+| Export DOCX / PDF of that document | 0.18 s / 0.28 s (38 KB / 72 KB) |
+| Project storage for 24 pages | 5.6 MB including rendered pages and thumbnails |
+
+The backend stayed between 147 MB and 193 MB across the whole drill, so the
+import and OCR paths do not leak unbounded memory for this document size. A
+multiply-cancelled job and a much larger PDF (hundreds of pages) were not
+measured; that stays on the open list instead of being claimed.
+
+### 13.8 Desktop QA: security review
+
+| Check | Result |
+| --- | --- |
+| API authentication | Missing or wrong bearer token returns `401` on every `/api` route, in the packaged shell and in the installed application |
+| SPA fallback | Client routes return `index.html`; a missing asset returns `404`; unknown `/api` paths return JSON `404` |
+| Path traversal | `../` in backup filenames, asset ids and page ids returns `404`; no file outside the data folder was read |
+| Zip slip | A crafted archive with `../escape.txt` is rejected (`422`) and no file is written outside the target directory; `test_project_backup.py` also asserts `backup_unsafe_path` |
+| Encrypted backup | Backup with a password returns `200`; restore without a password returns `backup_password_required`, with a wrong password `backup_wrong_password`, with the right password `201` and the pages intact |
+| Secret scan | No API keys, tokens, private keys or credentials in tracked files; `.env`, `*.db`, `.venv` and `*.enc` are ignored |
+| Token leakage | The per-launch token is generated at runtime, passed by environment, and absent from the built client and the packaged `app.asar` |
+| Dependency audit | Runtime tree reports one **low** advisory: KaTeX prototype pollution that can bypass `trust` restrictions. DocuRebuild renders only user-authored equation source with `trust: false` and never renders imported text as math, so the path is not reachable; the upgrade to KaTeX 0.19 is a breaking change and is deferred to a maintenance release |
+| Electron hardening | `sandbox`, `contextIsolation`, no `nodeIntegration`, CSP, permission denial, navigation restricted to the local origin, external links in the system browser |
+
+### 13.9 Desktop QA: accessibility and contrast
+
+The interface is desktop-only, so the old viewport-driven layout checks were
+removed. A token audit measured every text and UI pair used by the theme:
+
+- Light theme warning badges put white text on amber at **2.95:1**, and the
+  blue, teal, emerald, amber and rose accent presets reached only
+  **3.07:1-4.16:1** with white labels. Light-theme success, warning and
+  destructive badge text on its 12% tint reached **3.19:1-4.06:1**.
+- Those pairs failed WCAG AA for normal-size text. The token values were adjusted
+  (success 28%, warning 30%, destructive 43%, info 44%, and the affected accent
+  presets) until every label, muted text, status badge and accent reached at
+  least **4.5:1**, and the dark theme primary was raised from 4.36:1 to 5.07:1.
+- `apps/web/src/test/design-tokens.test.ts` now parses the real token file and
+  fails the suite if any of those pairs drops below its threshold, so the fix
+  cannot silently regress.
+
+Not performed, and therefore still open: a keyboard-only walkthrough of the
+installed application with focus-visibility screenshots, and a screen-reader
+pass (NVDA or Narrator). Radix primitives supply labelled dialogs and controls,
+but that is an argument, not a verified result. What *was* checked on the
+installed build is that the dashboard paints, that the saved dark theme and teal
+accent resolve to their token values, and that the rendered layout has no
+horizontal overflow at 1426x779 — a rendering check, not an assistive-technology
+one.
+
+### 13.10 What is still open
+
+These are the honest remaining gaps; none require re-architecting:
+
+- A redacted real-scan OCR corpus (English, Burmese, mixed, at least one table
+  and one multi-column page) scored with the existing harness.
+- A keyboard-only and screen-reader accessibility pass on the installed
+  application.
+- A sustained large-document performance and cancellation drill (hundreds of
+  pages, repeated cancelled imports).
+- An automated end-to-end desktop smoke suite; the desktop checks above were run
+  manually and are partly covered by backend tests.
+- macOS and Linux packaging. Only Windows x64 is built and tested.
+- Installer size and footprint. The installer is 202 MB and installs 643 MB,
+  because it carries Electron's full Chromium locale set (49 MB), a 178 MB
+  Tesseract build and a 105 MB Python sidecar. Trimming Chromium locales and
+  shipping a slimmer Tesseract build are safe future optimisations, not 1.0
+  blockers.
+- Page-wide figure detection inside the OCR layout, page-wide equation
+  proposals, and nested-table separation (SHOULD HAVE, not 1.0).
+
+### 13.11 Revised completion
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Overall project | approx. 78% | **approx. 90%** |
+| Production-release readiness | approx. 65% | **approx. 84%** |
+
+The remaining gap is evidence on real scans, assistive-technology testing and
+sustained-load measurement, not missing foundations. Calling 1.0 shipped is
+defensible for a Windows desktop release; the open list above is the honest
+release-note content.

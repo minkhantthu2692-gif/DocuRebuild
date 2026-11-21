@@ -12,14 +12,14 @@ presented in the UI until it actually works.
 | 1. Local storage and project management | **Complete** | App/project DBs, folders, manifest, CRUD, trash |
 | 2. Main UI and workspace | **Complete** | Header navigation, dashboard, two-panel workspace, settings, i18n |
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
-| 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates), deterministic figure suggestions from embedded PDF images and vector drawings, and a local CER/WER benchmark harness done; measured real-document accuracy pending |
+| 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates), deterministic figure suggestions from embedded PDF images and vector drawings, a local CER/WER benchmark with committed synthetic English, Burmese and mixed fixtures, user-selectable page segmentation and measured results in `docs/ocr-benchmark.md` done; a redacted real-document corpus and figure detection in the OCR layout pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, OCR-layout, embedded-PDF-image, vector-drawing and raster-page ink region suggestions with a named source in the extraction dialog, library, verification and figure/text insertion, reviewed equation crops inserted as real equations, on-demand AI transcription of one equation crop into reviewable LaTeX, and structured table reconstruction from one saved crop locally (drawn rules or word boxes) and with AI done; page-wide table detection pending |
 | 6. AI integration and free usage first | **In progress** | Unified BYOK provider platform with local Ollama, custom OpenAI-compatible and 12 cloud adapters, dynamic model discovery, multiple connections and encrypted keys, key rotation/cooldown/failover, per-task routing with fallbacks, remote-consent and HTTPS boundary, daily/task/connection limits, verified-cost budget, metadata-only usage ledger and history, reviewable OCR cleanup, optional vision region proposals, equation-crop transcription and table-crop reading done; account-level billing/quota verification pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, merged cells from a PDF's drawn rules and from a scanned page's or saved crop's visible cell borders, structured reading of one saved table crop with local OCR or an optional vision model, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, inserting a reviewed equation crop as a real numbered equation, optional vision-model transcription of one saved equation crop into reviewable LaTeX, and faithful Markdown/TXT/Word/PDF export; merged-cell detection for text-only tables and automatic page-wide equation recognition pending |
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, multi-line Word equations, footnotes, per-project page headers/footers, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
-| 10. Desktop, PWA and mobile distribution | Planned | Web app is responsive; no Tauri/PWA yet |
-| 11. Final QA and production release | Planned | Requires all previous phases |
+| 10. Desktop distribution | **Complete for Windows** | Electron shell with a bundled PyInstaller sidecar, loopback-only API with a per-launch bearer token, bundled Tesseract with `eng`/`mya`, per-user NSIS installer, and smoke tests for the packaged backend. Mobile, PWA and device pairing are out of scope for 1.0 |
+| 11. Final QA and production release | **In progress** | Version 1.0.0, AGPL-3.0 licensing, third-party notices, changelog and a reproducible OCR baseline are done; remaining release checks are tracked in `PROJECT_COMPLETION_REPORT.md` |
 
 ---
 
@@ -63,13 +63,12 @@ presented in the UI until it actually works.
 - Source viewer controls, thumbnail rail, page navigation and empty states.
 - Rich-text editor panel with formatting toolbar, document typeface, counts,
   autosave status and load-error handling.
-- Mobile segmented Source/Document workflow.
 - Theme, accent, radius, blur, density, text size and motion settings.
 - English/Burmese localization with live switching and key-parity tests.
 - Reusable empty, skeleton, spinner, dialog, menu, select and segmented controls.
 
-**Verification** — Vitest for layout/appearance/formatting/i18n, browser checks
-for theme/language switching and mobile panel switching.
+**Verification** — Vitest for layout/appearance/formatting/i18n, desktop checks
+for theme and language switching.
 
 ---
 
@@ -83,7 +82,7 @@ for theme/language switching and mobile panel switching.
 - EXIF orientation, checksums, immutable originals, browser-safe display copies.
 - WebP thumbnails, page ordering (drag), page deletion and non-destructive
   rotation with reset.
-- Zoom, fit, actual size and page navigation; responsive thumbnail rail.
+- Zoom, fit, actual size and page navigation; resizable thumbnail rail.
 - Asset streaming with content-type and path containment.
 - PDF import for text-based, image-based and mixed PDFs, with one page per PDF
   page, immutable original storage, 150 DPI local rendering and WebP thumbnails.
@@ -752,19 +751,44 @@ colour and accent semantics) and a bundled offline LaTeX typesetter.
   thumbnail images and an extracted region's crop. Editor undo/redo stays separate
   from revision history: it is an editing convenience, not a stored backup.
 
-## Phase 10 — Desktop, PWA and mobile distribution (planned)
+## Phase 10 - Desktop distribution (complete for Windows)
 
-- Tauri desktop shell with a Python sidecar and packaging limits documented.
-- PWA install/offline shell where browser capabilities allow.
-- Camera import and optional secure pairing to a user-owned processing host.
-- No public backend exposure by default.
+**Delivered**
 
-## Phase 11 — Final QA and production release (planned)
+- Electron shell with a bundled PyInstaller one-folder Python sidecar.
+- Loopback-only API with a per-launch bearer token delivered through a
+  context-isolated preload bridge; `sandbox`, `contextIsolation`, no
+  `nodeIntegration`, a strict CSP and origin-restricted navigation.
+- Per-user NSIS installer with Start menu and desktop shortcuts, bundled
+  Tesseract 5.4 with `eng`/`mya`/`osd`, and `LICENSE`/`THIRD_PARTY_NOTICES.md`.
+- A data folder that matches the browser build's folder, so existing projects
+  survive the upgrade; uninstalling keeps projects and backups.
+- Build tooling (`scripts/build-desktop.mjs`) with cached downloads and
+  `--skip-web`/`--skip-backend`/`--skip-tesseract`.
 
-- Full accessibility, responsiveness and performance pass.
-- Installation, upgrade and recovery documentation.
-- Security review, dependency audit, backup/restore drill.
-- Release notes and versioned migrations.
+**Out of scope for 1.0:** PWA install, camera import, mobile layouts and device
+pairing. The desktop window is the supported form.
+
+## Phase 11 - Final QA and production release (in progress)
+
+**Delivered**
+
+- Version 1.0.0 across packages, health endpoint and interface; `CHANGELOG.md`.
+- AGPL-3.0 `LICENSE` and a complete `THIRD_PARTY_NOTICES.md`.
+- Measured OCR baseline on committed synthetic English/Burmese/mixed pages,
+  with the page-segmentation finding and `docs/ocr-benchmark.md`.
+- Installed-application drills: install, launch, OCR, four export formats,
+  vault backup and restore with an MD5 check, clean shutdown, uninstall with
+  data retention, and reinstall over existing data.
+- Performance drill on the installed build (24-page import, page OCR, 168k
+  character save, DOCX/PDF export, memory sampling).
+- Security drill: token enforcement, path traversal, zip slip, encrypted
+  backup password handling, secret scan and dependency audit.
+- Contrast audit with an automated token-contrast test.
+
+**Remaining:** redacted real-scan OCR corpus, screen-reader and keyboard-only
+testing, sustained-load and cancellation measurement, an automated end-to-end
+desktop smoke suite, and macOS/Linux packaging.
 
 ---
 
@@ -772,8 +796,9 @@ colour and accent semantics) and a bundled offline LaTeX typesetter.
 
 - **Burmese OCR is hard.** Fonts, diacritic order and Zawgyi legacy text require
   careful benchmarking. No conversion is ever automatic.
-- **Offline processing is bounded by hardware.** Browser-only PWA builds cannot
-  run arbitrary Python/PyTorch stacks; capabilities must be reported honestly.
+- **Offline processing is bounded by hardware.** The desktop build bundles
+  Tesseract but no PyTorch-scale models; capabilities are reported at runtime
+  instead of being implied.
 - **Large documents need streaming.** Imports stream uploads and PDFs are rendered
   one page at a time as background jobs with progress and cancellation. Cancellation
   is cooperative: it is checked between files and PDF pages, so one very large page
