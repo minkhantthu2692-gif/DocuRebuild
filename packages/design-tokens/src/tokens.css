@@ -30,16 +30,16 @@
   --accent: 240 34% 94%;
   --accent-foreground: 231 32% 16%;
 
-  --destructive: 0 72% 51%;
+  --destructive: 0 72% 43%;
   --destructive-foreground: 0 0% 100%;
 
-  --success: 152 60% 36%;
+  --success: 152 60% 28%;
   --success-foreground: 0 0% 100%;
 
-  --warning: 32 92% 46%;
+  --warning: 32 92% 30%;
   --warning-foreground: 0 0% 100%;
 
-  --info: 210 88% 48%;
+  --info: 210 88% 44%;
   --info-foreground: 0 0% 100%;
 
   --border: 235 24% 89%;
@@ -132,7 +132,7 @@
   --popover: 232 24% 12%;
   --popover-foreground: 230 30% 94%;
 
-  --primary: 245 85% 67%;
+  --primary: 245 85% 70%;
   --primary-foreground: 245 60% 10%;
 
   --secondary: 232 18% 17%;
@@ -175,7 +175,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   Accent presets — selected in Settings > Appearance.
+   Accent presets - selected in Settings > Appearance.
    -------------------------------------------------------------------------- */
 :root[data-accent="indigo"] {
   --primary: 245 72% 58%;
@@ -184,19 +184,19 @@
   --primary: 262 80% 61%;
 }
 :root[data-accent="blue"] {
-  --primary: 216 88% 55%;
+  --primary: 216 88% 50%;
 }
 :root[data-accent="teal"] {
-  --primary: 174 72% 36%;
+  --primary: 174 72% 28%;
 }
 :root[data-accent="emerald"] {
-  --primary: 156 64% 37%;
+  --primary: 156 64% 31%;
 }
 :root[data-accent="amber"] {
-  --primary: 32 92% 45%;
+  --primary: 32 92% 34%;
 }
 :root[data-accent="rose"] {
-  --primary: 346 78% 56%;
+  --primary: 346 78% 48%;
 }
 
 /* Accent preview swatches for Settings (independent of the active accent). */
@@ -211,19 +211,19 @@
   --swatch: 262 80% 61%;
 }
 .accent-swatch[data-swatch="blue"] {
-  --swatch: 216 88% 55%;
+  --swatch: 216 88% 50%;
 }
 .accent-swatch[data-swatch="teal"] {
-  --swatch: 174 72% 36%;
+  --swatch: 174 72% 28%;
 }
 .accent-swatch[data-swatch="emerald"] {
-  --swatch: 156 64% 37%;
+  --swatch: 156 64% 31%;
 }
 .accent-swatch[data-swatch="amber"] {
-  --swatch: 32 92% 45%;
+  --swatch: 32 92% 34%;
 }
 .accent-swatch[data-swatch="rose"] {
-  --swatch: 346 78% 56%;
+  --swatch: 346 78% 48%;
 }
 
 .dark[data-accent="indigo"] {
