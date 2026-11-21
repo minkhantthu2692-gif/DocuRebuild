@@ -404,6 +404,12 @@
     "confirm": "Send paid request"
   },
   "ocr": {
+    "layout": "Page layout",
+    "layoutAuto": "Automatic",
+    "layoutColumn": "Single column",
+    "layoutBlock": "Single block",
+    "layoutSparse": "Sparse text",
+    "layoutHint": "Burmese pages use sparse text automatically; change the layout if a page needs something else.",
     "open": "Extract text",
     "title": "Extract text from page {{page}}",
     "description": "Text is extracted on this device. Results are proposals and must be reviewed.",
@@ -947,8 +953,7 @@
     "expandLeft": "Show source panel",
     "collapseRight": "Hide document panel",
     "expandRight": "Show document panel",
-    "resize": "Resize panels",
-    "switch": "Switch workspace panel"
+    "resize": "Resize panels"
   },
   "autosave": "Autosave on",
   "phaseNote": "This workspace grows phase by phase. Tools appear only when they actually work."

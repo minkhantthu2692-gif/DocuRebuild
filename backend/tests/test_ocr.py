@@ -420,3 +420,61 @@ def test_detect_engine_reports_not_configured_without_candidates(
     assert status["available"] is False
     assert status["reason"] == "not_configured"
     assert status["command"] == "tesseract"
+
+def test_ocr_capabilities_reports_page_segmentation_modes(
+    client: TestClient, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(
+        ocr,
+        "detect_engine",
+        lambda force=False: {
+            **_engine_available(),
+            "page_segmentation_mode": 11,
+            "page_segmentation_modes": [3, 4, 6, 11],
+        },
+    )
+    body = client.get("/api/ocr/capabilities").json()
+
+    assert body["page_segmentation_mode"] == 11
+    assert body["page_segmentation_modes"] == [3, 4, 6, 11]
+
+
+def test_ocr_rejects_unsupported_segmentation_mode(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    page = upload_pages(client, project["id"], ["ocr-layout.png"])[0]
+    response = client.post(
+        f"/api/projects/{project['id']}/pages/{page['id']}/ocr",
+        json={"languages": ["eng"], "page_segmentation_mode": 7},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "ocr_invalid_segmentation_mode"
+
+
+def test_segmentation_mode_uses_configured_default(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from app.core.errors import AppError
+    from app.services import ocr
+
+    monkeypatch.setattr(
+        ocr,
+        "get_settings",
+        lambda: SimpleNamespace(ocr_page_segmentation_mode=11),
+    )
+
+    assert ocr._resolve_segmentation_mode(None) == 11
+    assert ocr._resolve_segmentation_mode(6) == 6
+
+    try:
+        ocr._resolve_segmentation_mode(12)
+    except AppError as error:
+        assert error.code == "ocr_invalid_segmentation_mode"
+    else:  # pragma: no cover - the call must be rejected.
+        raise AssertionError("An unsupported mode must be rejected.")

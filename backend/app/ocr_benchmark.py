@@ -35,9 +35,12 @@ punctuation and Burmese combining marks are kept as they are, and no
 Zawgyi/Unicode conversion is performed: the benchmark measures what the engine
 produced, not what a conversion could have produced.
 
-Run it with ``python -m app.ocr_benchmark <fixtures-folder>``. Exit codes are 0
-when every case was scored, 1 when at least one case could not be scored and 2
-for an invalid manifest or argument.
+Run it with ``python -m app.ocr_benchmark <fixtures-folder>``. Add
+``--segmentation-mode`` to score a specific Tesseract page layout mode (3
+automatic, 4 single column, 6 single block, 11 sparse text) instead of the
+configured default, which is how the Burmese page setting is evaluated. Exit
+codes are 0 when every case was scored, 1 when at least one case could not be
+scored and 2 for an invalid manifest or argument.
 """
 
 from __future__ import annotations
@@ -481,6 +484,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Print the full report as JSON instead of a table.",
     )
+    parser.add_argument(
+        "--segmentation-mode",
+        type=int,
+        choices=ocr_service.PAGE_SEGMENTATION_MODES,
+        default=None,
+        metavar="MODE",
+        help=(
+            "Tesseract page segmentation mode (3 automatic, 4 single column, "
+            "6 single block, 11 sparse text). Defaults to the configured value."
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -501,7 +515,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         wanted = set(args.names)
         cases = [case for case in cases if case.name in wanted]
 
-    report = run_cases(cases)
+    if args.segmentation_mode is None:
+        report = run_cases(cases)
+    else:
+        mode = args.segmentation_mode
+
+        def runner(path: Path, languages: list[str]) -> dict[str, Any]:
+            return ocr_service.extract_image_text(
+                path, languages, page_segmentation_mode=mode
+            )
+
+        report = run_cases(cases, ocr_runner=runner)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:

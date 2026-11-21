@@ -1,0 +1,10 @@
+DocuRebuild turns scans, photographs and PDF pages into structured documents.
+Every imported page keeps its original file unchanged on this device.
+Text is extracted locally and stored as a proposal for human review.
+Tables can be reconstructed from word boxes or from drawn cell borders.
+Figures keep their source crop, caption and an optional reference number.
+Equations are typed as LaTeX and rendered offline with KaTeX.
+Exports are written locally as Markdown, plain text, Word or PDF.
+Version history records checkpoints without replacing the original page.
+Project backups are verified before they are offered for download.
+The application does not send documents to a remote service by default.

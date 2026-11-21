@@ -11,12 +11,16 @@ class OcrCapabilitiesOut(BaseModel):
     tessdata_dir: str | None
     languages: list[str]
     preferred_languages: list[str]
+    page_segmentation_mode: int = 3
+    page_segmentation_modes: list[int] = Field(default_factory=lambda: [3, 4, 6, 11])
     reason: str | None = None
     setup_hint: str | None = None
 
 
 class OcrRunRequest(BaseModel):
     languages: list[str] = Field(default_factory=lambda: ["eng"])
+    # Optional override of the configured page segmentation mode (3, 4, 6, 11).
+    page_segmentation_mode: int | None = None
 
 
 class OcrBlockUpdate(BaseModel):

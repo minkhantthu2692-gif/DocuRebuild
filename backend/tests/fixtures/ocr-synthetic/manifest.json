@@ -1,0 +1,26 @@
+{
+  "description": "Synthetic, deterministic pages rendered with Windows GDI+ text shaping. They exercise the OCR pipeline and language data; they are not a substitute for a redacted real-document benchmark.",
+  "cases": [
+    {
+      "name": "english-page",
+      "category": "english",
+      "languages": ["eng"],
+      "image": "english/page-1.png",
+      "reference": "english/page-1.txt"
+    },
+    {
+      "name": "burmese-page",
+      "category": "burmese",
+      "languages": ["mya"],
+      "image": "burmese/page-1.png",
+      "reference": "burmese/page-1.txt"
+    },
+    {
+      "name": "mixed-page",
+      "category": "mixed",
+      "languages": ["eng", "mya"],
+      "image": "mixed/page-1.png",
+      "reference": "mixed/page-1.txt"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+[
+  {
+    "name": "english-page",
+    "category": "english",
+    "languages": ["eng"],
+    "image": "english/page-1.png",
+    "reference": "english/page-1.txt",
+    "lines": [
+      { "text": "DocuRebuild turns scans, photographs and PDF pages into structured documents.", "font": "Arial", "size": 48 },
+      { "text": "Every imported page keeps its original file unchanged on this device.", "font": "Arial", "size": 48 },
+      { "text": "Text is extracted locally and stored as a proposal for human review.", "font": "Arial", "size": 48 },
+      { "text": "Tables can be reconstructed from word boxes or from drawn cell borders.", "font": "Arial", "size": 48 },
+      { "text": "Figures keep their source crop, caption and an optional reference number.", "font": "Arial", "size": 48 },
+      { "text": "Equations are typed as LaTeX and rendered offline with KaTeX.", "font": "Arial", "size": 48 },
+      { "text": "Exports are written locally as Markdown, plain text, Word or PDF.", "font": "Arial", "size": 48 },
+      { "text": "Version history records checkpoints without replacing the original page.", "font": "Arial", "size": 48 },
+      { "text": "Project backups are verified before they are offered for download.", "font": "Arial", "size": 48 },
+      { "text": "The application does not send documents to a remote service by default.", "font": "Arial", "size": 48 }
+    ]
+  },
+  {
+    "name": "burmese-page",
+    "category": "burmese",
+    "languages": ["mya"],
+    "image": "burmese/page-1.png",
+    "reference": "burmese/page-1.txt",
+    "lines": [
+      { "text": "ဒိုကျူရီဘီလ်သည် စာမျက်နှာများကို တိကျစွာ ပြန်လည်တည်ဆောက်သည်။", "font": "Myanmar Text", "size": 54 },
+      { "text": "မူရင်းအချက်အလက်များကို မဖျက်ဆီးဘဲ ထိန်းသိမ်းထားသည်။", "font": "Myanmar Text", "size": 54 },
+      { "text": "ဒေသတွင်းစက်တွင်သာ စာသားများကို ဖတ်ရှုသည်။", "font": "Myanmar Text", "size": 54 },
+      { "text": "အင်္ဂလိပ်နှင့် မြန်မာဘာသာဖြင့် အလုပ်လုပ်နိုင်သည်။", "font": "Myanmar Text", "size": 54 },
+      { "text": "စာမျက်နှာတစ်ခုချင်းစီကို သီးခြားစစ်ဆေးနိုင်သည်။", "font": "Myanmar Text", "size": 54 },
+      { "text": "မသေချာသောစာသားကို အသုံးပြုသူက အတည်ပြုရသည်။", "font": "Myanmar Text", "size": 54 },
+      { "text": "မူရင်းပုံများကို ဘယ်တော့မှ ပြောင်းလဲမည်မဟုတ်ပါ။", "font": "Myanmar Text", "size": 54 },
+      { "text": "ဇယားများနှင့် ညီမျှခြင်းများကို ပြန်လည်တည်ဆောက်နိုင်သည်။", "font": "Myanmar Text", "size": 54 },
+      { "text": "ဒေတာအားလုံးကို ဒေသတွင်းတွင်သာ သိမ်းဆည်းထားသည်။", "font": "Myanmar Text", "size": 54 },
+      { "text": "အရည်အသွေးနှင့် တိကျမှုကို ဦးစားပေးသည်။", "font": "Myanmar Text", "size": 54 }
+    ]
+  },
+  {
+    "name": "mixed-page",
+    "category": "mixed",
+    "languages": ["eng", "mya"],
+    "image": "mixed/page-1.png",
+    "reference": "mixed/page-1.txt",
+    "lines": [
+      { "text": "DocuRebuild", "font": "Arial", "size": 64 },
+      { "text": "ဒေသတွင်း စာရွက်စာတမ်း ပြန်လည်တည်ဆောက်မှု", "font": "Myanmar Text", "size": 54 },
+      { "text": "Local-first reconstruction workspace.", "font": "Arial", "size": 46 },
+      { "text": "စာမျက်နှာများကို locally ဖတ်ရှုပြီး ပြန်လည်တည်ဆောက်သည်။", "font": "Myanmar Text", "size": 54 },
+      { "text": "Review every proposal before inserting it.", "font": "Arial", "size": 46 },
+      { "text": "မူရင်းအချက်အလက်များကို မပြောင်းလဲပါ။", "font": "Myanmar Text", "size": 54 }
+    ]
+  }
+]

@@ -46,6 +46,7 @@ import {
   buildLanguageOptions,
   confidenceVariant,
   languageLabel,
+  preferredSegmentationMode,
 } from "@/lib/ocr-display";
 import { cn } from "@/lib/utils";
 import { PageTablesDialog } from "./page-tables-dialog";
@@ -92,6 +93,8 @@ export function OcrDialog({
   const paidAi = usePaidAiGuard();
 
   const [languageValue, setLanguageValue] = useState("eng");
+  const [segmentation, setSegmentation] = useState("3");
+  const layoutChosen = useRef(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [includeNote, setIncludeNote] = useState(true);
@@ -110,6 +113,16 @@ export function OcrDialog({
     () => buildLanguageOptions(capabilities?.languages, t),
     [capabilities, t],
   );
+
+  // Pages in a script whose line spacing confuses automatic layout analysis
+  // (Burmese) get sparse-text segmentation. The choice is visible in the
+  // selector, and any manual choice stops this from overriding it.
+  useEffect(() => {
+    if (!capabilities || layoutChosen.current) return;
+    setSegmentation(
+      String(preferredSegmentationMode(languageValue, capabilities.page_segmentation_mode)),
+    );
+  }, [capabilities, languageValue]);
 
   useEffect(() => {
     if (!open) {
@@ -191,7 +204,11 @@ export function OcrDialog({
     if (!page || !capabilities?.available) return;
     const languages = languageValue.split("+").filter(Boolean);
     startOcr.mutate(
-      { pageId: page.id, languages },
+      {
+        pageId: page.id,
+        languages,
+        pageSegmentationMode: Number(segmentation),
+      },
       { onError: (error) => toast.error(errorMessage(error)) },
     );
   };
@@ -358,6 +375,29 @@ export function OcrDialog({
                   </SelectContent>
                 </Select>
               </div>
+              <div className="min-w-0 flex-1 space-y-1">
+                <label className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("ocr.layout")}
+                </label>
+                <Select
+                  value={segmentation}
+                  onValueChange={(value) => {
+                    layoutChosen.current = true;
+                    setSegmentation(value);
+                  }}
+                  disabled={busy}
+                >
+                  <SelectTrigger className="h-control" aria-label={t("ocr.layout")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="3">{t("ocr.layoutAuto")}</SelectItem>
+                    <SelectItem value="4">{t("ocr.layoutColumn")}</SelectItem>
+                    <SelectItem value="6">{t("ocr.layoutBlock")}</SelectItem>
+                    <SelectItem value="11">{t("ocr.layoutSparse")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex shrink-0 flex-col items-stretch gap-1 sm:items-end">
                 <Button
                   size="sm"
@@ -377,6 +417,8 @@ export function OcrDialog({
                 </span>
               </div>
             </div>
+
+                <p className="text-2xs text-muted-foreground">{t("ocr.layoutHint")}</p>
 
                 <div className="flex gap-2 rounded-lg border border-border/60 bg-background/50 p-3 text-2xs leading-relaxed text-muted-foreground">
                   <CircleAlert className="mt-0.5 size-icon-sm shrink-0 text-warning" aria-hidden="true" />

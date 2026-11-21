@@ -34,8 +34,15 @@ export function useLatestOcr(projectId: string, pageId: string | null, enabled: 
 export function useStartOcr(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ pageId, languages }: { pageId: string; languages: string[] }) =>
-      api.startOcr(projectId, pageId, languages),
+    mutationFn: ({
+      pageId,
+      languages,
+      pageSegmentationMode,
+    }: {
+      pageId: string;
+      languages: string[];
+      pageSegmentationMode?: number;
+    }) => api.startOcr(projectId, pageId, languages, pageSegmentationMode),
     onSuccess: (run) => {
       queryClient.setQueryData(latestKey(projectId, run.page_id), run);
     },

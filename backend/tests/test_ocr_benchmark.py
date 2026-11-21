@@ -491,3 +491,48 @@ def test_main_returns_one_when_a_case_could_not_be_scored(
     output = capsys.readouterr().out
     assert "No local OCR engine is available." in output
     assert "could not be scored" in output
+
+def test_main_passes_segmentation_mode_to_the_engine(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    folder = tmp_path / "fixtures"
+    _write(folder / "page.png", "image bytes")
+    _write(folder / "page.txt", "hello world")
+    _manifest(
+        folder,
+        {
+            "cases": [
+                {
+                    "name": "page",
+                    "image": "page.png",
+                    "reference": "page.txt",
+                }
+            ]
+        },
+    )
+
+    calls: list[int | None] = []
+
+    def extract(
+        path: Path,
+        languages: list[str],
+        *,
+        page_segmentation_mode: int | None = None,
+    ) -> dict:
+        calls.append(page_segmentation_mode)
+        return {"text": "hello world", "engine": "tesseract", "confidence": 90.0}
+
+    monkeypatch.setattr(ocr_benchmark.ocr_service, "extract_image_text", extract)
+
+    assert main([str(folder), "--json", "--segmentation-mode", "11"]) == 0
+    capsys.readouterr()
+    assert calls == [11]
+
+
+def test_main_rejects_an_unknown_segmentation_mode(tmp_path: Path) -> None:
+    _stored_cases(tmp_path)
+
+    with pytest.raises(SystemExit) as error:
+        main([str(tmp_path / "fixtures"), "--segmentation-mode", "12"])
+
+    assert error.value.code == 2

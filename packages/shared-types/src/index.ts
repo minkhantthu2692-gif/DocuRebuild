@@ -339,6 +339,8 @@ export interface OcrCapabilities {
   tessdata_dir: string | null;
   languages: string[];
   preferred_languages: string[];
+  page_segmentation_mode: number;
+  page_segmentation_modes: number[];
   reason: string | null;
   setup_hint: string | null;
 }

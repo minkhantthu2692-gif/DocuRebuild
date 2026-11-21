@@ -44,7 +44,12 @@ def start_page_ocr(
     session: DbSession,
 ) -> dict[str, Any]:
     directory = project_service.ensure_project_storage(project)
-    run = ocr_service.start_ocr(directory, page_id, payload.languages)
+    run = ocr_service.start_ocr(
+        directory,
+        page_id,
+        payload.languages,
+        payload.page_segmentation_mode,
+    )
     touch_project(session, project)
     return run
 

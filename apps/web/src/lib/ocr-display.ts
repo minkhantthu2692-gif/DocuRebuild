@@ -14,6 +14,17 @@ export function languageLabel(code: string, t: (key: string) => string): string 
   return code;
 }
 
+/**
+ * Page layout to preselect for a language combination.
+ *
+ * Tesseract's automatic layout analysis collapses Burmese rows, so a combination
+ * that includes `mya` starts on sparse text (11). The selector shows the value,
+ * and any manual choice stops this preset from overriding it.
+ */
+export function preferredSegmentationMode(value: string, configured: number): number {
+  return value.split("+").includes("mya") ? 11 : configured;
+}
+
 /** Recognition options built from installed engine language data. */
 export function buildLanguageOptions(
   languages: string[] | undefined,

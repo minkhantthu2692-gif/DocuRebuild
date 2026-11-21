@@ -1,0 +1,6 @@
+DocuRebuild
+ဒေသတွင်း စာရွက်စာတမ်း ပြန်လည်တည်ဆောက်မှု
+Local-first reconstruction workspace.
+စာမျက်နှာများကို locally ဖတ်ရှုပြီး ပြန်လည်တည်ဆောက်သည်။
+Review every proposal before inserting it.
+မူရင်းအချက်အလက်များကို မပြောင်းလဲပါ။

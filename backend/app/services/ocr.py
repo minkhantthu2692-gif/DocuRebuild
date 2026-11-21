@@ -29,6 +29,11 @@ logger = logging.getLogger(__name__)
 
 ENGINE_NAME = "tesseract"
 PREFERRED_LANGUAGES = ("eng", "mya")
+# Tesseract page segmentation modes this application offers. Automatic (3) is
+# the general default; sparse text (11) keeps Burmese lines separate when the
+# page's line spacing defeats automatic layout analysis; single block (6) and
+# single column (4) suit crops and simple layouts.
+PAGE_SEGMENTATION_MODES = (3, 4, 6, 11)
 CACHE_TTL_SECONDS = 15.0
 
 _engine_cache: tuple[float, dict[str, Any]] | None = None
@@ -204,6 +209,8 @@ def detect_engine(force: bool = False) -> dict[str, Any]:
         "tessdata_dir": str(settings.tessdata_dir) if settings.tessdata_dir else None,
         "languages": [],
         "preferred_languages": [],
+        "page_segmentation_mode": settings.ocr_page_segmentation_mode,
+        "page_segmentation_modes": list(PAGE_SEGMENTATION_MODES),
         "reason": None,
         "setup_hint": None,
     }
@@ -289,6 +296,23 @@ def _normalise_languages(requested: list[str]) -> list[str]:
     return languages[:4]
 
 
+def _resolve_segmentation_mode(requested: int | None) -> int:
+    """Return a valid Tesseract page segmentation mode for this run.
+
+    An unknown mode is a client mistake, not a reason to fall back silently:
+    the caller asked for a specific layout and should learn it was rejected.
+    """
+    mode = get_settings().ocr_page_segmentation_mode if requested is None else requested
+    if mode not in PAGE_SEGMENTATION_MODES:
+        allowed = ", ".join(str(value) for value in PAGE_SEGMENTATION_MODES)
+        raise AppError(
+            422,
+            "ocr_invalid_segmentation_mode",
+            f"Unsupported page segmentation mode {mode}. Use one of: {allowed}.",
+        )
+    return mode
+
+
 def _get_page(conn, page_id: str):
     row = conn.execute("SELECT * FROM pages WHERE id = ?", (page_id,)).fetchone()
     if row is None:
@@ -333,7 +357,12 @@ def shutdown_ocr_executor() -> None:
         executor.shutdown(wait=False, cancel_futures=True)
 
 
-def start_ocr(project_dir: Path, page_id: str, languages: list[str]) -> dict[str, Any]:
+def start_ocr(
+    project_dir: Path,
+    page_id: str,
+    languages: list[str],
+    page_segmentation_mode: int | None = None,
+) -> dict[str, Any]:
     status = detect_engine()
     if not status.get("available"):
         raise AppError(
@@ -355,6 +384,8 @@ def start_ocr(project_dir: Path, page_id: str, languages: list[str]) -> dict[str
             "ocr_language_unavailable",
             f"OCR language data is not installed: {', '.join(missing)}.",
         )
+
+    segmentation_mode = _resolve_segmentation_mode(page_segmentation_mode)
 
     with project_db(project_dir) as conn:
         page = _get_page(conn, page_id)
@@ -388,11 +419,19 @@ def start_ocr(project_dir: Path, page_id: str, languages: list[str]) -> dict[str
             "run_id": run_id,
             "page_id": page_id,
             "languages": "+".join(requested),
+            "page_segmentation_mode": segmentation_mode,
         },
     )
 
     try:
-        _get_executor().submit(_execute_ocr_run, run_id, project_dir, page_id, requested)
+        _get_executor().submit(
+            _execute_ocr_run,
+            run_id,
+            project_dir,
+            page_id,
+            requested,
+            segmentation_mode,
+        )
     except RuntimeError:
         _mark_failed(
             project_dir,
@@ -427,7 +466,11 @@ def _mark_failed(project_dir: Path, run_id: str, message: str, code: str) -> Non
 
 
 def _execute_ocr_run(
-    run_id: str, project_dir: Path, page_id: str, languages: list[str]
+    run_id: str,
+    project_dir: Path,
+    page_id: str,
+    languages: list[str],
+    page_segmentation_mode: int | None = None,
 ) -> None:
     try:
         with project_db(project_dir) as conn:
@@ -435,7 +478,7 @@ def _execute_ocr_run(
                 "UPDATE ocr_runs SET status = 'running', updated_at = ? WHERE id = ?",
                 (_now(), run_id),
             )
-        result = _perform_ocr(project_dir, page_id, languages)
+        result = _perform_ocr(project_dir, page_id, languages, page_segmentation_mode)
         with project_db(project_dir) as conn:
             conn.execute("DELETE FROM ocr_blocks WHERE run_id = ?", (run_id,))
             now = _now()
@@ -737,7 +780,10 @@ def _parse_tsv(
 
 
 def _perform_ocr(
-    project_dir: Path, page_id: str, languages: list[str]
+    project_dir: Path,
+    page_id: str,
+    languages: list[str],
+    page_segmentation_mode: int | None = None,
 ) -> dict[str, Any]:
     settings = get_settings()
     status = detect_engine()
@@ -763,7 +809,7 @@ def _perform_ocr(
                 "-l",
                 "+".join(languages),
                 "--psm",
-                "3",
+                str(_resolve_segmentation_mode(page_segmentation_mode)),
                 "-c",
                 "tessedit_create_tsv=1",
             ],
@@ -794,7 +840,9 @@ def _perform_ocr(
 
 
 def extract_image_content(
-    image_path: Path, languages: list[str]
+    image_path: Path,
+    languages: list[str],
+    page_segmentation_mode: int | None = None,
 ) -> dict[str, Any]:
     """Run the local engine on a standalone image and keep its word boxes.
 
@@ -840,7 +888,7 @@ def extract_image_content(
                 "-l",
                 "+".join(requested),
                 "--psm",
-                "3",
+                str(_resolve_segmentation_mode(page_segmentation_mode)),
                 "-c",
                 "tessedit_create_tsv=1",
             ],
@@ -871,13 +919,17 @@ def extract_image_content(
     }
 
 
-def extract_image_text(image_path: Path, languages: list[str]) -> dict[str, Any]:
+def extract_image_text(
+    image_path: Path,
+    languages: list[str],
+    page_segmentation_mode: int | None = None,
+) -> dict[str, Any]:
     """Read a standalone image, such as an extracted crop, as plain text.
 
     The caller stores the result as an unverified proposal. Word boxes are
     dropped here; use :func:`extract_image_content` when they are needed.
     """
-    content = extract_image_content(image_path, languages)
+    content = extract_image_content(image_path, languages, page_segmentation_mode)
     return {
         "engine": content["engine"],
         "engine_version": content["engine_version"],
