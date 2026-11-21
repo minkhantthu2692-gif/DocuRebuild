@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 
 const meta: AppMeta = {
   name: "DocuRebuild",
-  version: "0.1.0",
+  version: "1.0.0",
   capabilities: {
     import_images: true,
     import_pdf: true,

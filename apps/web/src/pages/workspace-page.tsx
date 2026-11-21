@@ -4,8 +4,6 @@ import {
   ArrowLeft,
   CircleAlert,
   CopyPlus,
-  FileText,
-  Image as ImageIcon,
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
@@ -38,11 +36,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Separator } from "@/components/ui/separator";
 import { CenteredSpinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useIsDesktop } from "@/hooks/use-breakpoints";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useOpenProject, useProject } from "@/hooks/use-projects";
 import {
@@ -54,16 +50,12 @@ import {
   writeWorkspaceLayout,
   type WorkspaceLayout,
 } from "@/lib/workspace-layout";
-import { cn } from "@/lib/utils";
-
-type MobilePanel = "source" | "document";
 
 export function WorkspacePage() {
   const { projectId = "" } = useParams<{ projectId: string }>();
   const { t } = useTranslation("workspace");
   const { t: tCommon } = useTranslation("common");
   const navigate = useNavigate();
-  const isDesktop = useIsDesktop();
   const errorMessage = useApiErrorMessage();
 
   const projectQuery = useProject(projectId);
@@ -75,7 +67,6 @@ export function WorkspacePage() {
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
   const containerRef = useRef<HTMLDivElement>(null);
-  const [mobilePanel, setMobilePanel] = useState<MobilePanel>("source");
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
@@ -150,8 +141,6 @@ export function WorkspacePage() {
   }
 
   const bothPanelsVisible = layout.sourceVisible && layout.editorVisible;
-  const sourceRendered = isDesktop ? layout.sourceVisible : true;
-  const editorRendered = isDesktop ? layout.editorVisible : true;
 
   return (
     <WorkspaceActionsProvider>
@@ -264,42 +253,21 @@ export function WorkspacePage() {
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center border-b border-border/60 bg-background/30 px-3 py-1.5 lg:hidden">
-        <SegmentedControl
-          value={mobilePanel}
-          onValueChange={(value) => setMobilePanel(value as MobilePanel)}
-          label={t("panels.switch")}
-          className="max-w-xs"
-          options={[
-            { value: "source", label: t("source"), icon: <ImageIcon /> },
-            { value: "document", label: t("document"), icon: <FileText /> },
-          ]}
-        />
-      </div>
-
-      <div ref={containerRef} className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {sourceRendered ? (
+      <div ref={containerRef} className="flex min-h-0 flex-1 flex-row">
+        {layout.sourceVisible ? (
           <div
-            className={cn(
-              "min-h-0 min-w-0 flex-1 lg:flex-none",
-              mobilePanel === "source" ? "flex" : "hidden",
-              "lg:flex",
-            )}
+            className="flex min-h-0 min-w-0 flex-1 lg:flex-none"
             style={
-              isDesktop && bothPanelsVisible
+              bothPanelsVisible
                 ? { width: `${Math.round(layout.split * 100)}%` }
                 : undefined
             }
           >
-            <SourcePanel
-              projectId={projectId}
-              className="w-full"
-              onContentInserted={() => setMobilePanel("document")}
-            />
+            <SourcePanel projectId={projectId} className="w-full" />
           </div>
         ) : null}
 
-        {isDesktop && bothPanelsVisible ? (
+        {bothPanelsVisible ? (
           <div
             role="separator"
             aria-orientation="vertical"
@@ -324,7 +292,7 @@ export function WorkspacePage() {
                 updateLayout({ split: MAX_SPLIT });
               }
             }}
-            className="group hidden w-1.5 shrink-0 cursor-col-resize touch-none items-center justify-center bg-border/30 transition-colors hover:bg-primary/25 focus-visible:bg-primary/25 focus-visible:outline-none lg:flex"
+            className="group flex w-1.5 shrink-0 cursor-col-resize touch-none items-center justify-center bg-border/30 transition-colors hover:bg-primary/25 focus-visible:bg-primary/25 focus-visible:outline-none"
           >
             <span
               className="h-8 w-0.5 rounded-pill bg-border transition-colors group-hover:bg-primary/60"
@@ -333,14 +301,8 @@ export function WorkspacePage() {
           </div>
         ) : null}
 
-        {editorRendered ? (
-          <div
-            className={cn(
-              "min-h-0 min-w-0 flex-1",
-              mobilePanel === "document" ? "flex" : "hidden",
-              "lg:flex",
-            )}
-          >
+        {layout.editorVisible ? (
+          <div className="flex min-h-0 min-w-0 flex-1">
             <EditorPanel projectId={projectId} className="w-full" />
           </div>
         ) : null}
