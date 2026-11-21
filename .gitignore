@@ -13,6 +13,10 @@ dist-ssr/
 build/
 out/
 *.tsbuildinfo
+# The desktop shell keeps its installer artwork in a build folder that must be
+# committed; only generated build output is ignored.
+!apps/desktop/build/
+!apps/desktop/build/*
 
 # Local environment / secrets
 .env

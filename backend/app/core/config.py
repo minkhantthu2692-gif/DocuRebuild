@@ -37,6 +37,14 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
 
+    # Desktop shell mode. When set, every /api request must present this token.
+    # It is generated per launch by the desktop shell and never written to disk.
+    api_token: str | None = None
+    # Folder containing the built web client. The desktop shell sets this so the
+    # local API and the interface share one origin and no CORS exception is
+    # needed. It stays unset for the Vite development server.
+    web_dist: Path | None = None
+
     max_import_mb: int = 200
     max_upload_batch: int = 50
     # Project backups contain every source image, so they can be much larger than
@@ -52,6 +60,10 @@ class Settings(BaseSettings):
     tesseract_cmd: str = "tesseract"
     tessdata_dir: Path | None = None
     ocr_default_languages: list[str] = ["eng"]
+    # Tesseract page segmentation mode used when a run does not choose one.
+    # 3 is automatic layout analysis; sparse text (11) is the reliable choice
+    # for Burmese pages, whose line spacing confuses automatic segmentation.
+    ocr_page_segmentation_mode: int = 3
     ocr_timeout_seconds: int = 180
     ocr_max_image_edge: int = 4000
     ocr_max_workers: int = 2
@@ -100,5 +112,7 @@ def get_settings() -> Settings:
     settings.data_dir = settings.data_dir.expanduser().resolve()
     if settings.tessdata_dir is not None:
         settings.tessdata_dir = settings.tessdata_dir.expanduser().resolve()
+    if settings.web_dist is not None:
+        settings.web_dist = settings.web_dist.expanduser().resolve()
     settings.ensure_layout()
     return settings

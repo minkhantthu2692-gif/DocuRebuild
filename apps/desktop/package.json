@@ -1,0 +1,80 @@
+{
+  "name": "@docurebuild/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DocuRebuild desktop shell with a bundled local backend",
+  "author": "DocuRebuild",
+  "license": "AGPL-3.0-or-later",
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "45.4.1",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.docurebuild.app",
+    "productName": "DocuRebuild",
+    "copyright": "Copyright (C) 2026 DocuRebuild contributors",
+    "directories": {
+      "output": "../../dist/desktop-installer",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../../dist/desktop/backend",
+        "to": "backend"
+      },
+      {
+        "from": "../../dist/desktop/web",
+        "to": "web"
+      },
+      {
+        "from": "../../dist/desktop/tesseract",
+        "to": "tesseract"
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      },
+      {
+        "from": "../../LICENSE",
+        "to": "LICENSE"
+      },
+      {
+        "from": "../../THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "DocuRebuild-${version}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DocuRebuild",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
+    }
+  }
+}

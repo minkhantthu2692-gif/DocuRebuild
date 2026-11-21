@@ -724,7 +724,7 @@ export function SettingsPage() {
                 <span className="text-muted-foreground">
                   {t("about.version")}:{" "}
                   <span className="font-mono text-foreground">
-                    v{metaQuery.data?.version ?? "0.1.0"}
+                    v{metaQuery.data?.version ?? "1.0.0"}
                   </span>
                 </span>
                 {metaQuery.data?.repository_url ? (

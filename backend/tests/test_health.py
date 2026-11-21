@@ -18,12 +18,14 @@ def _unavailable_engine() -> dict:
 
 
 def test_health_reports_local_database(client: TestClient) -> None:
+    from app import __version__
+
     response = client.get("/api/health")
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
     assert body["database"] == "ok"
-    assert body["version"] == "0.1.0"
+    assert body["version"] == __version__
     assert body["projects"] == 0
 
 

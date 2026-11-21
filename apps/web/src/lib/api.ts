@@ -76,6 +76,16 @@ import { filenameFromDisposition } from "@/lib/download";
 
 const API_BASE = "/api";
 
+/**
+ * The desktop shell opens the client from the local API origin and injects a
+ * per-launch token through its preload bridge. In browser development mode the
+ * bridge is absent and the request stays a same-origin call with no token.
+ */
+function desktopAuthHeaders(): Record<string, string> {
+  const token = window.docurebuild?.apiToken;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
@@ -111,6 +121,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: {
         Accept: "application/json",
         ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+        ...desktopAuthHeaders(),
         ...init?.headers,
       },
     });
@@ -139,6 +150,7 @@ async function download(
       ...init,
       headers: {
         ...(typeof init?.body === "string" ? { "Content-Type": "application/json" } : {}),
+        ...desktopAuthHeaders(),
         ...init?.headers,
       },
     });
@@ -358,10 +370,18 @@ export const api = {
     request<OcrCapabilities>(`/ocr/capabilities${refresh ? "?refresh=true" : ""}`),
   getLatestOcr: (projectId: string, pageId: string) =>
     request<OcrRun | null>(`/projects/${projectId}/pages/${pageId}/ocr`),
-  startOcr: (projectId: string, pageId: string, languages: string[]) =>
+  startOcr: (
+    projectId: string,
+    pageId: string,
+    languages: string[],
+    pageSegmentationMode?: number,
+  ) =>
     request<OcrRun>(`/projects/${projectId}/pages/${pageId}/ocr`, {
       method: "POST",
-      body: JSON.stringify({ languages }),
+      body: JSON.stringify({
+        languages,
+        page_segmentation_mode: pageSegmentationMode ?? null,
+      }),
     }),
   getOcrRun: (projectId: string, runId: string) =>
     request<OcrRun>(`/projects/${projectId}/ocr/runs/${runId}`),

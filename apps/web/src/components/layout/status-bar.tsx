@@ -33,7 +33,7 @@ export function StatusBar() {
       <span className="hidden text-border sm:inline" aria-hidden="true">
         /
       </span>
-      <span className="hidden font-mono sm:inline">v{meta.data?.version ?? "0.1.0"}</span>
+      <span className="hidden font-mono sm:inline">v{meta.data?.version ?? "1.0.0"}</span>
 
       <div className="ml-auto flex items-center gap-1.5">
         <Badge variant="outline" className="hidden border-transparent bg-background/60 sm:inline-flex">

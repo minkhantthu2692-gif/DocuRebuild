@@ -1,6 +1,6 @@
 {
   "name": "docurebuild",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Local-first AI-powered document reconstruction workspace",
   "workspaces": [
@@ -16,7 +16,10 @@
     "test": "npm run test:web && npm run test:api",
     "test:web": "npm run test -w @docurebuild/web",
     "test:api": "python -m pytest backend/tests -q",
-    "lint": "npm run lint -w @docurebuild/web"
+    "lint": "npm run lint -w @docurebuild/web",
+    "desktop:build": "node scripts/build-desktop.mjs",
+    "desktop:dist": "npm run desktop:build && npm run dist -w @docurebuild/desktop",
+    "desktop:start": "npm run start -w @docurebuild/desktop"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
