@@ -314,6 +314,9 @@ secret scan.
   reports `1.0.0` in the status bar and passes the 12-point UI check with no
   console errors; the packaged sidecar passed a 61-check drill covering auth,
   OCR, export, backup/restore and vault restore.
+- Fresh-clone verification: a shallow clone of `db44b44` ran `npm ci`, 290 web
+  tests in 47 files, typecheck, lint, the production build, and 414 backend tests
+  in 241 s, all clean, on 22 November 2026.
 
 ## 14. Handover checklist for the next agent
 

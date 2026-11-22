@@ -563,6 +563,7 @@ copied into the installed application by electron-builder's `extraResources`.
 | Reinstall over existing data | Reinstalling from the same installer exits 0 in 25 s, recreates both shortcuts and the registry entry, and the launched app reads the same 8 projects |
 | Installed footprint | 643 MB on disk (Electron 356 MB, Tesseract 178 MB, Python sidecar 105 MB, web client 3 MB). Size is the cost of bundling an offline OCR engine and a Python runtime |
 | Version consistency | 1.0.0 in the root/web/desktop packages, the backend `__version__`, the health endpoint, the installer registry entry and the UI status bar |
+| Fresh clone | A shallow clone of `db44b44` ran `npm ci`, 290 web tests, typecheck, lint, the production build and 414 backend tests without errors |
 
 ### 13.7 Desktop QA: performance and memory
 
