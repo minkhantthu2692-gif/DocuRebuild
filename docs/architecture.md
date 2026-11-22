@@ -51,6 +51,18 @@ DocuRebuild.exe (Electron)
 - The static payload lives in `dist/desktop` (web, backend, tesseract) and is
   produced by `scripts/build-desktop.mjs`; electron-builder wraps it as a per-user
   NSIS installer.
+- Only one instance runs. A second launch focuses the existing window. Window
+  bounds and the maximized state are stored in `%APPDATA%\DocuRebuild`; the data
+  directory stays in `%LOCALAPPDATA%\DocuRebuild\DocuRebuild`, matching the path
+  used before the desktop shell existed.
+- The window paints a theme-aware background before the SPA loads, so a dark
+  theme does not flash white. A startup timeout, a backend crash after startup or
+  a renderer crash opens an error dialog with the tail of `backend.log` and quits
+  instead of leaving a dead window.
+- The installer is per-user (`oneClick: false`, `allowElevation: false`), creates
+  Start menu and desktop shortcuts, ships `LICENSE` and
+  `THIRD_PARTY_NOTICES.md`, and keeps project data on uninstall
+  (`deleteAppDataOnUninstall: false`).
 
 ## Backend modules
 

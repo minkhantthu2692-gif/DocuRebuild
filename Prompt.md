@@ -10,6 +10,14 @@ Read the root "AGENTS.md" first and follow its instructions.
 
 Do not start implementing the application yet. First, create a complete and technically realistic project specification.
 
+> **Implementation status (2026-11-21).** This document is the original product
+> specification and phased plan. The shipped 1.0 scope is a **Windows x64 desktop
+> application** (Electron + bundled Python sidecar). Mobile, PWA, camera import
+> and device pairing were evaluated and are explicitly out of scope for 1.0;
+> paragraphs that describe them are retained as future product thinking, not as
+> current requirements. Current status and decisions live in `PROJECT_MEMORY.md`
+> and `ROADMAP.md`.
+
 1. Product Vision
 
 DocuRebuild helps users transform scanned books, textbook pages, photographs, screenshots, and PDF documents into accurate, structured, editable documents.
@@ -149,8 +157,8 @@ Every setting must have a clear purpose, predictable behavior, validation, and p
 Selected architecture decisions:
 
 - Runtime: Hybrid.
-- Platform: Desktop, Tablet, and Mobile.
-- Distribution: Web/PWA and Desktop.
+- Platform: Windows desktop for 1.0 (Electron shell with a local Python sidecar).
+- Distribution: Native desktop installer. Mobile and PWA are out of scope for 1.0.
 - OCR: Hybrid, with selectable workflows.
 - PDF: Both text-based and image-based PDFs.
 - Languages: English, Burmese, and other languages.
@@ -161,15 +169,16 @@ Selected architecture decisions:
 
 Design the architecture around these decisions.
 
-The desktop application should use a local backend and local processing engines.
+The desktop application must use a local backend and local processing engines.
 
-The web/PWA version must clearly distinguish between browser capabilities and local backend capabilities.
+A browser development mode exists for working on the client, but it is not a
+supported product distribution. It must never imply that a browser-only page can
+run the Python OCR or PDF-processing dependencies.
 
-Do not pretend that a browser-only PWA can run every native Python OCR or PDF-processing dependency.
-
-Mobile should provide an adaptive workflow, camera import, and an optional secure connection to a user's own processing host where practical.
-
-If remote access to a local backend is supported, design explicit pairing, authentication, access control, and secure communication. Do not expose the backend publicly by default.
+Remote access to a user's local backend, mobile clients, camera import and device
+pairing are outside the 1.0 scope. If they are ever added, they require explicit
+pairing, authentication, access control and secure communication; the backend
+must never be exposed publicly by default.
 
 6. Recommended Technology Stack
 
@@ -227,7 +236,8 @@ Background Processing
 
 Desktop
 
-- Tauri.
+- Electron (selected after evaluating Tauri; the required Rust/MSVC toolchain
+  was not available in the build environment).
 - Python backend sidecar where appropriate.
 
 Document Export
@@ -282,7 +292,7 @@ Include:
 - Multiple-file import.
 - Drag and drop.
 - Clipboard paste.
-- Camera import where supported.
+- Camera import is out of scope for 1.0; photographs can be imported as image files.
 - PDF page rendering.
 - Embedded PDF text extraction.
 - Page navigation and reordering.
@@ -476,8 +486,8 @@ Requirements:
 - Independent scrolling.
 - Fullscreen source viewer.
 - Fullscreen editor.
-- Responsive desktop/tablet/mobile layouts.
-- Adaptive single-panel mobile workflow.
+- Responsive desktop layouts that adapt panels and controls to the window size.
+- A resizable two-panel workspace; no separate mobile single-panel mode in 1.0.
 - Organized tabs, popups, switches, and floating toolbars.
 - Avoid overcrowded controls.
 
@@ -605,7 +615,9 @@ Avoid unnecessary fragmentation or excessive helper files.
 - File type and path validation.
 - Safe PDF and archive handling.
 - Proper backend access control.
-- Secure local-network pairing if supported.
+- A loopback-only backend with a per-launch token in the desktop build.
+- Secure local-network pairing is out of scope for 1.0; add it only with explicit
+  authentication and access control.
 - No public backend exposure by default.
 - No unnecessary telemetry.
 
@@ -635,7 +647,7 @@ Phase 8 — Document Editor and Export.
 
 Phase 9 — History, Backup, and Recovery.
 
-Phase 10 — Desktop, PWA, and Mobile Distribution.
+Phase 10 — Desktop Distribution.
 
 Phase 11 — Final QA and Production Release.
 
@@ -662,7 +674,7 @@ Define benchmarks for:
 - Mathematical equations.
 - Tables.
 - Multi-column layouts.
-- Camera photographs.
+- Imported photographs (camera capture itself is out of scope for 1.0).
 - Scanned PDFs.
 - Mixed PDFs.
 
@@ -703,7 +715,6 @@ Define final acceptance criteria for:
 - DOCX and TXT export.
 - History and recovery.
 - Desktop distribution.
-- Supported PWA functionality.
 - Security.
 - Performance.
 - Documentation.
@@ -883,13 +894,15 @@ Expose only settings that are genuinely supported by the platform and implementa
 
 9. Cross-Platform Considerations
 
-Desktop, browser/PWA, and mobile environments have different background execution limitations.
+Desktop environments have different background-execution and resource limits.
 
-Do not assume browser tabs or mobile operating systems can run unlimited background tasks.
+Do not assume a window or a local backend can run unlimited background tasks.
 
 Document platform-specific limitations and provide appropriate fallbacks.
 
-For mobile, prefer foreground processing or controlled background execution when required by the operating system.
+For the 1.0 desktop build, foreground progress, cancellation and bounded worker
+pools are preferred over unbounded background work. Browser and mobile
+background-execution rules are not part of the 1.0 scope.
 
 10. Acceptance Criteria
 
@@ -1159,9 +1172,10 @@ Important Instructions
 5. Make the interface responsive and adaptive.
    
    - Desktop: prioritize the source viewer and document editor workspace.
-   - Tablet: adapt panels and controls to available space.
-   - Mobile: use an appropriate single-panel workflow with touch-friendly interactions.
-   - Do not force the desktop layout onto smaller screens.
+   - Adapt panels and controls to the available window size.
+   - Mobile and tablet are out of scope for 1.0; do not reintroduce a separate
+     mobile workflow without an approved scope change.
+   - Do not force a fixed layout onto small windows; use the responsive rules.
 
 6. Follow the application's design system.
    

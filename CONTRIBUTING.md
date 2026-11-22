@@ -5,8 +5,9 @@ every change must keep user data on the user's machine and keep AI output review
 
 ## Before you start
 
-- Read [`AGENTS.md`](AGENTS.md) for the permanent product and engineering rules, and
-  [`docs/architecture.md`](docs/architecture.md) for the current module layout.
+- Read [`AGENTS.md`](AGENTS.md) for the permanent product and engineering rules,
+  [`PROJECT_MEMORY.md`](PROJECT_MEMORY.md) for architecture and handover context,
+  and [`docs/architecture.md`](docs/architecture.md) for the module layout.
 - Inspect the existing code before changing an area. Follow the surrounding naming,
   style and patterns instead of introducing a parallel implementation.
 - Open an issue first for a large change, a new dependency, a database migration or
@@ -26,7 +27,9 @@ npm run dev
 ```
 
 Tesseract 5 with `eng` and/or `mya` traineddata is optional but needed for local OCR.
-No AI provider or credential is required to develop or test the application.
+No AI provider or credential is required to develop or test the application. The
+desktop payload build downloads Tesseract automatically and does not need admin
+rights; see `npm run desktop:build` / `npm run desktop:dist`.
 
 ## Checks
 

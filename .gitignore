@@ -69,9 +69,6 @@ playwright-report/
 playwright/.cache/
 coverage/
 
-# Desktop packaging (Tauri)
-src-tauri/target/
-
 # Editor / OS noise
 .vscode/*
 !.vscode/extensions.json

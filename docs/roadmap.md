@@ -1,8 +1,13 @@
-# Roadmap and current status
+# Detailed phase history
 
-This roadmap follows the phased plan in `Prompt.md`. A phase is only marked
-complete when its own acceptance checks pass; later-phase functionality is not
-presented in the UI until it actually works.
+This document keeps the long-form, phase-by-phase implementation record that
+follows the plan in `Prompt.md`. A phase is only marked complete when its own
+acceptance checks pass; later-phase functionality is not presented in the UI
+until it actually works.
+
+The current release status, remaining work and deferred features are summarised
+in the root `ROADMAP.md`. If the two disagree, `ROADMAP.md` and the shipped code
+win.
 
 ## Status summary
 
@@ -19,7 +24,7 @@ presented in the UI until it actually works.
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, multi-line Word equations, footnotes, per-project page headers/footers, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop distribution | **Complete for Windows** | Electron shell with a bundled PyInstaller sidecar, loopback-only API with a per-launch bearer token, bundled Tesseract with `eng`/`mya`, per-user NSIS installer, and smoke tests for the packaged backend. Mobile, PWA and device pairing are out of scope for 1.0 |
-| 11. Final QA and production release | **In progress** | Version 1.0.0, AGPL-3.0 licensing, third-party notices, changelog and a reproducible OCR baseline are done; remaining release checks are tracked in `PROJECT_COMPLETION_REPORT.md` |
+| 11. Final QA and production release | **Complete for Windows 1.0** | Version 1.0.0, AGPL-3.0 licensing, third-party notices, changelog, reproducible OCR baseline, installer QA and security/performance drills are done; wider-release gaps are tracked in the root `ROADMAP.md` |
 
 ---
 
@@ -177,9 +182,11 @@ image processing uses Pillow with no OpenCV dependency.
   drawn or usable rules remains a plain grid, a nested table is not separated from its
   parent, and a hand-corrected block is a barrier instead of being bridged.
   Page-wide equation detection and transcription are still pending.
-- OCR accuracy benchmarks (CER/WER) for English, Burmese and mixed pages using
-  fixtures from real documents. The local harness exists and is tested, but no
-  fixtures are shipped and no accuracy figures are claimed yet.
+- OCR accuracy benchmarks (CER/WER) for English, Burmese and mixed pages. A
+  local harness, committed synthetic fixtures and a measured baseline now exist
+  in `docs/ocr-benchmark.md`; a corpus of real scans is still needed before
+  claiming real-world accuracy. The page-segmentation comparison (Burmese PSM 3
+  versus PSM 11) is reproducible with `--segmentation-mode`.
 - Optional richer engines (for example PaddleOCR) behind the same adapter, only
   if they can preserve the same review and verification guarantees.
 
@@ -769,7 +776,7 @@ colour and accent semantics) and a bundled offline LaTeX typesetter.
 **Out of scope for 1.0:** PWA install, camera import, mobile layouts and device
 pairing. The desktop window is the supported form.
 
-## Phase 11 - Final QA and production release (in progress)
+## Phase 11 - Final QA and production release (complete for Windows 1.0)
 
 **Delivered**
 
@@ -785,10 +792,14 @@ pairing. The desktop window is the supported form.
 - Security drill: token enforcement, path traversal, zip slip, encrypted
   backup password handling, secret scan and dependency audit.
 - Contrast audit with an automated token-contrast test.
+- Final stabilization: theme-aware window background, post-startup backend and
+  renderer crash handling, version metadata alignment, a repaired text encoding
+  defect in the equation dialog, and a documented fresh-clone workflow.
 
-**Remaining:** redacted real-scan OCR corpus, screen-reader and keyboard-only
-testing, sustained-load and cancellation measurement, an automated end-to-end
-desktop smoke suite, and macOS/Linux packaging.
+**Remaining (tracked in `ROADMAP.md`):** redacted real-scan OCR corpus,
+screen-reader and keyboard-only testing, sustained-load and cancellation
+measurement, an automated end-to-end desktop smoke suite, code signing, and
+macOS/Linux packaging.
 
 ---
 
@@ -805,9 +816,11 @@ desktop smoke suite, and macOS/Linux packaging.
   render or image decode still has to finish before the job stops.
 - **SQLite on network shares is unsafe.** Connected devices must use the local
   API, not direct database access.
-- **Dependency audit.** ESLint/TypeScript-ESLint currently pull a vulnerable
-  `minimatch` (moderate, development-only). Runtime dependencies are clean of
-  critical advisories after the Tiptap 3 and Vitest 5 upgrades.
+- **Dependency audit.** `npm audit --omit=dev` reports one low-severity KaTeX
+  advisory (prototype pollution through `trust`). The editor renders only
+  user-authored equations with `trust: false`, and the 0.19 upgrade is breaking,
+  so it is accepted for 1.0. Development-only lint tooling is not part of the
+  shipped application.
 - **Version history is not a backup.** Document versions live in the same project
   database, so deleting the project folder, disk failure or database corruption
   removes them too. Project backup download, additive restore and the local vault

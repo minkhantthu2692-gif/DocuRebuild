@@ -1,222 +1,252 @@
-Create AGENTS.md — DocuRebuild
+# DocuRebuild — permanent instructions for AI coding agents
 
-You are working on DocuRebuild, a Local-First AI-Powered Document Reconstruction Workspace.
+This file is the working agreement for every AI agent that changes this
+repository. Read it completely before editing code. It describes the product,
+the architecture that actually ships, the rules that must not be broken, and how
+to verify work.
 
-Before creating anything, understand the project context and its intended architecture. Create a comprehensive but practical "AGENTS.md" at the project root.
+DocuRebuild is a **local-first, AI-assisted document reconstruction workspace**.
+Users import scanned pages or PDFs, review OCR text, reconstruct tables, figures
+and equations, edit the document, and export Markdown, plain text, Word or PDF.
+The supported 1.0 distribution is a **Windows desktop application** built with
+Electron and a bundled Python sidecar. Mobile, PWA and device pairing are out of
+scope for 1.0.
 
-This file must serve as the permanent development instruction guide for all AI coding agents working on this project.
+## Start here
 
-Core Product Principles
+| Document | Purpose |
+| --- | --- |
+| `PROJECT_MEMORY.md` | Current architecture, decisions, status and handover context |
+| `ROADMAP.md` | Completed work, remaining gaps and deferred features |
+| `CHANGELOG.md` | Release history and user-visible changes |
+| `docs/architecture.md` | Modules, storage layout, data model and API surface |
+| `docs/ocr-benchmark.md` | OCR accuracy methodology and measured results |
+| `PROJECT_COMPLETION_REPORT.md` | Delivery and QA record for the 1.0 installer |
+| `Prompt.md` | Original product specification and phase plan |
+| `CONTRIBUTING.md` | Human contributor setup and checks |
+| `SECURITY.md` | Vulnerability reporting and credential scope |
 
-1. Local-First: User projects, databases, documents, and assets must remain locally controlled. Do not introduce Firebase, Supabase, or mandatory third-party cloud storage/database services.
-2. Free Usage First: The application must remain useful without requiring paid AI subscriptions or paid API keys.
-3. User-Controlled: Give users meaningful control over processing methods, AI providers, models, workflows, preferences, and application behavior.
-4. Accuracy First: Preserve original information. Never silently invent, replace, or approve uncertain extracted content.
-5. Manual + AI: Every important AI-assisted workflow should have a reasonable manual alternative.
-6. Modular Architecture: Keep features, services, processing engines, and provider integrations independent and maintainable.
-7. Production Quality: Prioritize reliability, security, accessibility, maintainability, and a polished user experience.
+If this file and an older document disagree, the code and `PROJECT_MEMORY.md`
+win; update the stale document in the same change.
 
-Free Usage First — Mandatory Rules
+## Repository map
+
+```text
+apps/web/            React + TypeScript + Vite client (Tiptap editor, i18n)
+apps/desktop/        Electron main process, preload bridge, installer config
+backend/             FastAPI application, services, Alembic migrations, Pytest
+packages/            Design tokens and shared TypeScript contracts
+scripts/             Desktop payload build and OCR fixture tooling
+docs/                Architecture, benchmark and detailed phase history
+dist/                Build output (git-ignored)
+```
+
+Key runtime files:
+
+- `apps/desktop/src/main.cjs` — window, sidecar lifecycle, token, CSP, shutdown.
+- `apps/desktop/src/preload.cjs` — exposes only the API token and build metadata.
+- `backend/desktop_server.py` — sidecar entry point, loopback-only binding.
+- `backend/app/main.py` — app factory, auth middleware, SPA serving.
+- `backend/pyinstaller.spec` — one-folder sidecar packaging.
+- `apps/desktop/package.json` — electron-builder/NSIS configuration.
+
+## Product principles
+
+1. **Local-first.** Projects, databases, documents and assets stay on the user's
+   machine. Do not add Firebase, Supabase or mandatory third-party cloud
+   storage/database services.
+2. **Free usage first.** The application must remain useful without paid AI
+   subscriptions or paid API keys.
+3. **User-controlled.** Users choose processing methods, AI providers, models,
+   workflows, preferences and behaviour.
+4. **Accuracy first.** Preserve original information. Never silently invent,
+   replace or approve uncertain extracted content.
+5. **Manual + AI.** Every important AI-assisted workflow has a reasonable manual
+   alternative.
+6. **Modular architecture.** Keep features, services, processing engines and
+   provider integrations independent and maintainable.
+7. **Production quality.** Prioritise reliability, security, accessibility,
+   maintainability and a polished experience.
+
+## Free usage rules (mandatory)
 
 - Support local/offline processing wherever technically practical.
 - Prefer genuinely free and locally executable solutions before paid services.
-- Support optional free-tier API providers where available.
-- Paid providers and paid API usage must always be optional.
-- Never silently trigger paid API requests or paid operations.
-- Clearly communicate free-tier limitations, quotas, availability, and possible costs.
-- Require explicit user approval before using a paid service or exceeding a configured spending limit.
-- Allow users to configure usage limits, preferred providers, fallback providers, and task-specific AI settings.
-- Provide graceful fallbacks when an API is unavailable, rate-limited, or out of quota.
-- Do not advertise a provider or model as free unless its current pricing and limitations are verified.
-- Do not assume free API availability or quotas are permanent.
-- The core application must remain usable without an internet connection or AI provider credentials, subject to local processing capabilities.
+- Optional free-tier API providers are allowed; paid providers are always
+  optional.
+- Never silently trigger a paid request or paid operation. Require explicit user
+  approval before a paid service is used or a configured spending limit is
+  exceeded.
+- Let users configure usage limits, preferred providers, fallback providers and
+  task-specific AI settings.
+- Fail gracefully when an API is unavailable, rate-limited or out of quota.
+- Do not advertise a provider or model as free unless its current pricing and
+  limitations are verified. Free quotas are not permanent.
+- The core application must work offline without AI credentials, subject to
+  local processing capabilities.
 
-User Flexibility
+## Accuracy and AI reliability
 
-- Prefer configurable settings over unnecessary fixed behavior.
-- Make important processing and AI decisions user-selectable.
-- Provide sensible defaults and optional presets for beginners.
-- Keep advanced controls accessible without overwhelming the main interface.
-- Avoid unnecessary restrictions on user workflows.
-- Do not create configuration options that have no meaningful implementation or effect.
-
-UI / UX Development Rules
-
-- Build a consistent, reusable design system.
-- Do not arbitrarily hardcode design values such as colors, font sizes, spacing, dimensions, margins, padding, border radius, or blur intensity.
-- Determine appropriate values through the application's design system, responsive requirements, accessibility, and visual consistency.
-- Respect system theme and application appearance settings.
-- Keep the interface clean, minimal, polished, and responsive.
-- Avoid unnecessary visual decoration, overcrowded controls, and excessive empty space.
-- Use progressive disclosure for advanced settings.
-- Maintain consistent interactions and feedback across the application.
-- Support desktop, tablet, and mobile layouts appropriately.
-
-Technical Rules
-
-- Keep frontend, backend, database, processing engines, and AI provider integrations separated.
-- Use clear interfaces and adapters for interchangeable engines and providers.
-- Avoid unnecessary dependencies and duplicated implementations.
-- Use dynamic provider/model discovery where supported instead of maintaining outdated hardcoded model lists.
-- Never expose API keys or sensitive credentials in frontend code, logs, or plain-text storage.
-- Preserve original imported files as immutable source assets.
-- Use migrations for database schema changes.
-- Handle errors, cancellation, retries, large files, and background processing properly.
-- Keep application data and project data organized and portable.
-- Write meaningful automated tests for important functionality.
-- Update relevant documentation whenever architecture, features, settings, or workflows change.
-
-AI Reliability Rules
-
-- AI-generated content is a proposal until verified where accuracy matters.
+- AI output is a proposal until the user verifies it where accuracy matters.
 - Preserve original values and track proposed changes.
-- Record provider, model, task, timestamp, and verification status.
-- Never fabricate missing table cells, equation symbols, figure labels, or numerical information.
-- Clearly identify uncertain results and allow manual correction.
-- Prefer structured and deterministic reconstruction over generative image replacement when exact information must be preserved.
+- Record provider, model, task, timestamp and verification status.
+- Never fabricate missing table cells, equation symbols, figure labels or
+  numerical information.
+- Identify uncertain results and allow manual correction.
+- Prefer structured, deterministic reconstruction over generative image
+  replacement when exact information must be preserved.
+- OCR text, AI text and user corrections must stay distinguishable in storage,
+  the UI and exports.
 
-Development Workflow
+## Architecture rules
 
-- Inspect the existing repository before making changes.
-- Follow the architecture and specifications in "Prompt.md".
-- Implement development phases sequentially.
-- Do not skip incomplete functionality or replace real implementations with mock functionality.
-- Run relevant tests and verify actual behavior before considering a task complete.
-- Do not claim a feature works unless it has been implemented and tested.
-- Keep code, documentation, and actual application behavior synchronized.
-- Explain significant architectural decisions and technical limitations.
+- Keep the frontend, backend, database, processing engines and AI providers
+  separated. Use interfaces/adapters for interchangeable engines and providers.
+- Never expose API keys or credentials in frontend code, logs, commits or
+  plain-text storage. Desktop credentials live in the encrypted local vault.
+- Preserve imported originals as immutable source assets. Every derived image is
+  reproducible from the original plus stored edit parameters.
+- Use Alembic migrations for schema changes; never rewrite an existing migration
+  that a user database has already applied.
+- Handle errors, cancellation, retries, large files and background processing.
+- Keep application data and project data portable and outside the repository.
+- Use dynamic provider/model discovery instead of hardcoded model catalogues.
+- Avoid unnecessary dependencies and duplicated implementations.
+- Update documentation and tests with every behaviour change.
 
-Important
+### Desktop boundary
 
-These instructions apply throughout the project.
+- The backend binds `127.0.0.1` only and receives a random per-launch token.
+- With `DOCUREBUILD_API_TOKEN` set, every `/api` request must present
+  `Authorization: Bearer <token>`. Unset behaviour is for development and tests
+  only.
+- The renderer is sandboxed with `contextIsolation`, no Node integration and a
+  strict CSP. Do not add a generic IPC bridge.
+- The renderer loads the built client from the same origin as the API. Keep it
+  that way: a separate origin would need a CORS exception and weakens the token
+  boundary.
+- The token is generated by the shell, passed to the sidecar through its
+  environment, and exposed to the page only through the preload bridge. It must
+  never be written to disk, a command line, a log or the bundle.
 
-Do not interpret flexibility as permission to overcomplicate the application. Choose the simplest maintainable implementation that satisfies the product requirements.
+## UI and UX rules
 
-Create the "AGENTS.md" file only. Do not begin implementing application features during this task.
+- Use the design system in `packages/design-tokens` and the existing component
+  primitives. Do not hardcode colours, font sizes, spacing, dimensions, radii or
+  blur values; add or adjust tokens instead.
+- Respect Light, Dark and System themes and the saved appearance settings.
+- Keep the interface clean, minimal, polished and responsive.
+- Use progressive disclosure for advanced settings and avoid meaningless
+  options. Every setting must have a real effect, validation and persistence.
+- Maintain consistent interactions and feedback, including loading, empty, error,
+  disabled and success states.
+- Support keyboard navigation, visible focus, accessible names and WCAG AA
+  contrast. The token contrast test guards the current palette.
+- The desktop workspace is the supported 1.0 layout. Do not reintroduce the
+  mobile panel switch or camera/PWA flows without an approved scope change.
 
-Additional Development Rules: GitHub Integration, Backup & Internationalization
+## Internationalization
 
-Add the following permanent development rules to AGENTS.md.
+- English is the default language; Burmese is supported.
+- No hardcoded user-facing strings in components. Add keys to both
+  `apps/web/src/i18n/locales/en` and `.../my`; key-parity tests must pass.
+- Keep translations separate from logic. Language switching happens live.
+- Ensure Burmese Unicode renders and is typed correctly. Never perform automatic
+  Zawgyi/Unicode conversion.
+- Use locale-aware dates, numbers and formatting. Layouts must tolerate longer
+  translations and different scripts.
+- Adding a language must not require redesigning the localization layer.
 
-GitHub Integration and Repository Safety
+## Data, backup and GitHub safety
 
-- Support integration with an existing GitHub repository.
-- The user will provide the repository URL before implementation begins.
-- Treat the supplied repository as the authoritative remote repository unless the user explicitly requests otherwise.
-- Never create a replacement repository unnecessarily.
-- Never overwrite, delete, force-push, or rewrite existing remote history without explicit user authorization.
-- Inspect the repository, branches, existing files, remotes, and project structure before making GitHub-related changes.
-- Preserve existing source code, documentation, configuration, and user work.
-- Keep credentials and access tokens out of source code, logs, commits, and documentation.
-- Use secure GitHub authentication mechanisms available in the user's environment.
-- Never assume that a repository URL alone grants write permissions.
-- Request authentication or permission only when required.
+- Treat GitHub as source-code and documentation backup, **not** as storage for
+  user documents. Never commit imported books, photographs, PDFs, extracted
+  content, API keys, local databases, `dist/` output or personal assets.
+- Keep `.gitignore` current; verify `git status --ignored` before a release.
+- Never overwrite, delete, force-push or rewrite remote history without explicit
+  user authorisation. Inspect branches, remotes and working-tree state first.
+- Never assume a repository URL grants write permission. Use the credentials
+  already configured in the environment and never print or commit them.
+- Explain what will be uploaded before an externally visible or sensitive
+  operation. Prefer reversible operations.
+- User data lives in `%LOCALAPPDATA%\DocuRebuild\DocuRebuild` (or
+  `DOCUREBUILD_DATA_DIR`); window state and logs live in
+  `%APPDATA%\DocuRebuild`. Uninstalling must not delete projects.
 
-Backup and Recovery
+## Development workflow
 
-- Treat GitHub as an additional source-code and documentation backup, not as the primary storage location for user documents.
-- Never upload private project documents, imported books, photographs, PDFs, extracted content, API keys, local databases, or personal assets to GitHub by default.
-- Maintain a carefully designed ".gitignore".
-- Separate application source code from local application data and user project data.
-- Provide safe backup and recovery workflows.
-- Verify backup results and remote synchronization status.
-- Prefer reversible operations and maintain recovery options.
-- Explain what will be uploaded before performing potentially sensitive operations.
+1. Inspect the repository and existing changes before editing. Treat unfamiliar
+   work as potential user work; investigate before deleting or overwriting it.
+2. Implement in small, coherent changes that follow existing patterns.
+3. Do not replace real implementations with mocks, and do not skip unfinished
+   functionality silently.
+4. Run the relevant checks and verify actual behaviour before claiming success.
+5. Keep code, documentation and observed behaviour synchronised.
+6. Update `CHANGELOG.md` for user-visible changes and `PROJECT_MEMORY.md` /
+   `ROADMAP.md` when status, architecture or decisions change.
+7. Never commit or push unless the user asks. Never claim a push, release or
+   download succeeded without verifying it.
 
-GitHub-assisted Development
+### Commands
 
-Use GitHub capabilities where appropriate for:
+```powershell
+# Install
+npm ci
+python -m venv backend/.venv
+backend/.venv/Scripts/python -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt
 
-- Repository inspection.
-- Commit and push.
-- Pull and synchronization.
-- Branch management.
-- Release management.
-- Issue tracking.
-- Pull request workflows.
-- Changelog and version history.
-- Documentation updates.
+# Develop (API :8000, Vite :5173)
+npm run dev
 
-Do not perform destructive or externally visible actions without appropriate user authorization.
+# Checks
+npm run test:web
+backend/.venv/Scripts/python -m pytest backend/tests -q
+npm run typecheck
+npm run lint
+npm run build
 
-Internationalization (i18n)
+# Desktop payload and NSIS installer
+npm run desktop:build      # web + PyInstaller sidecar + Tesseract
+npm run desktop:dist       # adds electron-builder packaging
+npm run desktop:start      # run the Electron shell against dist/desktop
 
-- English is the primary/default application language.
-- Burmese is a supported secondary language.
-- Build a proper localization architecture from the beginning.
-- Avoid hardcoded user-facing strings throughout the frontend.
-- Keep translations separate from application logic.
-- Support language switching without requiring unnecessary application restarts.
-- Ensure Burmese Unicode rendering and text input work correctly.
-- Avoid destructive Zawgyi/Unicode conversions.
-- Design layouts that can accommodate different text lengths and scripts.
-- Use locale-aware date, number, and formatting behavior where appropriate.
-- Make adding more languages possible without redesigning the localization architecture.
+# OCR benchmark
+backend/.venv/Scripts/python -m app.ocr_benchmark --help
+```
 
-These requirements apply throughout the project.
+Bundled Tesseract is required for OCR tests and for `desktop:build`; the build
+script downloads and extracts it without administrator rights. CI installs
+Tesseract with apt.
 
-UI Reference Interpretation & Design Direction
+## Release rules
 
-Use the attached DocuRebuild UI mockup strictly as a visual reference and design direction, not as a fixed template or a screen that must be copied exactly.
+- The version lives in the root, web, desktop and shared package manifests, in
+  `backend/app/__init__.py` and `backend/pyproject.toml`. Keep them equal; the UI
+  reads the version from `/api/health`.
+- Build the installer from a clean tree, record its size and SHA-256, and smoke
+  test install → launch → create/import → OCR → export → backup/restore →
+  uninstall (data retained) → reinstall.
+- Publish release notes that state the supported platform, install steps, what
+  the build contains and every known limitation. Do not describe deferred work
+  as shipped.
+- A GitHub Release asset must be verified by downloading it and checking the
+  published checksum. Never publish a different file from the one that was
+  tested.
 
-The purpose of this reference is to communicate the overall visual direction, workspace concept, layout preferences, and user experience I have in mind.
+## UI reference
 
-Important Instructions
+`mockup-reference-ui.png` communicates visual direction only. Do not reproduce
+it literally. Evaluate every element against real functionality; add what is
+missing, remove what is redundant or misleading, and preserve the intended
+clean, professional, subtly glassy workspace feel. When the reference conflicts
+with usability, accessibility, responsiveness or technical reality, the
+application wins.
 
-1. Do not directly replicate the mockup.
-   
-   - Do not copy every component, button, panel, label, icon, or visual detail.
-   - The mockup is conceptual and may contain placeholder content, unnecessary elements, or incomplete ideas.
-   - Some elements may need to be redesigned, replaced, removed, or improved.
+## Do not
 
-2. Think critically about the actual application.
-   
-   - Evaluate every UI element based on DocuRebuild's real functionality and architecture.
-   - Add missing components and interactions that are genuinely useful.
-   - Remove unnecessary, redundant, misleading, or decorative elements.
-   - Reorganize layouts when doing so improves usability.
-   - Do not introduce features simply because they appear in the reference.
-
-3. Preserve the intended design direction.
-   
-   - Clean, polished, minimal, and professional.
-   - Subtle Liquid Glass / Glassmorphism where appropriate.
-   - Clear visual hierarchy and intuitive navigation.
-   - Comfortable workspace for long document editing and reconstruction sessions.
-   - Avoid overcrowded panels, excessive decoration, and unnecessary blank spaces.
-
-4. Design around actual workflows.
-   
-   - Source image/PDF viewing and editing.
-   - OCR and content extraction.
-   - Table, figure, and equation reconstruction.
-   - AI-assisted operations and verification.
-   - Rich text document editing.
-   - Project management, history, settings, and export.
-
-5. Make the interface responsive and adaptive.
-   
-   - Desktop: prioritize the source viewer and document editor workspace.
-   - Tablet: adapt panels and controls to available space.
-   - Mobile: use an appropriate single-panel workflow with touch-friendly interactions.
-   - Do not force the desktop layout onto smaller screens.
-
-6. Follow the application's design system.
-   
-   - Do not arbitrarily hardcode colors, font sizes, spacing, dimensions, margins, padding, or blur values.
-   - Use consistent design tokens, existing theme settings, and responsive layout rules.
-   - Respect Light, Dark, and System themes, accent colors, font settings, and accessibility preferences.
-
-Decision Priority
-
-When the reference conflicts with actual functionality, usability, accessibility, responsiveness, or technical limitations, prioritize the actual application requirements.
-
-You have the freedom to make better design decisions rather than blindly following the image.
-
-Expected Result
-
-Create a cohesive and production-quality DocuRebuild interface that captures the intention of the reference while improving its structure, usability, and completeness.
-
-The final UI should feel purpose-built for DocuRebuild, not like a reproduction of a mockup.
-
-The reference communicates what I want the application to feel like, not exactly what every screen must look like.
+- Introduce cloud databases or mandatory accounts.
+- Add silent paid AI calls, hidden telemetry or background uploads.
+- Hardcode secrets, credentials, user paths or design values.
+- Store user content in Git, logs or the AI usage ledger.
+- Break the local-only API boundary or the token check.
+- Claim a test, build, push or release succeeded without evidence.

@@ -9,7 +9,17 @@
  * stays in the same local folder the browser build already uses.
  */
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, screen, session, shell } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  Menu,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  screen,
+  session,
+  shell,
+} = require("electron");
 const { spawn } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -142,6 +152,17 @@ async function startBackend() {
   backend.once("error", (error) => {
     backendReady = false;
     if (!quitting) showStartupFailure(error.message);
+  });
+
+  backend.once("exit", (code, signal) => {
+    // A crash after startup would otherwise leave a window with no API behind it.
+    const wasReady = backendReady;
+    backendReady = false;
+    if (!quitting && wasReady) {
+      showStartupFailure(
+        `The local workspace service stopped unexpectedly (${code ?? signal}).`,
+      );
+    }
   });
 
   const deadline = Date.now() + STARTUP_TIMEOUT_MS;
@@ -284,6 +305,11 @@ function installSecurityHandlers() {
   });
 }
 
+function windowBackgroundColor() {
+  // Pre-paint colour only: avoid a white flash before the saved theme applies.
+  return nativeTheme.shouldUseDarkColors ? "#0c0e17" : "#f6f6f4";
+}
+
 function createWindow() {
   const state = readWindowState();
   const bounds = visibleBounds(state);
@@ -294,7 +320,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 700,
     show: false,
-    backgroundColor: "#f6f6f4",
+    backgroundColor: windowBackgroundColor(),
     icon: path.join(getResourceRoot(), "icon.ico"),
     title: "DocuRebuild",
     webPreferences: {
@@ -307,6 +333,12 @@ function createWindow() {
     },
   });
 
+  nativeTheme.on("updated", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setBackgroundColor(windowBackgroundColor());
+    }
+  });
+
   if (bounds) mainWindow.setBounds(bounds);
   if (state && state.maximized) mainWindow.maximize();
 
@@ -317,6 +349,17 @@ function createWindow() {
   });
 
   const origin = `http://127.0.0.1:${backendPort}`;
+  const isAppUrl = (target) => {
+    try {
+      // Compare parsed origins, not string prefixes: a URL such as
+      // http://127.0.0.1:<port>@attacker.example shares the prefix but would
+      // navigate the privileged window to another site.
+      return new URL(target).origin === origin;
+    } catch {
+      return false;
+    }
+  };
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (/^(https?:|mailto:)/i.test(url)) {
       void shell.openExternal(url);
@@ -324,7 +367,13 @@ function createWindow() {
     return { action: "deny" };
   });
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(origin)) {
+    if (!isAppUrl(url)) {
+      event.preventDefault();
+      if (/^(https?:|mailto:)/i.test(url)) void shell.openExternal(url);
+    }
+  });
+  mainWindow.webContents.on("will-redirect", (event, url) => {
+    if (!isAppUrl(url)) {
       event.preventDefault();
       if (/^(https?:|mailto:)/i.test(url)) void shell.openExternal(url);
     }
@@ -346,6 +395,7 @@ function createWindow() {
 ipcMain.on("docurebuild:config", (event) => {
   event.returnValue = {
     apiToken: backendToken,
+    origin: backendPort ? `http://127.0.0.1:${backendPort}` : "",
     platform: "desktop",
     version: app.getVersion(),
   };

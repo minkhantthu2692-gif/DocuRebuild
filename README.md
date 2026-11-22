@@ -37,7 +37,9 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 ## Install the desktop app
 
-1. Run `DocuRebuild-1.0.0-setup.exe`.
+1. Run `DocuRebuild-1.0.0-setup.exe` from the
+   [v1.0.0 release](https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.0.0).
+   The release notes publish the SHA-256 checksum.
 2. The installer creates a per-user installation and a Start menu shortcut. It
    does not require administrator rights and does not install a system service.
 3. Start DocuRebuild. The first launch creates the local data folder at
@@ -323,6 +325,8 @@ See [`docs/roadmap.md`](docs/roadmap.md).
 | Layer | Technology |
 | --- | --- |
 | Web client | React 18, TypeScript, Vite, Tailwind CSS, Radix UI primitives |
+| Desktop shell | Electron 45, context-isolated preload, NSIS installer |
+| Local API runtime | Python 3.12 packaged with PyInstaller (one-folder sidecar) |
 | Editor | Tiptap 3 (ProseMirror) |
 | Equations | KaTeX (bundled locally, MIT) |
 | Word export | python-docx, latex2mathml, mathml2omml (all run locally) |
@@ -344,22 +348,34 @@ design tokens and Tailwind preset.
 ```text
 apps/
   web/                  React client (Vite dev server on :5173)
+  desktop/              Electron shell, preload bridge and installer config
 backend/
   app/                  FastAPI application and services
   alembic/              Application-database migrations
-  tests/                Pytest suite
+  tests/                Pytest suite and OCR fixtures
 packages/
   design-tokens/        CSS variables, Tailwind preset, theme tokens
   shared-types/         Shared TypeScript contracts
+scripts/
+  build-desktop.mjs     Web + PyInstaller sidecar + Tesseract payload
+  prepare-tesseract.mjs Cached Tesseract extraction
 docs/
   architecture.md       Modules, storage layout, data model, API surface
-  roadmap.md            Phase status, limitations and next steps
+  roadmap.md            Detailed phase-by-phase implementation history
+  ocr-benchmark.md      OCR methodology and measured results
+  AiSessionRedesign.txt AI workspace design notes
 .github/
   workflows/            CI, CodeQL and dependency-update automation
   ISSUE_TEMPLATE/       Bug and feature request forms
-start-docurebuild.bat   Windows one-click launcher for the local app
+start-docurebuild.bat   Windows one-click development launcher
 AGENTS.md               Permanent instructions for AI coding agents
-Prompt.md               Product specification and phased roadmap source
+PROJECT_MEMORY.md       Architecture, decisions, status and handover context
+ROADMAP.md              Current completion status and deferred features
+CHANGELOG.md            Release history
+LICENSE                 AGPL-3.0
+THIRD_PARTY_NOTICES.md  Dependency licences and notices
+PROJECT_COMPLETION_REPORT.md  Delivery and QA record
+Prompt.md               Original product specification and phase plan
 CONTRIBUTING.md         Setup, checks and contribution rules
 SECURITY.md             Vulnerability reporting and local-credential scope
 ```
@@ -1024,7 +1040,10 @@ provider.
 npm run desktop:build
 
 # Installer in dist/desktop-installer
-npm run desktop:dist
+npm run desktop:dist   # -> DocuRebuild-1.0.0-setup.exe
+
+# Run the Electron shell against an existing dist/desktop payload
+npm run desktop:start
 ```
 
 `scripts/build-desktop.mjs` builds the web client, bundles the API with
@@ -1116,6 +1135,15 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 
 ## Known limitations
 
+- **Platform.** 1.0 ships for Windows x64 only. The installer is not code-signed,
+  so Windows SmartScreen may warn on first run. macOS and Linux packaging are not
+  available.
+- **Size.** The installer is about 202 MB and installs about 643 MB because
+  Chromium, the Python runtime and Tesseract ship offline. Trimming them is future
+  work.
+- **Release QA.** The installed build was exercised manually and over the DevTools
+  protocol. There is no automated desktop end-to-end suite, and keyboard-only and
+  screen-reader passes are still outstanding; colour contrast is automated.
 - The editor covers core rich text, manual tables, equations and footnotes, not the
   full target model (page layout is pending). Figures are supported as
   block image nodes from the region library; their caption and alt text can be
@@ -1271,10 +1299,12 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
 | 9. History, backup and recovery | **Complete**: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop distribution | **Complete for Windows**: Electron shell with a bundled Python sidecar, loopback-only API with a per-launch token, bundled Tesseract, and a per-user NSIS installer. Mobile, PWA and device pairing are out of scope |
-| 11. Final QA and production release | In progress: desktop smoke tests, version 1.0.0, AGPL-3.0 licensing and third-party notices done; remaining release checks are tracked in `PROJECT_COMPLETION_REPORT.md` |
+| 11. Final QA and production release | **Complete for Windows 1.0**: desktop smoke tests, version 1.0.0, AGPL-3.0 licensing, third-party notices, performance/security drills and a GitHub Release. Wider-release gaps are listed in `ROADMAP.md` |
 
-Detailed criteria and design decisions are in [`docs/roadmap.md`](docs/roadmap.md)
-and [`docs/architecture.md`](docs/architecture.md).
+Current status, remaining work and deferred features are summarised in
+[`ROADMAP.md`](ROADMAP.md). Detailed criteria and design decisions are in
+[`docs/roadmap.md`](docs/roadmap.md), [`docs/architecture.md`](docs/architecture.md)
+and [`PROJECT_MEMORY.md`](PROJECT_MEMORY.md).
 
 ---
 

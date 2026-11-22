@@ -4,7 +4,7 @@ All notable changes to DocuRebuild are recorded here. This project follows
 [Semantic Versioning](https://semver.org/) and the desktop application is the
 supported 1.0 distribution.
 
-## [1.0.0] - 2026-11-20
+## [1.0.0] - 2026-11-22
 
 The first desktop release. DocuRebuild now installs as a Windows application
 with no Node.js, Python, Tesseract or development tools required.
@@ -57,6 +57,18 @@ with no Node.js, Python, Tesseract or development tools required.
   dark-theme primary (4.36:1) did not meet WCAG AA for normal text. The token
   values were adjusted until every pair reaches at least 4.5:1, and
   `design-tokens.test.ts` now fails the suite if a future change regresses it.
+- **Startup and crash handling.** The window background now follows the system
+  theme instead of always painting light, a crash of the backend after startup or
+  of the renderer opens an error dialog with the log tail instead of leaving a
+  dead window, and the single-instance lock focuses the existing window.
+- **Navigation guard.** The desktop window compared navigation URLs by string
+  prefix, so a crafted `http://127.0.0.1:<port>@host` link could have kept the
+  privileged window on another site. Navigation and redirects now compare parsed
+  origins, and the preload bridge is installed only on the application origin.
+- **Text encoding.** A double-encoded em dash in the equation dialog's page
+  fallback was replaced with the correct character.
+- **Version metadata.** `backend/pyproject.toml` and the bug-report template now
+  report 1.0.0.
 
 ### Accessibility
 

@@ -134,12 +134,12 @@ export function RegionFormulaDialog({
     if (includeNote) {
       note = usesAiSource
         ? t("elements.formula.aiSourceNote", {
-            page: pageNumber ?? "â€”",
+            page: pageNumber ?? "—",
             model: aiProposal?.model ?? "",
             status,
           })
         : t("elements.formula.sourceNote", {
-            page: pageNumber ?? "â€”",
+            page: pageNumber ?? "—",
             status,
           });
     }
@@ -155,7 +155,7 @@ export function RegionFormulaDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sigma className="size-icon-sm text-primary" aria-hidden="true" />
-            {t("elements.formula.title", { page: pageNumber ?? "â€”" })}
+            {t("elements.formula.title", { page: pageNumber ?? "—" })}
           </DialogTitle>
           <DialogDescription>{t("elements.formula.description")}</DialogDescription>
         </DialogHeader>

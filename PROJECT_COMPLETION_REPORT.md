@@ -1,10 +1,11 @@
 # DocuRebuild - Project Completion Report
 
-**Report date:** 20 November 2026
+**Report date:** 22 November 2026
 **Report state:** audit snapshot at `26b9263`, followed by the 1.0 desktop
-delivery recorded in section 13
-**Working tree:** the desktop shell, packaging, OCR baseline and licensing
-changes from section 13 are not yet committed
+delivery recorded in section 13 and the final stabilization described in
+`PROJECT_MEMORY.md`
+**Working tree:** the 1.0 delivery and stabilization changes are committed and
+pushed to `main`
 **Scope of this report:** audit of implemented behaviour, not a plan for new features
 
 ---
@@ -24,11 +25,10 @@ is implemented end to end, with automated coverage on both sides of the stack.
 | Core local-first MVP scope (phases 0-9) | **approx. 90%** | Functional coverage, verified by tests and code inspection |
 | Production-release readiness | **approx. 84%** | Desktop packaging, licensing, the OCR baseline, installed-app QA, performance and security drills are delivered; real-scan accuracy and assistive-technology testing remain |
 
-The application is usable today by a technical user who runs the one-click local
-launcher, and as an installed Windows application since the work in section 13.
-The remaining production gaps are a redacted real-document OCR corpus,
-screen-reader testing and sustained-load measurement. None of them require
-re-architecting the product.
+The application is usable today as an installed Windows application. The
+remaining production gaps are a redacted real-document OCR corpus,
+screen-reader testing, sustained-load measurement and code signing. None of them
+require re-architecting the product.
 
 **Strongest areas:** project/storage model, import pipeline (including PDFs and
 background jobs), non-destructive image editing, editor/export, version history
@@ -548,12 +548,13 @@ copied into the installed application by electron-builder's `extraResources`.
 | Packaged sidecar auth | `401` without a token and with a wrong token, `200` with the correct one |
 | Packaged sidecar routing | SPA at `/`, hashed assets, client routes; `404` JSON for unknown `/api`; `404` for traversal |
 | Packaged OCR | Bundled engine reports 5.4.0.20240606 with `eng`, `mya`, `osd`; a Burmese page returns 75.6 mean confidence |
+| Packaged sidecar drill | 61 checks against `docurebuild-backend.exe` with a throwaway data folder: `401` without/wrong token, health and meta at 1.0.0, all capabilities, 14 AI providers, settings persistence, project and document round-trip through SQLite, image import, English OCR at 95.8 confidence, Markdown/TXT/DOCX/PDF export, zip backup/restore with a byte-identical source asset, vault copy and restore, and `404` for traversal and unknown projects |
 | End-to-end PDF run | Two-page PDF imported, pages rendered 1240x1755, OCR text matched the reference apart from one capitalisation difference |
-| Installer | `DocuRebuild-1.0.0-setup.exe`, 211,528,454 bytes (201.7 MB), SHA-256 `F40F12DE04451EAA995ED2E85181B861907192AE160F0D360C7C75B08719AB12`, built by electron-builder NSIS |
-| Install | Silent per-user install exits 0 in 37 s; `%LOCALAPPDATA%\Programs\DocuRebuild` holds the shell, sidecar, web client and Tesseract, with `LICENSE` and `THIRD_PARTY_NOTICES.md` under `resources\`; Start menu and desktop shortcuts are created; no administrator prompt |
-| Installed launch | The window opens, the sidecar listens on loopback (`127.0.0.1:57914` in the final drill), and `/api/health` reports `version: 1.0.0`, `database: ok` |
-| Installed UI | Driven over the DevTools protocol: the document reaches `complete`, the dashboard renders the heading, **8 project cards** and the `v1.0.0` status bar, the saved dark theme and teal accent resolve to their token values, there is no horizontal overflow at 1426x779, and no console error or warning is logged |
-| Existing data | The installed app listed every project that already existed in `%LOCALAPPDATA%\DocuRebuild\DocuRebuild` (8 at the time of the drill), so the upgrade keeps projects and schema |
+| Installer | Final rebuild `DocuRebuild-1.0.0-setup.exe`, 211,528,811 bytes (201.7 MB), SHA-256 `7B444BF2B996C8EC1B4699D3C438747718D2DC665CDE0CFF31368311BB14A46C`, built by electron-builder NSIS after the navigation-guard, theme and crash-handling fixes |
+| Install | Silent per-user install exits 0 in 34 s; `%LOCALAPPDATA%\Programs\DocuRebuild` holds the shell, sidecar, web client and Tesseract, with `LICENSE` and `THIRD_PARTY_NOTICES.md` under `resources\`; Start menu and desktop shortcuts are created; no administrator prompt |
+| Installed launch | The window opens, the sidecar listens on loopback, and `/api/health` reports `version: 1.0.0`, `database: ok` |
+| Installed UI | Driven over the DevTools protocol: the document reaches `complete`, the dashboard renders the heading, **7 project cards**, the `v1.0.0` status bar, a 64-character preload token and `platform: desktop`; there is no horizontal overflow at 1536x794, and no console error or warning is logged |
+| Existing data | The installed app listed every project that already existed in `%LOCALAPPDATA%\DocuRebuild\DocuRebuild` (7 at the final drill), so the upgrade keeps projects and schema |
 | Installed API isolation | No token and a wrong token both return `401`; `/projects/abc` returns the SPA; the installed hashed asset returns `200` and a missing asset returns `404` |
 | Installed OCR and export | Using the installed sidecar directly: Tesseract 5.4.0.20240606 with `eng`/`mya`/`osd`; English page OCR 96.4 confidence, Burmese page (mode 11) 82.3; Markdown, TXT, DOCX and PDF exports all return the document body (a 0-byte Markdown file only when the document itself is empty) |
 | Installed backup and restore | A vault copy was created, then restored as a new project. The archived source PDF extracts with an identical MD5 to the original and opens as 2 pages, so the backup is byte-faithful |

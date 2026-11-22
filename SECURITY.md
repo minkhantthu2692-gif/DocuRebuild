@@ -2,8 +2,8 @@
 
 ## Supported versions
 
-DocuRebuild is in early development. Security fixes target the current `main` branch;
-there is no long-term-support release yet.
+Security fixes target the current `main` branch and the latest 1.0.x release.
+There is no long-term-support release yet.
 
 ## Reporting a vulnerability
 
@@ -49,9 +49,10 @@ Out of scope:
   them; file-system permissions are part of the security boundary.
 - Project documents, databases, imported files, backups and exports are user data.
   They are never uploaded by the application and must not be committed to Git.
-- The local API binds to loopback by default. Exposing it to a network requires the
-  user's own reverse proxy, authentication and TLS; the project does not provide a
-  public hosting configuration.
+- The local API binds to loopback only. The desktop build additionally requires a
+  random per-launch bearer token. Exposing the API to a network requires the user's
+  own reverse proxy, authentication and TLS; the project does not provide a public
+  hosting configuration.
 
 ## Disclosure
 
