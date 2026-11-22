@@ -303,12 +303,17 @@ secret scan.
 
 - Version 1.0.0 everywhere. License AGPL-3.0-or-later.
 - Repository: <https://github.com/minkhantthu2692-gif/DocuRebuild>
-- Release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.0.0>
-- Installer asset: `DocuRebuild-1.0.0-setup.exe`, 211,528,811 bytes (201.7 MB),
-  SHA-256 `7B444BF2B996C8EC1B4699D3C438747718D2DC665CDE0CFF31368311BB14A46C`,
+- Release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.0.0>,
+  published 22 November 2026 from tag `v1.0.0` at commit `0a7af7f`.
+- Installer asset:
+  <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/download/v1.0.0/DocuRebuild-1.0.0-setup.exe>,
+  211,528,811 bytes (201.7 MB), SHA-256
+  `7B444BF2B996C8EC1B4699D3C438747718D2DC665CDE0CFF31368311BB14A46C`,
   built on 22 November 2026 from the stabilized tree.
 - The installer is built locally and uploaded as a GitHub Release asset; it is
   deliberately not committed to Git.
+- Release download verified anonymously on 22 November 2026: the downloaded asset
+  is 211,528,811 bytes and its SHA-256 matches the notes.
 - Final rebuild verification: silent install exits 0 in 34 s; the installed app
   opens, lists the 7 existing projects, exposes a 64-character preload token,
   reports `1.0.0` in the status bar and passes the 12-point UI check with no

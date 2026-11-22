@@ -99,6 +99,15 @@ with no Node.js, Python, Tesseract or development tools required.
   backup/restore, uninstalled and reinstalled over existing project data on
   Windows 11. The installed dashboard rendered all existing projects with no
   console errors, and closing the window left no backend process behind.
+- The final installer (211,528,811 bytes, SHA-256
+  `7B444BF2B996C8EC1B4699D3C438747718D2DC665CDE0CFF31368311BB14A46C`) was
+  published in the
+  [v1.0.0 release](https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.0.0)
+  and downloaded again anonymously; the downloaded file matches the published
+  checksum.
+- A fresh shallow clone installed with `npm ci`, passed 414 backend tests and
+  290 web tests, typecheck, ESLint and the production build without local
+  history or build artifacts.
 
 ### Known limitations
 
