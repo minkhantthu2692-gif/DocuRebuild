@@ -405,7 +405,27 @@
     "copied": "Path copied",
     "copyFailed": "The path couldn’t be copied.",
     "offline": "The storage location is unavailable while the local backend is offline.",
-    "privacyNote": "GitHub backs up source code and documentation only — never your documents or imported pages."
+    "privacyNote": "GitHub backs up source code and documentation only — never your documents or imported pages.",
+    "reset": {
+      "title": "Clear all data",
+      "description": "Factory reset permanently deletes every project, source file, database row, setting, AI key and backup copy stored by DocuRebuild on this device.",
+      "action": "Clear all data…",
+      "dialogTitle": "Clear all data?",
+      "dialogDescription": "This returns DocuRebuild to its first-run state. The application stays installed.",
+      "warning": "This cannot be undone.",
+      "items": {
+        "projects": "Every project, imported page, thumbnail and extracted figure",
+        "settings": "Appearance, language, editor and backup preferences",
+        "keys": "Saved AI provider connections and encrypted API keys",
+        "backups": "Local backup copies, temporary files and the trash folder"
+      },
+      "irreversible": "There is no recovery from inside DocuRebuild. Download any backup you need before continuing.",
+      "typeLabel": "Type {{word}} to confirm",
+      "typeHint": "The confirmation is case-sensitive.",
+      "confirm": "Clear all data",
+      "clearing": "Clearing…",
+      "success": "All local DocuRebuild data was cleared."
+    }
   },
   "about": {
     "title": "About DocuRebuild",

@@ -92,3 +92,83 @@ def test_document_rejects_non_document_payload(client: TestClient, project: dict
         json={"content": {"type": "paragraph"}, "plain_text": ""},
     )
     assert response.status_code == 422
+
+
+def test_bulk_delete_moves_each_project_to_trash(client: TestClient) -> None:
+    ids = [
+        client.post("/api/projects", json={"name": f"Project {index}"}).json()["id"]
+        for index in range(3)
+    ]
+
+    response = client.post(
+        "/api/projects/bulk-delete",
+        json={"project_ids": [ids[0], ids[1], ids[1], "not-a-project"]},
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+
+    assert result["deleted"] == [ids[0], ids[1]]
+    assert result["failed"] == [
+        {
+            "id": "not-a-project",
+            "code": "project_not_found",
+            "message": "Project not found.",
+        }
+    ]
+    assert len(result["trash_paths"]) == 2
+    for trash_path in result["trash_paths"]:
+        assert Path(trash_path).is_dir()
+
+    remaining = client.get("/api/projects").json()
+    assert [item["id"] for item in remaining] == [ids[2]]
+
+
+def test_bulk_delete_never_moves_a_folder_outside_the_data_dir(
+    client: TestClient, project: dict, tmp_path: Path
+) -> None:
+    """A copied or stale database must not delete another location's folder."""
+    import sqlite3
+
+    from app.core.config import get_settings
+
+    outside = tmp_path / "outside-storage"
+    outside.mkdir()
+    (outside / "keep.txt").write_text("keep", encoding="utf-8")
+
+    database = sqlite3.connect(get_settings().database_path)
+    database.execute(
+        "UPDATE projects SET directory = ? WHERE id = ?", (str(outside), project["id"])
+    )
+    database.commit()
+    database.close()
+
+    response = client.post(
+        "/api/projects/bulk-delete", json={"project_ids": [project["id"]]}
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["deleted"] == []
+    assert result["failed"][0]["code"] == "project_storage_outside_data_dir"
+
+    assert (outside / "keep.txt").read_text(encoding="utf-8") == "keep"
+    assert client.get(f"/api/projects/{project['id']}").status_code == 200
+
+
+def test_bulk_delete_requires_at_least_one_project(client: TestClient) -> None:
+    response = client.post("/api/projects/bulk-delete", json={"project_ids": []})
+    assert response.status_code == 422
+
+
+def test_bulk_delete_reports_a_missing_project_without_stopping(
+    client: TestClient, project: dict
+) -> None:
+    missing = "00000000-0000-4000-8000-000000000000"
+    response = client.post(
+        "/api/projects/bulk-delete",
+        json={"project_ids": [missing, project["id"]]},
+    )
+    assert response.status_code == 200
+    result = response.json()
+    assert result["deleted"] == [project["id"]]
+    assert result["failed"][0]["id"] == missing
+    assert client.get("/api/projects").json() == []

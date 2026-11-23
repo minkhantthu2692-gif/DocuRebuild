@@ -172,10 +172,27 @@ def touch_project(session: Session, project: Project) -> None:
 
 
 def delete_project(session: Session, project: Project) -> str:
+    """Move a project folder to the local trash and remove its database row.
+
+    The folder must live under the configured data folder. A stale or copied
+    ``app.db`` can contain an absolute path that points somewhere else, and
+    moving that folder would silently delete data outside DocuRebuild's own
+    storage. The row can still be removed when the folder is already gone.
+    """
     settings = get_settings()
     directory = Path(project.directory)
+    folder_exists = directory.exists()
+    if folder_exists and not directory.resolve().is_relative_to(
+        settings.projects_dir.resolve()
+    ):
+        raise AppError(
+            409,
+            "project_storage_outside_data_dir",
+            "The project folder is outside the DocuRebuild data folder, so it "
+            "was not deleted.",
+        )
     trash_path: Path | None = None
-    if directory.exists():
+    if folder_exists:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         trash_path = settings.trash_dir / f"{project.id}-{stamp}"
         counter = 1

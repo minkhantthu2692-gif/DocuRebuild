@@ -348,13 +348,19 @@ def _get_executor() -> ThreadPoolExecutor:
         return _executor
 
 
-def shutdown_ocr_executor() -> None:
+def shutdown_ocr_executor(*, wait: bool = False) -> None:
+    """Stop the OCR worker pool.
+
+    ``wait=True`` is used before a factory reset deletes the data folder; normal
+    application shutdown keeps the default so quitting is not blocked by an
+    engine call that is still running.
+    """
     global _executor
     with _executor_lock:
         executor = _executor
         _executor = None
     if executor is not None:
-        executor.shutdown(wait=False, cancel_futures=True)
+        executor.shutdown(wait=wait, cancel_futures=True)
 
 
 def start_ocr(

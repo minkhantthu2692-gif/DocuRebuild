@@ -98,6 +98,37 @@ def test_the_client_asset_path_cannot_escape_the_dist_folder(
     assert response.status_code == 404
 
 
+def test_page_images_require_the_launch_token(desktop_client: TestClient) -> None:
+    from tests.conftest import make_png
+
+    created = desktop_client.post(
+        "/api/projects", headers=_auth(), json={"name": "Images"}
+    )
+    assert created.status_code == 201
+    project_id = created.json()["id"]
+
+    imported = desktop_client.post(
+        f"/api/projects/{project_id}/pages/import",
+        headers=_auth(),
+        files=[("files", ("page.png", make_png(), "image/png"))],
+    )
+    assert imported.status_code == 200, imported.text
+    thumbnail_id = imported.json()[0]["thumbnail_asset_id"]
+    asset_url = f"/api/projects/{project_id}/assets/{thumbnail_id}/file"
+
+    # A bare <img> request has no header; the desktop shell adds it at the
+    # network layer. The API itself must still reject an unauthenticated call.
+    assert desktop_client.get(asset_url).status_code == 401
+    image = desktop_client.get(asset_url, headers=_auth())
+    assert image.status_code == 200
+    assert image.headers["content-type"].startswith("image/")
+
+
+def test_factory_reset_requires_the_launch_token(desktop_client: TestClient) -> None:
+    response = desktop_client.post("/api/system/reset", json={"confirm": "DELETE"})
+    assert response.status_code == 401
+
+
 def test_desktop_server_only_accepts_loopback() -> None:
     from desktop_server import _parse_args
 

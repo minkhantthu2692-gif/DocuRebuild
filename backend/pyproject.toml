@@ -1,6 +1,6 @@
 [project]
 name = "docurebuild-backend"
-version = "1.0.0"
+version = "1.0.1"
 private = true
 requires-python = ">=3.11"
 

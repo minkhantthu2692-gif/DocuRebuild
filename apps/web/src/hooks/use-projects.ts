@@ -60,6 +60,17 @@ export function useDeleteProject() {
   });
 }
 
+export function useBulkDeleteProjects() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (projectIds: string[]) => api.bulkDeleteProjects(projectIds),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      void queryClient.invalidateQueries({ queryKey: ["health"] });
+    },
+  });
+}
+
 export function useDownloadProjectBackup() {
   return useMutation({
     mutationFn: ({ projectId, password }: { projectId: string; password?: string }) =>

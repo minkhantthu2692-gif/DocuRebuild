@@ -53,6 +53,7 @@ import type {
   ElementTableRequest,
   ElementTableResponse,
   ExportSettings,
+  FactoryResetResult,
   HealthStatus,
   HistoryEvent,
   ImportJob,
@@ -66,6 +67,7 @@ import type {
   PageSummary,
   PageTableProposals,
   ProjectBackupSummary,
+  ProjectBulkDeleteResult,
   ProjectDetail,
   ProjectSummary,
   RegionProposals,
@@ -200,6 +202,16 @@ export const api = {
     request<ProjectDetail>(`/projects/${projectId}/open`, { method: "POST" }),
   deleteProject: (projectId: string) =>
     request<{ ok: boolean; trash_path: string }>(`/projects/${projectId}`, { method: "DELETE" }),
+  bulkDeleteProjects: (projectIds: string[]) =>
+    request<ProjectBulkDeleteResult>("/projects/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify({ project_ids: projectIds }),
+    }),
+  resetAllData: (confirmation: string) =>
+    request<FactoryResetResult>("/system/reset", {
+      method: "POST",
+      body: JSON.stringify({ confirm: confirmation }),
+    }),
   // A password is sent in the request body, never in the URL, and is used only
   // for this download. Without one the archive stays a plain .zip.
   downloadProjectBackup: (projectId: string, password?: string) =>

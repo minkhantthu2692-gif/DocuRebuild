@@ -13,6 +13,7 @@ import {
   RefreshCw,
   ScanText,
   ShieldCheck,
+  Trash2,
   Type,
 } from "lucide-react";
 import { useState } from "react";
@@ -37,6 +38,7 @@ import type {
 } from "@docurebuild/shared-types";
 
 import { AiSettings } from "@/components/settings/ai-settings";
+import { FactoryResetDialog } from "@/components/settings/factory-reset-dialog";
 import {
   SettingRow,
   SettingsSection,
@@ -118,6 +120,7 @@ export function SettingsPage() {
   const updateSettings = useUpdateSettings();
   const errorMessage = useApiErrorMessage();
   const [copied, setCopied] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
 
   const settings = settingsQuery.data;
   const appearance = settings?.appearance;
@@ -710,6 +713,26 @@ export function SettingsPage() {
                 <ShieldCheck className="mt-0.5 size-icon-sm shrink-0 text-success" aria-hidden="true" />
                 <p>{t("storage.privacyNote")}</p>
               </div>
+
+              <Separator />
+
+              <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 space-y-1">
+                  <p className="text-sm font-medium">{t("storage.reset.title")}</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {t("storage.reset.description")}
+                  </p>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="shrink-0 self-start gap-1.5 sm:self-auto"
+                  onClick={() => setResetOpen(true)}
+                >
+                  <Trash2 />
+                  {t("storage.reset.action")}
+                </Button>
+              </div>
             </SettingsSection>
 
             <SettingsSection id="about" icon={Info} title={t("sections.about")}>
@@ -765,6 +788,11 @@ export function SettingsPage() {
         </div>
       </div>
 
+      <FactoryResetDialog
+        open={resetOpen}
+        onOpenChange={setResetOpen}
+        dataDir={health?.data_dir}
+      />
     </div>
   );
 }

@@ -39,6 +39,12 @@ DocuRebuild.exe (Electron)
 - The token reaches the renderer only through the context-isolated preload bridge
   (`window.docurebuild.apiToken`), and `lib/api.ts` sends it as a bearer token on
   every request.
+- Plain `<img>` and editor HTML cannot attach a header, so the shell also adds the
+  bearer token to same-origin `/api/*` subresource requests in
+  `session.defaultSession.webRequest.onBeforeSendHeaders`, but only when the
+  request does not already carry `Authorization`. Thumbnails, rendered source
+  pages and extracted figures therefore load in the installed build without ever
+  putting the token in a URL or in page storage.
 - The backend requires that token for every `/api` request when
   `DOCUREBUILD_API_TOKEN` is set. Without the variable (development and tests) the
   API stays open on loopback, which preserves the existing workflow.
@@ -160,6 +166,21 @@ folder used only while building or restoring a backup. Relative asset references
 stored in SQLite so a project folder can be moved without rewriting paths.
 `resolve_within` rejects path traversal.
 
+The factory reset (`POST /api/system/reset`) removes exactly the entries the
+application owns inside that data folder — `projects/`, `trash/`, `tmp/`,
+`backups/`, `secrets/` and the `app.db` files — stops import/OCR workers and
+disposes the connection pool first, then recreates the folder layout and an empty
+migrated database. Unrelated files in a user-chosen `DOCUREBUILD_DATA_DIR` are
+left alone, and the installed application, its logs and window state are not
+touched. A drive root or the home directory is refused.
+
+Deleting a project moves its folder into `trash/`, but only when the stored
+absolute path resolves inside the current data folder; otherwise the request
+fails with `project_storage_outside_data_dir`. Because `app.db` records absolute
+project directories, copying only the data folder does not relocate the projects
+it references — use a freshly created data folder for destructive testing and
+point `DOCUREBUILD_DATA_DIR` there.
+
 ### Import rules
 
 Images:
@@ -245,8 +266,10 @@ GET    /api/ai/usage/history
 DELETE /api/ai/usage
 GET    /api/settings
 PATCH  /api/settings
+POST   /api/system/reset
 GET    /api/projects
 POST   /api/projects
+POST   /api/projects/bulk-delete
 GET    /api/projects/{id}
 PATCH  /api/projects/{id}
 DELETE /api/projects/{id}

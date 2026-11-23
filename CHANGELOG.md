@@ -4,6 +4,59 @@ All notable changes to DocuRebuild are recorded here. This project follows
 [Semantic Versioning](https://semver.org/) and the desktop application is the
 supported 1.0 distribution.
 
+## [1.0.1] - 2026-11-23
+
+A maintenance release for the 1.0 desktop application. It repairs image display
+in the installed build and adds two data-management actions that were missing:
+a full factory reset and multi-project deletion.
+
+### Added
+
+- **Factory reset.** Settings → Local storage now offers *Clear all data*. It
+  permanently removes every project folder, source page, thumbnail, extracted
+  figure, database row, saved preference, AI connection, encrypted key, backup
+  copy and temporary file inside the data folder, then recreates an empty
+  database. Background import and OCR workers are stopped and pooled database
+  connections are closed first. The action warns that it cannot be undone and
+  requires typing `DELETE`, checked in the interface and again by the API. Only
+  files DocuRebuild itself owns are removed, so a custom data folder that also
+  holds unrelated files keeps them, and the application stays installed.
+- **Multi-select and bulk delete.** The dashboard has a *Select* mode with a
+  per-card accessible toggle, a live selected count, *Select all* (respecting the
+  current search), *Deselect all*, *Delete selected* and *Cancel*. Deletion uses
+  the existing single-project behaviour — the folder and its stored backups move
+  to the local trash folder — and reports per-project failures without rolling
+  back projects that were already moved. A folder that resolves outside the
+  configured data folder is never moved.
+
+### Fixed
+
+- **Broken images in the packaged application.** Thumbnails, source page
+  previews and extracted figures were requested as plain `<img>`/HTML
+  subresources, which cannot attach the per-launch bearer token. The Electron
+  shell now adds the token to same-origin `/api/*` requests at the network layer
+  when a request does not already carry `Authorization`. The token still never
+  appears in a URL, page storage or the renderer bundle.
+- **Delete refuses folders outside the data folder.** Each project row stores an
+  absolute folder path. A copied or stale `app.db` could therefore make delete
+  (or bulk delete) move a folder that belongs to another location. Deletion now
+  fails with `project_storage_outside_data_dir` and leaves both the row and the
+  folder untouched; a row whose folder is already missing can still be removed.
+
+### Verified
+
+- 423 backend tests and 297 web tests pass; typecheck, ESLint and the production
+  build are clean.
+- The packaged build was installed into a clean, empty data folder and driven
+  over the DevTools protocol: all workspace asset images loaded (thumbnail and
+  page preview responses carried real bytes), the Clear all data dialog stayed
+  disabled until `DELETE` was typed, bulk delete moved a project to `trash/`, a
+  row pointing outside the data folder was refused, and the factory reset left
+  an empty project list, an empty database and an unrelated file untouched.
+- Local installer `DocuRebuild-1.0.1-setup.exe`: 211,539,463 bytes, SHA-256
+  `9729E2116DA4E2790314BF687A0AD2D81E70F1ABE18D9D7A246892145E9B5792`. It is not
+  published yet.
+
 ## [1.0.0] - 2026-11-22
 
 The first desktop release. DocuRebuild now installs as a Windows application

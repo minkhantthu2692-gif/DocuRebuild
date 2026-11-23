@@ -30,6 +30,7 @@ vi.mock("@/hooks/use-app", () => ({
   useAppSettings: () => ({ data: settings, isLoading: false }),
   useHealth: () => ({ data: undefined }),
   useUpdateSettings: () => ({ mutate: mocks.update, isPending: false }),
+  useFactoryReset: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/hooks/use-ai", () => ({

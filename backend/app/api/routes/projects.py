@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
@@ -43,6 +44,9 @@ from app.schemas.projects import (
     PageRestoreOut,
     PageRestoreRequest,
     ProjectBackupSummary,
+    ProjectBulkDeleteFailure,
+    ProjectBulkDeleteRequest,
+    ProjectBulkDeleteResult,
     ProjectCreate,
     ProjectDetail,
     ProjectSummary,
@@ -61,6 +65,8 @@ from app.services.projects import touch_project
 from app.services.settings import get_app_settings
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+logger = logging.getLogger(__name__)
 
 
 def _detail(project) -> dict[str, Any]:
@@ -406,6 +412,47 @@ def delete_project(project: ProjectDep, session: DbSession) -> dict[str, Any]:
     base_name = Path(trash_path).name if trash_path else None
     local_backups.trash_project_vault(project.id, base_name)
     return {"ok": True, "trash_path": trash_path}
+
+
+@router.post("/bulk-delete", response_model=ProjectBulkDeleteResult)
+def bulk_delete_projects(
+    payload: ProjectBulkDeleteRequest, session: DbSession
+) -> ProjectBulkDeleteResult:
+    """Move several projects to the local trash in one request.
+
+    Each project keeps the same recovery behaviour as a single delete: its
+    folder and stored backup copies move to the local trash folder. A failure
+    for one project never rolls back a project that was already moved, and the
+    response reports exactly which IDs succeeded and which did not.
+    """
+    result = ProjectBulkDeleteResult()
+    # Preserve request order while ignoring duplicate IDs.
+    for project_id in dict.fromkeys(payload.project_ids):
+        try:
+            project = project_service.get_project(session, project_id)
+            trash_path = project_service.delete_project(session, project)
+            if trash_path:
+                result.trash_paths.append(trash_path)
+                local_backups.trash_project_vault(project.id, Path(trash_path).name)
+            result.deleted.append(project.id)
+        except AppError as exc:
+            session.rollback()
+            result.failed.append(
+                ProjectBulkDeleteFailure(
+                    id=project_id, code=exc.code, message=exc.message
+                )
+            )
+        except Exception:
+            session.rollback()
+            logger.exception("Bulk delete failed for project %s", project_id)
+            result.failed.append(
+                ProjectBulkDeleteFailure(
+                    id=project_id,
+                    code="project_delete_failed",
+                    message="The project could not be deleted.",
+                )
+            )
+    return result
 
 
 # --------------------------------------------------------------------------- #

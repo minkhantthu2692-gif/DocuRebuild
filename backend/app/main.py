@@ -22,6 +22,7 @@ from app.api.routes import (
     projects,
     regions,
     settings as settings_routes,
+    system,
     tables,
 )
 from app.services import imports as import_service
@@ -111,6 +112,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix="/api")
     app.include_router(projects.router, prefix="/api")
     app.include_router(settings_routes.router, prefix="/api")
+    app.include_router(system.router, prefix="/api")
     app.include_router(ocr.router, prefix="/api")
     app.include_router(elements.router, prefix="/api")
     app.include_router(regions.router, prefix="/api")

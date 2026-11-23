@@ -78,6 +78,27 @@ export interface ProjectDetail extends ProjectSummary {
   document_updated_at: string | null;
 }
 
+/** One project that could not be moved to the trash during a bulk delete. */
+export interface ProjectBulkDeleteFailure {
+  id: string;
+  code: string;
+  message: string;
+}
+
+/** Outcome of deleting several projects in one request. */
+export interface ProjectBulkDeleteResult {
+  deleted: string[];
+  failed: ProjectBulkDeleteFailure[];
+  trash_paths: string[];
+}
+
+/** Outcome of a factory reset that erased all local application data. */
+export interface FactoryResetResult {
+  ok: boolean;
+  data_dir: string;
+  projects_removed: number;
+}
+
 /** One verified backup archive kept in the local backup vault. */
 export interface ProjectBackupSummary {
   filename: string;

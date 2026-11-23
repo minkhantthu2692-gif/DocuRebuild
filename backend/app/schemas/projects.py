@@ -246,3 +246,19 @@ class DocumentRestoreOut(BaseModel):
     revision_id: str | None = None
     updated_at: str | None = None
     document: DocumentOut
+
+
+class ProjectBulkDeleteRequest(BaseModel):
+    project_ids: list[str] = Field(min_length=1, max_length=500)
+
+
+class ProjectBulkDeleteFailure(BaseModel):
+    id: str
+    code: str
+    message: str
+
+
+class ProjectBulkDeleteResult(BaseModel):
+    deleted: list[str] = Field(default_factory=list)
+    failed: list[ProjectBulkDeleteFailure] = Field(default_factory=list)
+    trash_paths: list[str] = Field(default_factory=list)

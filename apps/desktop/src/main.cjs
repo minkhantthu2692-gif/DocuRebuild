@@ -305,6 +305,29 @@ function installSecurityHandlers() {
   });
 }
 
+/**
+ * Attach the launch token to subresource requests that cannot set headers.
+ *
+ * Page thumbnails, document figures and CSS images are loaded by <img> tags,
+ * which never send an Authorization header. The renderer's own fetch calls
+ * already carry the token, so this only fills the gap and never duplicates it.
+ * The token stays in the shell process; it is not exposed in URLs or storage.
+ */
+function installApiAuthorization(origin) {
+  if (!backendToken) return;
+  const filter = { urls: [`${origin}/api/*`] };
+  session.defaultSession.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
+    const headers = details.requestHeaders || {};
+    const hasAuthorization = Object.keys(headers).some(
+      (name) => name.toLowerCase() === "authorization",
+    );
+    if (!hasAuthorization) {
+      headers.Authorization = `Bearer ${backendToken}`;
+    }
+    callback({ requestHeaders: headers });
+  });
+}
+
 function windowBackgroundColor() {
   // Pre-paint colour only: avoid a white flash before the saved theme applies.
   return nativeTheme.shouldUseDarkColors ? "#0c0e17" : "#f6f6f4";
@@ -417,6 +440,7 @@ if (!gotLock) {
     installSecurityHandlers();
     try {
       await startBackend();
+      installApiAuthorization(`http://127.0.0.1:${backendPort}`);
       createWindow();
     } catch (error) {
       showStartupFailure(error instanceof Error ? error.message : String(error));

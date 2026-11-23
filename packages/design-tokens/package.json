@@ -1,6 +1,6 @@
 {
   "name": "@docurebuild/design-tokens",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Shared design tokens and Tailwind preset for DocuRebuild",
   "main": "tailwind-preset.cjs",

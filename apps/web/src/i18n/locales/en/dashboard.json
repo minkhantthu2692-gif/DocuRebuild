@@ -84,5 +84,25 @@
     "confirm": "Move to trash",
     "deleting": "Moving…",
     "deleted": "Project moved to the local trash folder."
+  },
+  "selection": {
+    "action": "Select",
+    "selected": "{{count}} selected",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
+    "deleteSelected": "Delete ({{count}})",
+    "toggleProject": "Select {{name}}"
+  },
+  "bulkDeleteDialog": {
+    "title": "Delete {{count}} projects?",
+    "description": "The selected project folders will be moved to the local trash folder. Imported source files are not permanently deleted.",
+    "warning": "This cannot be undone from the app. Recover a folder from the local trash only if you need it.",
+    "listLabel": "Projects to delete",
+    "more": "and {{count}} more",
+    "confirm": "Move {{count}} to trash",
+    "deleting": "Moving…",
+    "deleted_one": "{{count}} project moved to the local trash folder.",
+    "deleted_other": "{{count}} projects moved to the local trash folder.",
+    "partial": "{{deleted}} moved. {{failed}} could not be deleted."
   }
 }

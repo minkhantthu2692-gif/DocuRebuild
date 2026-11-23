@@ -1,10 +1,11 @@
-import { Plus, Search, TriangleAlert, FolderLock, ArchiveRestore } from "lucide-react";
+import { Plus, Search, TriangleAlert, FolderLock, ArchiveRestore, ListChecks, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import type { ProjectSummary } from "@docurebuild/shared-types";
 
+import { BulkDeleteProjectsDialog } from "@/components/projects/bulk-delete-projects-dialog";
 import { CreateProjectDialog } from "@/components/projects/create-project-dialog";
 import { DeleteProjectDialog } from "@/components/projects/delete-project-dialog";
 import { ProjectCard } from "@/components/projects/project-card";
@@ -47,6 +48,9 @@ export function DashboardPage() {
   const [restoreOpen, setRestoreOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<ProjectSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
   const filtered = useMemo(() => {
@@ -58,6 +62,27 @@ export function DashboardPage() {
         project.description.toLowerCase().includes(query),
     );
   }, [projects, search]);
+
+  const selectedProjects = useMemo(
+    () => projects.filter((project) => selectedIds.has(project.id)),
+    [projects, selectedIds],
+  );
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((project) => selectedIds.has(project.id));
+
+  const toggleSelected = (project: ProjectSummary) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(project.id)) next.delete(project.id);
+      else next.add(project.id);
+      return next;
+    });
+  };
+
+  const exitSelection = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
 
   const hasProjects = projects.length > 0;
 
@@ -106,8 +131,8 @@ export function DashboardPage() {
         </header>
 
         <section className="mt-7" aria-labelledby="projects-heading">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
               <h2 id="projects-heading" className="text-sm font-semibold tracking-tight">
                 {t("projects")}
               </h2>
@@ -116,11 +141,68 @@ export function DashboardPage() {
                   {projects.length}
                 </Badge>
               ) : null}
+              {search.trim() && filtered.length !== projects.length ? (
+                <span className="text-2xs text-muted-foreground">
+                  {t("projectsCount", { count: filtered.length })}
+                </span>
+              ) : null}
             </div>
-            {search.trim() && filtered.length !== projects.length ? (
-              <span className="text-2xs text-muted-foreground">
-                {t("projectsCount", { count: filtered.length })}
-              </span>
+
+            {hasProjects ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {selectionMode ? (
+                  <>
+                    <span
+                      aria-live="polite"
+                      className="mr-1 text-xs font-medium text-foreground"
+                    >
+                      {t("selection.selected", { count: selectedProjects.length })}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={allFilteredSelected}
+                      onClick={() =>
+                        setSelectedIds(new Set(filtered.map((project) => project.id)))
+                      }
+                    >
+                      {t("selection.selectAll")}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={selectedIds.size === 0}
+                      onClick={() => setSelectedIds(new Set())}
+                    >
+                      {t("selection.deselectAll")}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={selectedProjects.length === 0}
+                      onClick={() => setBulkDeleteOpen(true)}
+                    >
+                      <Trash2 />
+                      {t("selection.deleteSelected", {
+                        count: selectedProjects.length,
+                      })}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={exitSelection}>
+                      <X />
+                      {tCommon("actions.cancel")}
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectionMode(true)}
+                  >
+                    <ListChecks />
+                    {t("selection.action")}
+                  </Button>
+                )}
+              </div>
             ) : null}
           </div>
 
@@ -178,6 +260,9 @@ export function DashboardPage() {
                     project={project}
                     onRename={setRenameTarget}
                     onDelete={setDeleteTarget}
+                    selectionMode={selectionMode}
+                    selected={selectedIds.has(project.id)}
+                    onToggleSelected={toggleSelected}
                   />
                 </div>
               ))}
@@ -208,6 +293,22 @@ export function DashboardPage() {
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null);
+        }}
+      />
+      <BulkDeleteProjectsDialog
+        projects={selectedProjects}
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        onDeleted={(deletedIds, failedIds) => {
+          if (failedIds.length === 0) {
+            exitSelection();
+            return;
+          }
+          setSelectedIds((current) => {
+            const next = new Set(current);
+            deletedIds.forEach((id) => next.delete(id));
+            return next;
+          });
         }}
       />
     </div>

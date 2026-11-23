@@ -83,6 +83,9 @@ Electron main process (apps/desktop/src/main.cjs)
 Renderer (apps/web)
   └─ preload exposes { apiToken, platform: "desktop", version }
      All API calls add Authorization: Bearer <token> from window.docurebuild.
+     The shell's webRequest hook adds the same header to same-origin /api/*
+     subresources (<img>, editor HTML) that cannot set one, so thumbnails,
+     source pages and figures load without the token ever entering a URL.
 
 FastAPI sidecar (backend/desktop_server.py -> backend/app/main.py)
   ├─ binds 127.0.0.1 only; rejects non-loopback --host
@@ -153,7 +156,7 @@ switch to the desktop app.
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| Project management | Complete | Create, list, open, rename, delete to trash, integrity checks |
+| Project management | Complete | Create, list, open, rename, delete to trash, multi-select bulk delete, integrity checks |
 | Image/PDF import | Complete | Images and PDFs, immutable originals, 150 DPI rendering, EXIF, checksums, background jobs with progress/cancel |
 | Image processing | Complete | Non-destructive crop, perspective, deskew, grayscale, contrast, brightness, sharpness, denoise, threshold, shadow/background cleanup |
 | Local OCR | Complete | Tesseract adapter, `eng`/`mya`/mixed, confidence, editable and verifiable blocks, stale detection, page segmentation choice |
@@ -165,7 +168,7 @@ switch to the desktop app.
 | Editor and export | Complete | Headings, lists, quotes, code, links, find/replace, tables, figures, inline images, equations, footnotes, headers/footers; Markdown/TXT/DOCX/PDF export |
 | History and backup | Complete | Revisions, restore/compare, activity log with CSV/JSON export, verified zip/drbz backup, additive and selective restore, local vault with retention, opt-in scheduled copies |
 | AI (BYOK) | Complete for the supported scope | Local Ollama + custom OpenAI-compatible + 12 cloud adapters, dynamic models, encrypted keys, rotation/failover, per-task routes, limits/budget, consent, metadata-only usage |
-| Desktop distribution | Complete for Windows | Electron + sidecar, token, CSP, bundled Tesseract, NSIS installer, data-preserving uninstall |
+| Desktop distribution | Complete for Windows | Electron + sidecar, token (including API subresource injection), CSP, bundled Tesseract, NSIS installer, data-preserving uninstall, typed-confirmation factory reset |
 | i18n | Complete | English + Burmese, live switching, key parity tests, Unicode-safe |
 
 Deferred or partial work is listed in `ROADMAP.md`. Notable gaps: real-scan OCR
@@ -266,8 +269,8 @@ AI credentials are configured in the application, not in environment files.
 ## 11. Verification commands and current results
 
 ```powershell
-backend/.venv/Scripts/python -m pytest backend/tests -q   # 414 passed
-npm run test:web                                          # 290 tests / 47 files
+backend/.venv/Scripts/python -m pytest backend/tests -q   # 423 passed
+npm run test:web                                          # 297 tests / 49 files
 npm run typecheck                                         # clean
 npm run lint                                              # clean
 npm run build                                             # production build
@@ -296,13 +299,26 @@ secret scan.
 - One low-severity KaTeX advisory (prototype pollution through `trust`) is
   accepted: the app renders only user-authored equations with `trust: false`.
 - SQLite must not live on a network share.
+- `app.db` stores **absolute** project directory paths. Copying the data folder
+  does not relocate the projects, and the app refuses to delete a folder that
+  resolves outside the active data folder (`project_storage_outside_data_dir`).
+  For destructive verification, start the app with `DOCUREBUILD_DATA_DIR`
+  pointing at an empty folder and create projects inside it; never test delete or
+  factory reset against a copy of real data.
 - The local vault is plaintext by design; only explicit downloads can be
   password-encrypted, and a forgotten password cannot be recovered.
 
 ## 13. Release state
 
-- Version 1.0.0 everywhere. License AGPL-3.0-or-later.
+- Version 1.0.1 everywhere (1.0.0 remains the published release). License
+  AGPL-3.0-or-later.
 - Repository: <https://github.com/minkhantthu2692-gif/DocuRebuild>
+- Unreleased 1.0.1 fixes image loading in the installed build and adds the
+  factory reset and dashboard bulk delete, plus a guard that refuses to delete a
+  folder outside the data folder. The source change is committed; the locally
+  built installer (`DocuRebuild-1.0.1-setup.exe`, 211,539,463 bytes, SHA-256
+  `9729E2116DA4E2790314BF687A0AD2D81E70F1ABE18D9D7A246892145E9B5792`) passed an
+  isolated packaged smoke test and is not published.
 - Release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.0.0>,
   published 22 November 2026 from tag `v1.0.0` at commit `0a7af7f`.
 - Installer asset:

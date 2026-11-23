@@ -19,6 +19,7 @@ export const SUPPORTED_LANGUAGES = ["en", "my"] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
 const LANGUAGE_STORAGE_KEY = "docurebuild.language";
+export { LANGUAGE_STORAGE_KEY };
 
 export const resources = {
   en: {

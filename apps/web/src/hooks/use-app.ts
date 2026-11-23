@@ -77,3 +77,15 @@ export function useUpdateSettings() {
     },
   });
 }
+
+export function useFactoryReset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (confirmation: string) => api.resetAllData(confirmation),
+    onSuccess: () => {
+      // The caller reloads the window, but clearing the cache now means a test
+      // or a delayed reload cannot show deleted projects from stale data.
+      queryClient.clear();
+    },
+  });
+}

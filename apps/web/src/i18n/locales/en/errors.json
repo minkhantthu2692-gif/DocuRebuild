@@ -134,5 +134,11 @@
   "ai_table_too_large": "The AI table reply is too large to review safely. Crop a smaller table.",
   "ai_table_region_required": "Only a table region can be read as a table.",
   "ai_preferences": "The AI limits could not be saved. Check the values and try again.",
-  "ai_migration": "Legacy AI settings could not be migrated. Your previous values are unchanged."
+  "ai_migration": "Legacy AI settings could not be migrated. Your previous values are unchanged.",
+  "reset_confirmation_required": "Type DELETE exactly to confirm the factory reset.",
+  "reset_incomplete": "DocuRebuild could not remove every data file. Close other applications that may be using the data folder, then try again.",
+  "reset_unsafe_location": "The configured data folder is too broad to reset safely. Choose a dedicated DocuRebuild folder.",
+  "reset_data_dir_invalid": "The configured data folder is not a directory, so it was not reset.",
+  "project_delete_failed": "This project could not be deleted. Its files were not changed.",
+  "project_storage_outside_data_dir": "This project's folder is stored outside the DocuRebuild data folder, so it was not deleted. Restore the data folder to its original location first."
 }

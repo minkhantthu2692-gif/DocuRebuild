@@ -49,8 +49,13 @@ def _get_executor() -> ThreadPoolExecutor:
         return _executor
 
 
-def shutdown_import_executor() -> None:
-    """Stop accepting imports and mark in-flight jobs as interrupted."""
+def shutdown_import_executor(*, wait: bool = False) -> None:
+    """Stop accepting imports and mark in-flight jobs as interrupted.
+
+    ``wait=True`` is used by a factory reset so no worker can still be writing
+    into a project folder while it is removed. Normal application shutdown keeps
+    the default so quitting is never held up by a large PDF import.
+    """
     global _executor
     with _executor_lock:
         executor = _executor
@@ -66,7 +71,7 @@ def shutdown_import_executor() -> None:
             "import_interrupted",
         )
     if executor is not None:
-        executor.shutdown(wait=False, cancel_futures=True)
+        executor.shutdown(wait=wait, cancel_futures=True)
 
 
 def _job_payload(row) -> dict[str, Any]:

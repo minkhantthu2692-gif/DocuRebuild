@@ -4,7 +4,7 @@ This is the short, current roadmap for the 1.0 Windows desktop release.
 `docs/roadmap.md` keeps the detailed phase-by-phase implementation history;
 `PROJECT_MEMORY.md` records architecture and handover context.
 
-Last updated: 2026-11-21.
+Last updated: 2026-11-23.
 
 ## Release status
 
@@ -13,12 +13,17 @@ installer, bundled OCR, local database/storage, BYOK AI, backup/restore and
 export are implemented and verified. Everything below labelled *Complete* is
 shipped in `DocuRebuild-1.0.0-setup.exe`.
 
+**1.0.1 (unreleased installer)** fixes image/thumbnail/figure loading in the
+installed build and adds the factory reset and dashboard multi-select bulk
+delete. The code and tests are in the repository; the 1.0.1 installer is built
+and smoke tested locally before publishing.
+
 ## Completed — 1.0 MUST HAVE
 
 | Area | Delivered |
 | --- | --- |
 | Foundation | npm-workspaces monorepo, React/Vite/Tailwind client, FastAPI backend, SQLite + Alembic, shared contracts, design tokens, typed errors |
-| Projects and storage | Local app/project databases, project folders, manifest, create/open/rename/delete-to-trash, integrity checks |
+| Projects and storage | Local app/project databases, project folders, manifest, create/open/rename/delete-to-trash, dashboard multi-select bulk delete, integrity checks |
 | Import | Images (JPG/PNG/WebP/BMP/TIFF) and PDFs, immutable originals, EXIF, checksums, 150 DPI PDF rendering, background jobs with progress and cancellation, PDF text-layer extraction |
 | Image processing | Non-destructive crop, perspective, deskew, grayscale, contrast, brightness, sharpness, denoise, threshold, shadow/background cleanup, before/after preview, reset |
 | OCR | Bundled Tesseract 5.4 `eng`/`mya`/`osd`, page segmentation choice, confidence, editable/verifiable blocks, stale detection, layout hints and overlay, local CER/WER benchmark |
@@ -27,7 +32,8 @@ shipped in `DocuRebuild-1.0.0-setup.exe`.
 | Editor and export | Tiptap editor with links, find/replace, tables, figures, equations, footnotes and headers/footers; Markdown, TXT, DOCX and PDF export with configurable page/margin |
 | History and backup | Document revisions with compare/restore, activity log with CSV/JSON export, verified zip and password-encrypted `.drbz` backup, additive and selective restore, local vault with retention, opt-in scheduled copies |
 | AI (BYOK) | Local Ollama, custom OpenAI-compatible and 12 cloud adapters, dynamic discovery, encrypted key vault, rotation/failover, per-task routes, limits and budget, remote consent, metadata-only usage ledger, reviewable proposals |
-| Desktop release | Electron shell, PyInstaller sidecar, loopback-only token-protected API, strict CSP and sandbox, bundled OCR, per-user NSIS installer, data-preserving uninstall, AGPL licensing and third-party notices |
+| Desktop release | Electron shell, PyInstaller sidecar, loopback-only token-protected API (including API subresource requests), strict CSP and sandbox, bundled OCR, per-user NSIS installer, data-preserving uninstall, AGPL licensing and third-party notices |
+| Data management | Typed-confirmation factory reset that removes only app-owned data and keeps the application installed |
 | Internationalization | English and Burmese, live switching, key-parity tests, Unicode-safe layout |
 
 ## Remaining MUST HAVE before a wider (non-Windows) production release
