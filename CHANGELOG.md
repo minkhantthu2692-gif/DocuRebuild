@@ -54,8 +54,9 @@ a full factory reset and multi-project deletion.
   row pointing outside the data folder was refused, and the factory reset left
   an empty project list, an empty database and an unrelated file untouched.
 - Local installer `DocuRebuild-1.0.1-setup.exe`: 211,539,463 bytes, SHA-256
-  `9729E2116DA4E2790314BF687A0AD2D81E70F1ABE18D9D7A246892145E9B5792`. It is not
-  published yet.
+  `9729E2116DA4E2790314BF687A0AD2D81E70F1ABE18D9D7A246892145E9B5792`. Published
+  as the `v1.0.1` GitHub Release and re-downloaded without credentials: the
+  published asset is the same size and checksum.
 
 ## [1.0.0] - 2026-11-22
 

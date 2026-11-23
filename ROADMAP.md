@@ -8,15 +8,16 @@ Last updated: 2026-11-23.
 
 ## Release status
 
-**DocuRebuild 1.0.0 is complete for the Windows x64 desktop scope.** The
-installer, bundled OCR, local database/storage, BYOK AI, backup/restore and
-export are implemented and verified. Everything below labelled *Complete* is
-shipped in `DocuRebuild-1.0.0-setup.exe`.
+**DocuRebuild 1.0.1 is the current release for the Windows x64 desktop scope
+(published 23 November 2026).** The installer, bundled OCR, local
+database/storage, BYOK AI, backup/restore and export are implemented and
+verified. Everything below labelled *Complete* ships in
+`DocuRebuild-1.0.1-setup.exe`.
 
-**1.0.1 (unreleased installer)** fixes image/thumbnail/figure loading in the
-installed build and adds the factory reset and dashboard multi-select bulk
-delete. The code and tests are in the repository; the 1.0.1 installer is built
-and smoke tested locally before publishing.
+**1.0.1** fixes image/thumbnail/figure loading in the installed build and adds
+the factory reset, dashboard multi-select bulk delete and a guard that refuses
+to delete a project folder outside the data folder. It supersedes
+`DocuRebuild-1.0.0-setup.exe`; upgrading keeps existing projects.
 
 ## Completed — 1.0 MUST HAVE
 
