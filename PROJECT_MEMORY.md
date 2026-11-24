@@ -323,7 +323,8 @@ secret scan.
 - Version 1.0.2 everywhere. License AGPL-3.0-or-later.
 - Repository: <https://github.com/minkhantthu2692-gif/DocuRebuild>
 - Current release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.0.2>,
-  published 24 November 2026 from tag `v1.0.2`, and marked latest.
+  published 24 November 2026 from tag `v1.0.2` at commit `dae6ffd`, and marked
+  latest.
 - 1.0.2 installer asset:
   <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/download/v1.0.2/DocuRebuild-1.0.2-setup.exe>,
   211,540,824 bytes (201.7 MB), SHA-256
@@ -333,6 +334,12 @@ secret scan.
   and makes Edit Image apply adjustments in place: the dialog and preview stay
   mounted while a debounced, serialised render arrives, and edits are flushed on
   close instead of on every slider tick.
+- 1.0.2 verification: 423 backend and 304 web tests pass; the installed sidecar
+  created a project, imported a page, ran bundled English OCR at 95.8 mean
+  confidence, exported Markdown/TXT/DOCX/PDF, and restored a backup zip as a new
+  project. Uninstall kept the data folder unchanged and reinstall restored the
+  per-user install. The published asset was re-downloaded anonymously: same size
+  and SHA-256.
 - 1.0.1 history: tag `v1.0.1` at commit `a6ca946`, published 23 November 2026;
   installer `DocuRebuild-1.0.1-setup.exe`, 211,539,463 bytes, SHA-256
   `9729E2116DA4E2790314BF687A0AD2D81E70F1ABE18D9D7A246892145E9B5792`, downloaded

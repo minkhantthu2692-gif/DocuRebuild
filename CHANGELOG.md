@@ -45,6 +45,16 @@ migration.
   rights); the registry entry and executable report 1.0.2. Launching the
   installed application with an empty temporary data folder started its sidecar
   and created a new project database there, leaving existing projects untouched.
+- The installed sidecar then ran a functional drill against an empty data folder:
+  create a project, import a synthetic English page, run bundled Tesseract OCR
+  (95.8 mean confidence, 709 characters), save a document, export Markdown, TXT,
+  DOCX and PDF, create a backup zip and restore it as a second project with the
+  same page.
+- Uninstalling removed the program files and kept the local data folder and its
+  database files unchanged; reinstalling 1.0.2 restored the per-user install and
+  the `DocuRebuild 1.0.2` registry entry.
+- The `v1.0.2` GitHub Release was published with the installer, and an anonymous
+  re-download matched 211,540,824 bytes and the SHA-256 above.
 - Local installer `DocuRebuild-1.0.2-setup.exe`: 211,540,824 bytes (201.7 MB),
   SHA-256
   `E501B0427371ED64B185A56E67089945896B417C9B19057130802455A1A03F47`.
