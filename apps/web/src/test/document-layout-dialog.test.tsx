@@ -63,7 +63,7 @@ describe("document layout dialog", () => {
 
     expect(screen.getByLabelText("Header text")).toHaveValue("Running head");
     expect(screen.getByLabelText("Footer text")).toHaveValue("Draft");
-    expect(screen.getByRole("checkbox", { name: /Add page numbers/ })).toBeChecked();
+    expect(screen.getByRole("switch", { name: /Add page numbers/ })).toBeChecked();
     expect(screen.getByText("12 / 200")).toBeInTheDocument();
   });
 
@@ -88,7 +88,7 @@ describe("document layout dialog", () => {
     fireEvent.change(screen.getByLabelText("Footer text"), {
       target: { value: "Source: {title}" },
     });
-    fireEvent.click(screen.getByRole("checkbox", { name: /Add page numbers/ }));
+    fireEvent.click(screen.getByRole("switch", { name: /Add page numbers/ }));
     fireEvent.click(screen.getByRole("button", { name: "Save layout" }));
 
     expect(mocks.mutate).toHaveBeenCalledWith(

@@ -1301,7 +1301,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
                 {imageSrc ? (
                   <>
                     <img
-                      key={`${currentPage.id}-${currentPage.updated_at}`}
+                      key={currentPage.id}
                       ref={imageRef}
                       src={imageSrc}
                       alt={currentPage.original_filename ?? labelFor(currentPage)}

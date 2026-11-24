@@ -29,6 +29,7 @@ import type {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -612,9 +613,7 @@ export function ElementsDialog({
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               {placement === "block" ? (
                 <label className="flex items-center gap-1.5 text-2xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    className="size-3.5 accent-primary"
+                  <Checkbox
                     checked={includeNote}
                     onChange={(event) => setIncludeNote(event.target.checked)}
                   />

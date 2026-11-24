@@ -19,6 +19,7 @@ import type { AiSuggestion, OcrBlock, OcrBlockKind, PageSummary } from "@docureb
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -162,6 +163,7 @@ export function OcrDialog({
     (block) => (drafts[block.id] ?? block.text) !== block.text,
   );
   const allSelected = blocks.length > 0 && selectedBlocks.length === blocks.length;
+  const someSelected = !allSelected && selectedBlocks.length > 0;
   const runError =
     run?.error_code && i18n.exists(run.error_code, { ns: "errors" })
       ? tErrors(run.error_code)
@@ -583,10 +585,9 @@ export function OcrDialog({
                                 {t("ocr.table.detect")}
                               </Button>
                               <label className="flex items-center gap-1.5 text-2xs text-muted-foreground">
-                                <input
-                                  type="checkbox"
-                                  className="size-3.5 accent-primary"
+                                <Checkbox
                                   checked={allSelected}
+                                  indeterminate={someSelected}
                                   onChange={(event) => {
                                     const checked = event.target.checked;
                                     setSelected(
@@ -621,9 +622,7 @@ export function OcrDialog({
                               >
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <label className="flex items-center gap-1.5 text-2xs">
-                                    <input
-                                      type="checkbox"
-                                      className="size-3.5 accent-primary"
+                                    <Checkbox
                                       checked={selected[block.id] ?? true}
                                       onChange={(event) =>
                                         setSelected((current) => ({
@@ -659,9 +658,7 @@ export function OcrDialog({
                                       dirty && "opacity-50",
                                     )}
                                   >
-                                    <input
-                                      type="checkbox"
-                                      className="size-3.5 accent-primary"
+                                    <Checkbox
                                       checked={block.verified}
                                       disabled={dirty || updateBlock.isPending || run.stale}
                                       onChange={(event) =>
@@ -881,9 +878,7 @@ export function OcrDialog({
 
             <DialogFooter className="mt-0 shrink-0 items-stretch gap-2 border-t border-border/60 pt-3 sm:items-center">
               <label className="mr-auto flex items-center gap-1.5 text-2xs text-muted-foreground sm:mr-auto">
-                <input
-                  type="checkbox"
-                  className="size-3.5 accent-primary"
+                <Checkbox
                   checked={includeNote}
                   onChange={(event) => setIncludeNote(event.target.checked)}
                   disabled={!run || run.stale}

@@ -4,6 +4,51 @@ All notable changes to DocuRebuild are recorded here. This project follows
 [Semantic Versioning](https://semver.org/) and the desktop application is the
 supported 1.0 distribution.
 
+## [1.0.2] - 2026-11-24
+
+A maintenance release for the 1.0 desktop application. It modernises the form
+controls across the workspace and stops the Edit Image dialog from refreshing,
+resetting or flickering while adjustments are made. Existing projects need no
+migration.
+
+### Changed
+
+- **Unified checkboxes, switches and radios.** Every checkbox in the workspace,
+  settings, tables and dialogs now uses one shared themed control with matching
+  sizing, hover, focus and disabled states. Standalone binary settings use a
+  toggle switch; independent and multi-item selections keep checkbox semantics;
+  radio groups stay native radios, so keyboard, label and screen-reader
+  behaviour is unchanged.
+- **Edit Image applies adjustments in place.** Filter changes are previewed
+  immediately and saved after a short pause instead of on every slider tick.
+  The preview image and the dialog itself stay mounted while a new render
+  arrives, edits are serialised so an older response cannot overwrite a newer
+  one, and a pending adjustment is still saved when the dialog closes. A loading
+  badge and a footer status replace the previous toast on every change.
+
+### Fixed
+
+- The Edit Image dialog no longer closes, blanks or resets its controls when the
+  page is refreshed after an adjustment.
+- The source viewer no longer remounts its page image when the page render is
+  updated, so scroll position and zoom stay put.
+
+### Verified
+
+- 423 backend tests and 304 web tests pass; typecheck, ESLint and the production
+  build are clean.
+- The rebuilt packaged sidecar was started against an empty data folder: a fresh
+  database migrated to the current schema, `/api/health` reported
+  `version: 1.0.2`, a request without the bearer token returned `401`, and the
+  bundled client was served from the same origin.
+- The installer was installed silently over 1.0.1 (per-user, no administrator
+  rights); the registry entry and executable report 1.0.2. Launching the
+  installed application with an empty temporary data folder started its sidecar
+  and created a new project database there, leaving existing projects untouched.
+- Local installer `DocuRebuild-1.0.2-setup.exe`: 211,540,824 bytes (201.7 MB),
+  SHA-256
+  `E501B0427371ED64B185A56E67089945896B417C9B19057130802455A1A03F47`.
+
 ## [1.0.1] - 2026-11-23
 
 A maintenance release for the 1.0 desktop application. It repairs image display

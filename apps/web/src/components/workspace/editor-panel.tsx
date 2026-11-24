@@ -62,6 +62,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1404,19 +1405,18 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
                 </p>
               </div>
 
-              <label className="flex items-start gap-2 text-2xs leading-relaxed text-muted-foreground">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 size-3.5 accent-primary"
-                  checked={figureNumbered}
-                  onChange={(event) => setFigureNumbered(event.target.checked)}
-                />
+              <label className="flex items-start justify-between gap-3 text-2xs leading-relaxed text-muted-foreground">
                 <span>
                   <span className="block text-xs text-foreground">
                     {t("editor.figure.numbered")}
                   </span>
                   {t("editor.figure.numberedHint")}
                 </span>
+                <Switch
+                  className="mt-0.5"
+                  checked={figureNumbered}
+                  onChange={(event) => setFigureNumbered(event.target.checked)}
+                />
               </label>
 
               {figureSelection?.note ? (
@@ -1562,19 +1562,18 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
               </p>
 
               {equationKind === "block" ? (
-                <label className="flex items-start gap-2 text-2xs leading-relaxed text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 size-3.5 accent-primary"
-                    checked={equationNumbered}
-                    onChange={(event) => setEquationNumbered(event.target.checked)}
-                  />
+                <label className="flex items-start justify-between gap-3 text-2xs leading-relaxed text-muted-foreground">
                   <span>
                     <span className="block text-xs text-foreground">
                       {t("editor.equation.numbered")}
                     </span>
                     {t("editor.equation.numberedHint")}
                   </span>
+                  <Switch
+                    className="mt-0.5"
+                    checked={equationNumbered}
+                    onChange={(event) => setEquationNumbered(event.target.checked)}
+                  />
                 </label>
               ) : null}
             </div>

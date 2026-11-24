@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CenteredSpinner, Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useDocumentLayout, useSaveDocumentLayout } from "@/hooks/use-document";
 
@@ -143,19 +144,18 @@ export function DocumentLayoutDialog({
                 />
               </div>
 
-              <label className="flex items-start gap-2 text-2xs leading-relaxed text-muted-foreground">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 size-3.5 accent-primary"
-                  checked={showPageNumbers}
-                  onChange={(event) => setShowPageNumbers(event.target.checked)}
-                />
+              <label className="flex items-start justify-between gap-3 text-2xs leading-relaxed text-muted-foreground">
                 <span>
                   <span className="block text-xs text-foreground">
                     {t("editor.pageLayout.showPageNumbers")}
                   </span>
                   {t("editor.pageLayout.showPageNumbersHint")}
                 </span>
+                <Switch
+                  className="mt-0.5"
+                  checked={showPageNumbers}
+                  onChange={(event) => setShowPageNumbers(event.target.checked)}
+                />
               </label>
 
               <div className="rounded-md border border-border/60 bg-muted/20 p-2.5">

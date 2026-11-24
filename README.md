@@ -37,8 +37,8 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 ## Install the desktop app
 
-1. Run `DocuRebuild-1.0.0-setup.exe` from the
-   [v1.0.0 release](https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.0.0).
+1. Run `DocuRebuild-1.0.2-setup.exe` from the
+   [latest release](https://github.com/minkhantthu2692-gif/DocuRebuild/releases/latest).
    The release notes publish the SHA-256 checksum.
 2. The installer creates a per-user installation and a Start menu shortcut. It
    does not require administrator rights and does not install a system service.
@@ -1040,7 +1040,7 @@ provider.
 npm run desktop:build
 
 # Installer in dist/desktop-installer
-npm run desktop:dist   # -> DocuRebuild-1.0.0-setup.exe
+npm run desktop:dist   # -> DocuRebuild-1.0.2-setup.exe
 
 # Run the Electron shell against an existing dist/desktop payload
 npm run desktop:start

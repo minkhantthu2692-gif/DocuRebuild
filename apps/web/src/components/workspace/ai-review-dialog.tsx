@@ -1,5 +1,5 @@
 import { Check, CircleAlert, Sparkles, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -7,6 +7,7 @@ import type { AiSuggestion } from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -63,9 +64,7 @@ function SuggestionCard({
   return (
     <li className="rounded-lg border border-border/70 bg-background/45 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="checkbox"
-          className="size-3.5 accent-primary"
+        <Checkbox
           checked={selected}
           disabled={disabled || busy}
           aria-label={t("aiReview.selectProposal", { page: pageLabel, text: preview })}
@@ -125,7 +124,6 @@ export function AiReviewDialog({ projectId, open, onOpenChange }: AiReviewDialog
   const query = useProjectAiSuggestions(projectId, "pending", open);
   const decide = useDecideAiSuggestion(projectId);
   const bulk = useBulkDecideAiSuggestions(projectId);
-  const selectAllRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [confirmAction, setConfirmAction] = useState<"accepted" | "rejected" | null>(
     null,
@@ -142,12 +140,6 @@ export function AiReviewDialog({ projectId, open, onOpenChange }: AiReviewDialog
     ? (decide.variables?.suggestionId ?? null)
     : null;
   const otherDecisionRunning = decide.isPending || bulk.isPending;
-
-  useEffect(() => {
-    if (selectAllRef.current) {
-      selectAllRef.current.indeterminate = someSelected;
-    }
-  }, [someSelected, suggestions.length]);
 
   useEffect(() => {
     if (!open) {
@@ -261,11 +253,9 @@ export function AiReviewDialog({ projectId, open, onOpenChange }: AiReviewDialog
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-background/50 px-3 py-2">
                 <label className="flex items-center gap-1.5 text-2xs text-muted-foreground">
-                  <input
-                    ref={selectAllRef}
-                    type="checkbox"
-                    className="size-3.5 accent-primary"
+                  <Checkbox
                     checked={allSelected}
+                    indeterminate={someSelected}
                     aria-label={t("aiReview.selectAll")}
                     disabled={bulk.isPending}
                     onChange={toggleAll}

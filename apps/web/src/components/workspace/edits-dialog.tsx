@@ -9,7 +9,6 @@ import {
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -34,8 +33,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { Toggle } from "@/components/ui/toggle";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useUpdatePageEdits, useResetPageEdits, useEstimatePageSkew } from "@/hooks/use-projects";
@@ -69,6 +70,14 @@ const DEFAULT_PERSPECTIVE_CORNERS: [number, number][] = [
 ];
 
 const MIN_PERSPECTIVE_AREA = 0.02;
+
+/**
+ * Slider and switch changes are previewed locally at once and only committed
+ * after the user pauses. Every commit re-renders the page on the backend, so
+ * sending one request per pixel of slider travel is both slow and visibly
+ * janky.
+ */
+const FILTER_COMMIT_DELAY_MS = 350;
 
 function perspectiveArea(corners: [number, number][]): number {
   let area = 0;
@@ -112,6 +121,10 @@ function hasActiveEdits(edits: PageEdits): boolean {
     f.threshold !== d.threshold ||
     f.threshold_level !== d.threshold_level
   );
+}
+
+function editsEqual(left: PageEdits, right: PageEdits): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function geometryIcon(type: PageGeometryStep["type"]): LucideIcon {
@@ -212,7 +225,9 @@ export function EditsDialog({ projectId, page, open, onOpenChange }: EditsDialog
   const [edits, setEdits] = useState<PageEdits>({ geometry: [], filters: DEFAULT_FILTERS });
   const [activeTool, setActiveTool] = useState<PageGeometryStep["type"] | null>(null);
   const [comparingBase, setComparingBase] = useState(false);
-  const [preview, setPreview] = useState<{ src: string; version: number } | null>(null);
+  const [preview, setPreview] = useState<{ src: string; base: boolean } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [status, setStatus] = useState<"idle" | "pending" | "saving">("idle");
   const [perspectiveCorners, setPerspectiveCorners] = useState<[number, number][]>(() =>
     cloneCorners(undefined),
   );
@@ -221,32 +236,74 @@ export function EditsDialog({ projectId, page, open, onOpenChange }: EditsDialog
   const dragRef = useRef<{ startX: number; startY: number; rect: PageEdits["geometry"][0]["rect"] } | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const previewCounter = useRef(0);
   const initializedPageRef = useRef<string | null>(null);
   const editsRef = useRef(edits);
   editsRef.current = edits;
   const perspectiveCornersRef = useRef(perspectiveCorners);
   perspectiveCornersRef.current = perspectiveCorners;
 
-  const currentEdits = useMemo(() => normaliseEdits(page?.edits), [page?.edits]);
-  const hasEdits = hasActiveEdits(currentEdits);
+  // The dialog keeps its own copy of the edits while it is open. Incoming page
+  // props (cache writes from each commit) must never replace what the user is
+  // currently adjusting, otherwise a round-trip would reset the controls.
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const savedEditsRef = useRef<PageEdits>(normaliseEdits(page?.edits));
+  const commitTimerRef = useRef<number | null>(null);
+  const inFlightRef = useRef(false);
+  const queuedRef = useRef<PageEdits | null>(null);
+  const savingPageIdRef = useRef<string | null>(null);
+  const generationRef = useRef(0);
 
-  const refreshPreview = useCallback(
-    (useBase = comparingBase, target: PageSummary | null = page) => {
-      if (!target) return;
-      previewCounter.current += 1;
-      const version = previewCounter.current;
-      const url = useBase
-        ? api.pageBasePreview(projectId, target.id)
-        : api.assetUrl(projectId, target.display_asset_id ?? target.original_asset_id, target.updated_at);
-      if (!url) {
+  useEffect(
+    () => () => {
+      if (commitTimerRef.current !== null) window.clearTimeout(commitTimerRef.current);
+    },
+    [],
+  );
+
+  const hasEdits = hasActiveEdits(edits);
+
+  const previewRef = useRef(preview);
+  previewRef.current = preview;
+
+  const previewSrc = useCallback(
+    (target: PageSummary, useBase: boolean) => {
+      if (useBase) {
+        return `${api.pageBasePreview(projectId, target.id)}?v=${encodeURIComponent(
+          target.updated_at ?? "",
+        )}`;
+      }
+      const url = api.assetUrl(
+        projectId,
+        target.display_asset_id ?? target.original_asset_id,
+        target.updated_at,
+      );
+      return url;
+    },
+    [projectId],
+  );
+
+  const showPreview = useCallback(
+    (target: PageSummary | null, useBase: boolean) => {
+      if (!target) {
         setPreview(null);
         return;
       }
-      const separator = url.includes("?") ? "&" : "?";
-      setPreview({ src: `${url}${separator}r=${version}`, version });
+      const src = previewSrc(target, useBase);
+      if (!src) {
+        setPreview(null);
+        return;
+      }
+      // Keeping the same URL avoids a needless reload when only object
+      // identity changed, and avoids a loading badge that no load event would
+      // ever clear.
+      const current = previewRef.current;
+      if (current && current.src === src && current.base === useBase) return;
+      previewRef.current = { src, base: useBase };
+      setPreview(previewRef.current);
+      setPreviewLoading(true);
     },
-    [page, projectId, comparingBase],
+    [previewSrc],
   );
 
   const measureImage = useCallback(() => {
@@ -280,7 +337,7 @@ export function EditsDialog({ projectId, page, open, onOpenChange }: EditsDialog
       observer.disconnect();
       window.removeEventListener("resize", measureImage);
     };
-  }, [open, activeTool, preview?.version, measureImage]);
+  }, [open, activeTool, preview?.src, measureImage]);
 
   useEffect(() => {
     if (!open) {
@@ -289,54 +346,152 @@ export function EditsDialog({ projectId, page, open, onOpenChange }: EditsDialog
     }
     if (!page || initializedPageRef.current === page.id) return;
     initializedPageRef.current = page.id;
+    queuedRef.current = null;
+    if (commitTimerRef.current !== null) {
+      window.clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = null;
+    }
+    // Reopening while the close-time flush is still running keeps the values
+    // the user just set instead of restoring the pre-flush page.
+    if (savingPageIdRef.current === page.id) {
+      setActiveTool(null);
+      setComparingBase(false);
+      setStatus("saving");
+      showPreview(page, false);
+      return;
+    }
     const initial = normaliseEdits(page.edits);
     editsRef.current = initial;
+    savedEditsRef.current = initial;
     setEdits(initial);
     setActiveTool(null);
     setComparingBase(false);
+    setStatus("idle");
     const existing = initial.geometry.find((step) => step.type === "perspective");
     setPerspectiveCorners(cloneCorners(existing?.corners));
-    refreshPreview(false);
-  }, [open, page, refreshPreview]);
+    showPreview(page, false);
+  }, [open, page, showPreview]);
 
-  const applyEdits = async (newEdits: PageEdits) => {
-    if (!page) return;
-    editsRef.current = newEdits;
-    setEdits(newEdits);
-    try {
-      const updated = await updateEdits.mutateAsync({ pageId: page.id, edits: newEdits });
-      toast.success(t("edits.applied"));
-      setComparingBase(false);
-      refreshPreview(false, updated);
-    } catch (error) {
-      toast.error(errorMessage(error));
-      const reverted = normaliseEdits(page.edits);
-      editsRef.current = reverted;
-      setEdits(reverted);
-    }
+  /**
+   * Commit one payload. A newer payload that arrives while a request is in
+   * flight is queued and sent next, so an older response can never overwrite
+   * the newest local state.
+   */
+  const commitEdits = useCallback(
+    async (next: PageEdits) => {
+      const target = pageRef.current;
+      if (!target) return;
+      if (inFlightRef.current) {
+        queuedRef.current = next;
+        setStatus("saving");
+        return;
+      }
+      inFlightRef.current = true;
+      savingPageIdRef.current = target.id;
+      setStatus("saving");
+      const generation = generationRef.current;
+      const pageId = target.id;
+      try {
+        const updated = await updateEdits.mutateAsync({ pageId: target.id, edits: next });
+        if (generation !== generationRef.current || pageRef.current?.id !== pageId) return;
+        savedEditsRef.current = next;
+        if (!queuedRef.current && editsEqual(editsRef.current, next)) {
+          showPreview(updated, false);
+        }
+      } catch (error) {
+        if (generation !== generationRef.current || pageRef.current?.id !== pageId) return;
+        toast.error(errorMessage(error));
+        const reverted = savedEditsRef.current;
+        editsRef.current = reverted;
+        setEdits(reverted);
+        queuedRef.current = null;
+      } finally {
+        inFlightRef.current = false;
+        if (generation === generationRef.current) {
+          savingPageIdRef.current = null;
+          const queued = queuedRef.current;
+          queuedRef.current = null;
+          if (queued) {
+            void commitEdits(queued);
+          } else {
+            setStatus("idle");
+          }
+        }
+      }
+    },
+    [errorMessage, showPreview, updateEdits],
+  );
+
+  const scheduleCommit = useCallback(
+    (next: PageEdits, immediate: boolean) => {
+      if (commitTimerRef.current !== null) {
+        window.clearTimeout(commitTimerRef.current);
+        commitTimerRef.current = null;
+      }
+      setStatus(immediate ? "saving" : "pending");
+      if (immediate) {
+        void commitEdits(next);
+        return;
+      }
+      commitTimerRef.current = window.setTimeout(() => {
+        commitTimerRef.current = null;
+        void commitEdits(next);
+      }, FILTER_COMMIT_DELAY_MS);
+    },
+    [commitEdits],
+  );
+
+  // Closing never drops a pending adjustment: the last value is flushed while
+  // the request can still complete.
+  useEffect(() => {
+    if (open) return;
+    if (commitTimerRef.current === null) return;
+    window.clearTimeout(commitTimerRef.current);
+    commitTimerRef.current = null;
+    const pending = editsRef.current;
+    if (!editsEqual(pending, savedEditsRef.current)) void commitEdits(pending);
+  }, [open, commitEdits]);
+
+  const applyEdits = (next: PageEdits, immediate = true) => {
+    editsRef.current = next;
+    setEdits(next);
+    scheduleCommit(next, immediate);
   };
 
   const handleReset = async () => {
     if (!page) return;
+    generationRef.current += 1;
+    queuedRef.current = null;
+    savingPageIdRef.current = page.id;
+    if (commitTimerRef.current !== null) {
+      window.clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = null;
+    }
     try {
       const updated = await resetEdits.mutateAsync(page.id);
       const cleared: PageEdits = { geometry: [], filters: DEFAULT_FILTERS };
       editsRef.current = cleared;
+      savedEditsRef.current = cleared;
+      queuedRef.current = null;
       setEdits(cleared);
       setActiveTool(null);
       setComparingBase(false);
-      initializedPageRef.current = null;
-      refreshPreview(false, updated);
+      setStatus("idle");
+      setPerspectiveCorners(cloneCorners(undefined));
+      showPreview(updated, false);
       toast.success(t("edits.reset"));
     } catch (error) {
       toast.error(errorMessage(error));
+    } finally {
+      if (savingPageIdRef.current === page.id) savingPageIdRef.current = null;
     }
   };
 
   const toggleCompare = () => {
+    if (!pageRef.current) return;
     const next = !comparingBase;
     setComparingBase(next);
-    refreshPreview(next);
+    showPreview(pageRef.current, next);
   };
 
   const handleAutoDeskew = async () => {
@@ -350,7 +505,7 @@ export function EditsDialog({ projectId, page, open, onOpenChange }: EditsDialog
       const current = editsRef.current;
       const geometry = current.geometry.filter((g) => g.type !== "deskew");
       geometry.push({ type: "deskew", angle: Math.round(angle * 10) / 10 });
-      await applyEdits({ ...current, geometry });
+      applyEdits({ ...current, geometry });
       toast.success(t("edits.deskew.applied", { angle: angle.toFixed(1) }));
     } catch (error) {
       toast.error(errorMessage(error));
@@ -359,7 +514,7 @@ export function EditsDialog({ projectId, page, open, onOpenChange }: EditsDialog
 
   const updateFilter = <K extends keyof PageEdits["filters"]>(key: K, value: PageEdits["filters"][K]) => {
     const current = editsRef.current;
-    applyEdits({ ...current, filters: { ...current.filters, [key]: value } });
+    applyEdits({ ...current, filters: { ...current.filters, [key]: value } }, false);
   };
 
   const addGeometry = (step: PageGeometryStep) => {
@@ -373,7 +528,7 @@ export function EditsDialog({ projectId, page, open, onOpenChange }: EditsDialog
       toast.error(t("edits.tooManySteps"));
       return;
     }
-    void applyEdits({ ...current, geometry });
+    applyEdits({ ...current, geometry });
   };
 
   const removeGeometry = (index: number) => {
@@ -507,7 +662,9 @@ export function EditsDialog({ projectId, page, open, onOpenChange }: EditsDialog
         setEdits((prev) => {
           const geom = prev.geometry.filter((g) => g.type !== "crop");
           geom.push({ type: "crop", rect });
-          return { ...prev, geometry: geom };
+          const next = { ...prev, geometry: geom };
+          editsRef.current = next;
+          return next;
         });
       }
     };
@@ -528,6 +685,9 @@ export function EditsDialog({ projectId, page, open, onOpenChange }: EditsDialog
   };
 
   const filterValue = (key: keyof PageEdits["filters"]) => edits.filters[key] as number;
+
+  const statusLabel =
+    status === "saving" ? t("edits.applying") : status === "pending" ? t("edits.pending") : "";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -550,19 +710,25 @@ export function EditsDialog({ projectId, page, open, onOpenChange }: EditsDialog
               {page && preview ? (
                 <img
                   ref={imageRef}
-                  key={`preview-${page.id}-${preview.version}`}
+                  // The element stays mounted while edits are applied. A new
+                  // source URL is painted over the previous frame instead of
+                  // remounting the node, so the dialog never blanks or closes.
+                  key={page.id}
                   src={preview.src}
                   alt={page.original_filename ?? t("viewer.pageOf", { page: page.page_number, total: 1 })}
                   draggable={false}
+                  decoding="async"
                   className="m-auto block max-h-full max-w-full object-contain rounded-xs bg-card shadow-sm"
                   style={{
+                    // Grayscale is idempotent, so painting it immediately can
+                    // never compose with the processed copy. Contrast and
+                    // brightness stay server-side: applying them here as well
+                    // would double the effect once the render arrives.
                     filter: comparingBase
                       ? undefined
                       : edits.filters.grayscale
                         ? "grayscale(1)"
-                        : edits.filters.threshold
-                          ? `contrast(${edits.filters.contrast}) brightness(${edits.filters.brightness})`
-                          : undefined,
+                        : undefined,
                     cursor: !comparingBase
                       ? activeTool === "crop"
                         ? "crosshair"
@@ -571,7 +737,11 @@ export function EditsDialog({ projectId, page, open, onOpenChange }: EditsDialog
                           : undefined
                       : undefined,
                   }}
-                  onLoad={measureImage}
+                  onLoad={() => {
+                    setPreviewLoading(false);
+                    measureImage();
+                  }}
+                  onError={() => setPreviewLoading(false)}
                   onPointerDown={comparingBase ? undefined : handleImagePointerDown}
                 />
               ) : (
@@ -581,6 +751,17 @@ export function EditsDialog({ projectId, page, open, onOpenChange }: EditsDialog
                 </div>
               )}
             </div>
+
+            {previewLoading && page && preview ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="pointer-events-none absolute right-3 top-3 z-20 flex items-center gap-1.5 rounded-pill border border-border/60 bg-background/90 px-2 py-1 text-2xs text-muted-foreground shadow-sm backdrop-blur-sm"
+              >
+                <Spinner className="size-3" />
+                {t("edits.updatingPreview")}
+              </div>
+            ) : null}
 
             {page && preview && activeTool === "perspective" && !comparingBase && imageBox ? (
               <div
@@ -705,42 +886,34 @@ export function EditsDialog({ projectId, page, open, onOpenChange }: EditsDialog
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t("edits.filters.title")}
                 </h3>
-                <div className="space-y-3">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-primary"
+                <div className="space-y-2">
+                  <label className="flex items-center justify-between gap-3 text-sm">
+                    <span>{t("edits.filters.grayscale")}</span>
+                    <Switch
                       checked={edits.filters.grayscale}
                       onChange={(e) => updateFilter("grayscale", e.target.checked)}
                     />
-                    <span>{t("edits.filters.grayscale")}</span>
                   </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-primary"
+                  <label className="flex items-center justify-between gap-3 text-sm">
+                    <span>{t("edits.filters.shadowRemoval")}</span>
+                    <Switch
                       checked={edits.filters.shadow_removal}
                       onChange={(e) => updateFilter("shadow_removal", e.target.checked)}
                     />
-                    <span>{t("edits.filters.shadowRemoval")}</span>
                   </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-primary"
+                  <label className="flex items-center justify-between gap-3 text-sm">
+                    <span>{t("edits.filters.backgroundCleanup")}</span>
+                    <Switch
                       checked={edits.filters.background_cleanup}
                       onChange={(e) => updateFilter("background_cleanup", e.target.checked)}
                     />
-                    <span>{t("edits.filters.backgroundCleanup")}</span>
                   </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-primary"
+                  <label className="flex items-center justify-between gap-3 text-sm">
+                    <span>{t("edits.filters.threshold")}</span>
+                    <Switch
                       checked={edits.filters.threshold}
                       onChange={(e) => updateFilter("threshold", e.target.checked)}
                     />
-                    <span>{t("edits.filters.threshold")}</span>
                   </label>
                   {edits.filters.threshold && (
                     <ThresholdLevelControl value={filterValue("threshold_level")} onChange={(v) => updateFilter("threshold_level", v)} />
@@ -774,6 +947,13 @@ export function EditsDialog({ projectId, page, open, onOpenChange }: EditsDialog
         </div>
 
         <DialogFooter className="mt-0 shrink-0 items-stretch gap-2 border-t border-border/60 pt-3">
+          <span
+            role="status"
+            aria-live="polite"
+            className="mr-auto hidden self-center text-2xs text-muted-foreground sm:block"
+          >
+            {statusLabel}
+          </span>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {tCommon("actions.close")}
           </Button>

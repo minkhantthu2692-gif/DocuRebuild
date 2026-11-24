@@ -24,6 +24,7 @@ import type {
 } from "@docurebuild/shared-types";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Radio } from "@/components/ui/radio";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { CenteredSpinner, Spinner } from "@/components/ui/spinner";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
@@ -114,6 +116,8 @@ export function RestorePagesDialog({
   const inspecting = inspectCopy.isPending || inspectUpload.isPending;
   const allSelected =
     selection !== null && chosen.size === selection.pages.length;
+  const someSelected =
+    selection !== null && chosen.size > 0 && chosen.size < selection.pages.length;
   const canInspect =
     source === "copy" ? filename !== "" : file !== null;
 
@@ -437,10 +441,8 @@ export function RestorePagesDialog({
                   {backups.data.map((copy) => (
                     <li key={copy.filename}>
                       <label className="flex cursor-pointer items-center gap-2.5 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
-                        <input
-                          type="radio"
+                        <Radio
                           name="restore-pages-copy"
-                          className="size-3.5 shrink-0 accent-primary"
                           checked={filename === copy.filename}
                           onChange={() => {
                             setFilename(copy.filename);
@@ -582,10 +584,9 @@ export function RestorePagesDialog({
                   </p>
                 </div>
                 <label className="flex items-center gap-2 text-2xs">
-                  <input
-                    type="checkbox"
-                    className="size-3.5 shrink-0 accent-primary"
+                  <Checkbox
                     checked={allSelected}
+                    indeterminate={someSelected}
                     disabled={selection.pages.length === 0}
                     onChange={toggleAll}
                   />
@@ -601,9 +602,7 @@ export function RestorePagesDialog({
                   {selection.pages.map((page) => (
                     <li key={page.id}>
                       <label className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-muted/40">
-                        <input
-                          type="checkbox"
-                          className="size-3.5 shrink-0 accent-primary"
+                        <Checkbox
                           checked={chosen.has(page.id)}
                           aria-label={t("restorePages.selectPage", {
                             page: page.page_number,
@@ -645,10 +644,9 @@ export function RestorePagesDialog({
               <ul className="max-h-56 space-y-0.5 overflow-y-auto p-1.5">
                 <li>
                   <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 hover:bg-muted/40">
-                    <input
-                      type="radio"
+                    <Radio
                       name="restore-document"
-                      className="mt-0.5 size-3.5 shrink-0 accent-primary"
+                      className="mt-0.5"
                       checked={chosenDocument === CURRENT_DOCUMENT}
                       onChange={() => setChosenDocument(CURRENT_DOCUMENT)}
                     />
@@ -678,10 +676,9 @@ export function RestorePagesDialog({
                 {selection.document.revisions.map((revision) => (
                   <li key={revision.id}>
                     <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 hover:bg-muted/40">
-                      <input
-                        type="radio"
+                      <Radio
                         name="restore-document"
-                        className="mt-0.5 size-3.5 shrink-0 accent-primary"
+                        className="mt-0.5"
                         checked={chosenDocument === revision.id}
                         onChange={() => setChosenDocument(revision.id)}
                       />
@@ -737,10 +734,9 @@ export function RestorePagesDialog({
                               : "flex items-start gap-2.5 rounded-md px-2 py-1.5 opacity-70"
                           }
                         >
-                          <input
-                            type="radio"
+                          <Radio
                             name="restore-page-asset"
-                            className="mt-0.5 size-3.5 shrink-0 accent-primary"
+                            className="mt-0.5"
                             checked={chosenAssetPage === page.id}
                             disabled={!available}
                             aria-label={t("restorePages.selectAssetPage", {
@@ -798,10 +794,9 @@ export function RestorePagesDialog({
                             : "flex items-start gap-2.5 rounded-md px-2 py-1.5 opacity-70"
                         }
                       >
-                        <input
-                          type="radio"
+                        <Radio
                           name="restore-element-asset"
-                          className="mt-0.5 size-3.5 shrink-0 accent-primary"
+                          className="mt-0.5"
                           checked={chosenElement === element.id}
                           disabled={!element.restorable}
                           aria-label={t("restorePages.selectElement", {

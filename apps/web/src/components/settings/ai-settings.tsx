@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import {
   useAddAiKey,
@@ -461,34 +462,32 @@ function ConnectionEditor({ connection, provider, locale }: ConnectionEditorProp
         </div>
       </div>
 
-      <label className="flex items-start gap-2 text-xs leading-relaxed">
-        <input
-          type="checkbox"
-          className="mt-0.5 size-3.5 shrink-0 accent-primary"
-          checked={allowRemote}
-          onChange={(event) => setAllowRemote(event.target.checked)}
-        />
+      <label className="flex items-start justify-between gap-3 text-xs leading-relaxed">
         <span>
           <span className="font-medium">{t("ai.allowRemote")}</span>
           <span className="mt-0.5 block text-2xs text-muted-foreground">
             {t("ai.allowRemoteDescription")}
           </span>
         </span>
+        <Switch
+          className="mt-0.5"
+          checked={allowRemote}
+          onChange={(event) => setAllowRemote(event.target.checked)}
+        />
       </label>
 
-      <label className="flex items-start gap-2 text-xs leading-relaxed">
-        <input
-          type="checkbox"
-          className="mt-0.5 size-3.5 shrink-0 accent-primary"
-          checked={enabled}
-          onChange={(event) => setEnabled(event.target.checked)}
-        />
+      <label className="flex items-start justify-between gap-3 text-xs leading-relaxed">
         <span>
           <span className="font-medium">{t("ai.enabled")}</span>
           <span className="mt-0.5 block text-2xs text-muted-foreground">
             {t("ai.enabledDescription")}
           </span>
         </span>
+        <Switch
+          className="mt-0.5"
+          checked={enabled}
+          onChange={(event) => setEnabled(event.target.checked)}
+        />
       </label>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -772,9 +771,7 @@ function ConnectionEditor({ connection, provider, locale }: ConnectionEditorProp
             onChange={(event) => setModelQuery(event.target.value)}
           />
           <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              className="size-3.5 accent-primary"
+            <Switch
               checked={favoritesOnly}
               onChange={(event) => setFavoritesOnly(event.target.checked)}
             />
@@ -1292,19 +1289,18 @@ function AddConnectionDialog({ open, onOpenChange, providers, onCreated }: AddCo
       </div>
 
       {!isLocal ? (
-        <label className="flex items-start gap-2 text-xs leading-relaxed">
-          <input
-            type="checkbox"
-            className="mt-0.5 size-3.5 shrink-0 accent-primary"
-            checked={allowRemote}
-            onChange={(event) => setAllowRemote(event.target.checked)}
-          />
+        <label className="flex items-start justify-between gap-3 text-xs leading-relaxed">
           <span>
             <span className="font-medium">{t("ai.allowRemote")}</span>
             <span className="mt-0.5 block text-2xs text-muted-foreground">
               {t("ai.allowRemoteDescription")}
             </span>
           </span>
+          <Switch
+            className="mt-0.5"
+            checked={allowRemote}
+            onChange={(event) => setAllowRemote(event.target.checked)}
+          />
         </label>
       ) : null}
 

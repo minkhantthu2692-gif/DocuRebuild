@@ -4,20 +4,24 @@ This is the short, current roadmap for the 1.0 Windows desktop release.
 `docs/roadmap.md` keeps the detailed phase-by-phase implementation history;
 `PROJECT_MEMORY.md` records architecture and handover context.
 
-Last updated: 2026-11-23.
+Last updated: 2026-11-24.
 
 ## Release status
 
-**DocuRebuild 1.0.1 is the current release for the Windows x64 desktop scope
-(published 23 November 2026).** The installer, bundled OCR, local
+**DocuRebuild 1.0.2 is the current release for the Windows x64 desktop scope
+(published 24 November 2026).** The installer, bundled OCR, local
 database/storage, BYOK AI, backup/restore and export are implemented and
 verified. Everything below labelled *Complete* ships in
-`DocuRebuild-1.0.1-setup.exe`.
+`DocuRebuild-1.0.2-setup.exe`.
 
-**1.0.1** fixes image/thumbnail/figure loading in the installed build and adds
+**1.0.2** unifies checkboxes, switches and radios across the workspace and fixes
+the Edit Image dialog reloading, resetting its controls or flickering during
+adjustments. It supersedes `DocuRebuild-1.0.1-setup.exe`; upgrading keeps
+existing projects.
+
+**1.0.1** fixed image/thumbnail/figure loading in the installed build and added
 the factory reset, dashboard multi-select bulk delete and a guard that refuses
-to delete a project folder outside the data folder. It supersedes
-`DocuRebuild-1.0.0-setup.exe`; upgrading keeps existing projects.
+to delete a project folder outside the data folder.
 
 ## Completed — 1.0 MUST HAVE
 
@@ -36,6 +40,7 @@ to delete a project folder outside the data folder. It supersedes
 | Desktop release | Electron shell, PyInstaller sidecar, loopback-only token-protected API (including API subresource requests), strict CSP and sandbox, bundled OCR, per-user NSIS installer, data-preserving uninstall, AGPL licensing and third-party notices |
 | Data management | Typed-confirmation factory reset that removes only app-owned data and keeps the application installed |
 | Internationalization | English and Burmese, live switching, key-parity tests, Unicode-safe layout |
+| Interface polish | Shared themed checkbox/switch/radio controls; Edit Image and the source viewer update previews in place without remounting, flickering or losing dialog state |
 
 ## Remaining MUST HAVE before a wider (non-Windows) production release
 

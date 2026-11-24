@@ -6,6 +6,8 @@ import type { TableProposalCell } from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import type { TableDraft } from "@/hooks/use-table-draft";
 import {
   needsTableAcknowledgement,
@@ -279,24 +281,21 @@ export function TableReview({
       </div>
 
       <div className="space-y-2 rounded-lg border border-border/60 bg-background/45 p-3">
-        <label className="flex items-center gap-2 text-2xs text-muted-foreground">
-          <input
-            type="checkbox"
-            className="size-3.5 accent-primary"
+        <label className="flex items-center justify-between gap-3 text-2xs text-muted-foreground">
+          <span>{t("ocr.table.headerRow")}</span>
+          <Switch
             checked={headerRow}
             onChange={(event) => onHeaderRowChange(event.target.checked)}
           />
-          {t("ocr.table.headerRow")}
         </label>
         {needsReview ? (
           <label className="flex items-start gap-2 text-2xs text-muted-foreground">
-            <input
-              type="checkbox"
-              className="mt-0.5 size-3.5 accent-primary"
+            <Checkbox
+              className="mt-0.5"
               checked={acknowledged}
               onChange={(event) => onAcknowledgedChange(event.target.checked)}
             />
-            {t("ocr.table.acknowledge")}
+            <span>{t("ocr.table.acknowledge")}</span>
           </label>
         ) : null}
       </div>

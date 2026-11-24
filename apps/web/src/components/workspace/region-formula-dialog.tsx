@@ -8,6 +8,7 @@ import type { ElementSummary } from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/input";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAiTasks } from "@/hooks/use-ai";
@@ -257,22 +259,18 @@ export function RegionFormulaDialog({
             </div>
           </div>
 
-          <label className="flex items-start gap-2 text-2xs leading-relaxed text-muted-foreground">
-            <input
-              type="checkbox"
-              className="mt-0.5 size-3.5 accent-primary"
+          <label className="flex items-center justify-between gap-3 text-2xs leading-relaxed text-muted-foreground">
+            <span>{t("elements.formula.numbered")}</span>
+            <Switch
               checked={numbered}
               onChange={(event) => setNumbered(event.target.checked)}
             />
-            {t("elements.formula.numbered")}
           </label>
         </div>
 
         <DialogFooter className="mt-0 shrink-0 items-stretch gap-2 border-t border-border/60 pt-3 sm:items-center">
           <label className="mr-auto flex items-center gap-1.5 text-2xs text-muted-foreground">
-            <input
-              type="checkbox"
-              className="size-3.5 accent-primary"
+            <Checkbox
               checked={includeNote}
               onChange={(event) => setIncludeNote(event.target.checked)}
             />

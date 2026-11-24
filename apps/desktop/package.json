@@ -1,6 +1,6 @@
 {
   "name": "@docurebuild/desktop",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "DocuRebuild desktop shell with a bundled local backend",
   "author": "DocuRebuild",

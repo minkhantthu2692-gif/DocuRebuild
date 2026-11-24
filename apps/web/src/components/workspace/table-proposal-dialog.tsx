@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import type { OcrBlock, PageSummary } from "@docurebuild/shared-types";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -152,9 +153,7 @@ export function TableProposalDialog({
 
         <DialogFooter className="mt-0 shrink-0 items-stretch gap-2 border-t border-border/60 pt-3 sm:items-center">
           <label className="mr-auto flex items-center gap-1.5 text-2xs text-muted-foreground">
-            <input
-              type="checkbox"
-              className="size-3.5 accent-primary"
+            <Checkbox
               checked={includeNote}
               onChange={(event) => setIncludeNote(event.target.checked)}
               disabled={!proposal}

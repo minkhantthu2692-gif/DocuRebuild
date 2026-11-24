@@ -38,7 +38,7 @@ function renderDialog() {
 
 function chooseProtected() {
   fireEvent.click(
-    screen.getByRole("checkbox", {
+    screen.getByRole("switch", {
       name: "Protect this archive with a password",
     }),
   );

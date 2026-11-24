@@ -170,6 +170,7 @@ switch to the desktop app.
 | AI (BYOK) | Complete for the supported scope | Local Ollama + custom OpenAI-compatible + 12 cloud adapters, dynamic models, encrypted keys, rotation/failover, per-task routes, limits/budget, consent, metadata-only usage |
 | Desktop distribution | Complete for Windows | Electron + sidecar, token (including API subresource injection), CSP, bundled Tesseract, NSIS installer, data-preserving uninstall, typed-confirmation factory reset |
 | i18n | Complete | English + Burmese, live switching, key parity tests, Unicode-safe |
+| Form controls and dialogs | Complete | Shared native `Checkbox`/`Switch`/`Radio` primitives, one owner per open dialog, in-place image previews |
 
 Deferred or partial work is listed in `ROADMAP.md`. Notable gaps: real-scan OCR
 corpus, page-wide automatic equation/figure recognition, nested tables,
@@ -265,12 +266,21 @@ AI credentials are configured in the application, not in environment files.
    providers are the default path; the core app never calls AI automatically.
 10. **Contrast fixed in tokens, not deferred.** The palette was adjusted until
     every checked pair reaches WCAG AA, guarded by a test.
+11. **Native inputs behind themed controls.** `Checkbox`, `Switch` and `Radio`
+    wrap real `<input>` elements and draw only the visual layer with tokens. This
+    keeps labels, keyboard support, form semantics and testing roles real, and
+    avoids a second implementation that could drift from the native behaviour.
+12. **A dialog owns its working state while open.** Dialog-local edits are
+    initialised on open and reset on close; a page cache write from a save must
+    never re-initialise an open dialog. The Edit Image dialog keeps the preview
+    node mounted, debounces expensive renders, and serialises commits so the last
+    confirmed render always matches the newest local adjustment.
 
 ## 11. Verification commands and current results
 
 ```powershell
 backend/.venv/Scripts/python -m pytest backend/tests -q   # 423 passed
-npm run test:web                                          # 297 tests / 49 files
+npm run test:web                                          # 304 tests / 51 files
 npm run typecheck                                         # clean
 npm run lint                                              # clean
 npm run build                                             # production build
@@ -310,20 +320,25 @@ secret scan.
 
 ## 13. Release state
 
-- Version 1.0.1 everywhere. License AGPL-3.0-or-later.
+- Version 1.0.2 everywhere. License AGPL-3.0-or-later.
 - Repository: <https://github.com/minkhantthu2692-gif/DocuRebuild>
-- Current release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.0.1>,
-  published 23 November 2026 from tag `v1.0.1` at commit `a6ca946`, and marked
-  latest.
-- 1.0.1 installer asset:
-  <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/download/v1.0.1/DocuRebuild-1.0.1-setup.exe>,
-  211,539,463 bytes (201.7 MB), SHA-256
-  `9729E2116DA4E2790314BF687A0AD2D81E70F1ABE18D9D7A246892145E9B5792`, built on
-  23 November 2026 from the stabilized tree.
-- 1.0.1 fixes image loading in the installed build and adds the typed-confirmation
-  factory reset, dashboard bulk delete and the outside-data-folder delete guard.
-- Release download verified anonymously on 23 November 2026: 211,539,463 bytes,
-  SHA-256 matches the release notes.
+- Current release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.0.2>,
+  published 24 November 2026 from tag `v1.0.2`, and marked latest.
+- 1.0.2 installer asset:
+  <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/download/v1.0.2/DocuRebuild-1.0.2-setup.exe>,
+  211,540,824 bytes (201.7 MB), SHA-256
+  `E501B0427371ED64B185A56E67089945896B417C9B19057130802455A1A03F47`, built on
+  24 November 2026 from the UI polish tree.
+- 1.0.2 unifies checkboxes, switches and radios behind shared themed primitives
+  and makes Edit Image apply adjustments in place: the dialog and preview stay
+  mounted while a debounced, serialised render arrives, and edits are flushed on
+  close instead of on every slider tick.
+- 1.0.1 history: tag `v1.0.1` at commit `a6ca946`, published 23 November 2026;
+  installer `DocuRebuild-1.0.1-setup.exe`, 211,539,463 bytes, SHA-256
+  `9729E2116DA4E2790314BF687A0AD2D81E70F1ABE18D9D7A246892145E9B5792`, downloaded
+  anonymously and verified. It fixed image loading in the installed build and
+  added the typed-confirmation factory reset, dashboard bulk delete and the
+  outside-data-folder delete guard.
 - The installer is built locally and uploaded as a GitHub Release asset; it is
   deliberately not committed to Git.
 - 1.0.0 history: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.0.0>,

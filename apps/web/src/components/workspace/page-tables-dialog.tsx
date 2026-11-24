@@ -7,6 +7,7 @@ import type { PageSummary } from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -231,9 +232,7 @@ export function PageTablesDialog({
           {candidate ? (
             <div className="mr-auto flex flex-wrap items-center gap-2">
               <label className="flex items-center gap-1.5 text-2xs text-muted-foreground">
-                <input
-                  type="checkbox"
-                  className="size-3.5 accent-primary"
+                <Checkbox
                   checked={includeNote}
                   onChange={(event) => setIncludeNote(event.target.checked)}
                 />

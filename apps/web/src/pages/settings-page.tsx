@@ -54,6 +54,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAppMeta, useAppSettings, useHealth, useUpdateSettings } from "@/hooks/use-app";
 import { useOcrCapabilities } from "@/hooks/use-ocr";
@@ -594,11 +595,10 @@ export function SettingsPage() {
               </div>
 
               <SettingRow title={t("backups.auto")} description={t("backups.autoDescription")}>
-                <label className="flex items-start gap-2 text-xs leading-relaxed">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 size-3.5 shrink-0 accent-primary"
+                <label className="flex items-center gap-2.5 text-xs leading-relaxed">
+                  <Switch
                     checked={backupPrefs.auto_on_open}
+                    aria-label={t("backups.autoLabel")}
                     onChange={(event) =>
                       change({ backups: { auto_on_open: event.target.checked } })
                     }

@@ -17,6 +17,19 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
+// Radix sliders size their thumb with ResizeObserver, which jsdom lacks.
+if (!("ResizeObserver" in globalThis)) {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  Object.defineProperty(globalThis, "ResizeObserver", {
+    writable: true,
+    value: ResizeObserverStub,
+  });
+}
+
 // Radix Select focuses an item on open, and jsdom has no scrollIntoView.
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};

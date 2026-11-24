@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useDownloadProjectBackup } from "@/hooks/use-projects";
 import { saveBlob } from "@/lib/download";
@@ -100,20 +101,18 @@ export function DownloadBackupDialog({
         </DialogHeader>
 
         <div className="mt-5 space-y-3">
-          <label className="flex items-start gap-2 text-xs leading-relaxed">
-            <input
-              type="checkbox"
-              className="mt-0.5 size-3.5 shrink-0 accent-primary"
+          <label className="flex items-center justify-between gap-3 text-xs leading-relaxed">
+            <span className="flex items-center gap-1.5">
+              <KeyRound className="size-icon-sm text-muted-foreground" aria-hidden="true" />
+              {t("backup.protectLabel")}
+            </span>
+            <Switch
               checked={protect}
               onChange={(event) => {
                 setProtect(event.target.checked);
                 setError(null);
               }}
             />
-            <span className="flex items-center gap-1.5">
-              <KeyRound className="size-icon-sm text-muted-foreground" aria-hidden="true" />
-              {t("backup.protectLabel")}
-            </span>
           </label>
 
           {protect ? (
