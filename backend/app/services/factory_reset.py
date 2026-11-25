@@ -29,6 +29,7 @@ DATA_ENTRIES = (
     "trash",
     "tmp",
     "backups",
+    "fonts",
     "secrets",
     "app.db",
     "app.db-wal",

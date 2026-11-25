@@ -37,6 +37,9 @@ hiddenimports = [
 ]
 hiddenimports += collect_submodules("uvicorn")
 hiddenimports += collect_submodules("alembic")
+# fontTools loads many table and codec modules lazily, and WOFF2 needs brotli.
+hiddenimports += collect_submodules("fontTools")
+hiddenimports += ["brotli"]
 hiddenimports += pymupdf_hidden
 
 analysis = Analysis(

@@ -1,7 +1,9 @@
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import type { Content } from "@tiptap/core";
 import {
+  ALargeSmall,
   AlignCenter,
+  AlignJustify,
   AlignLeft,
   AlignRight,
   Bold,
@@ -21,6 +23,7 @@ import {
   List,
   ListOrdered,
   Link2,
+  NotebookPen,
   Parentheses,
   Quote,
   Redo2,
@@ -28,6 +31,7 @@ import {
   Sigma,
   SquareFunction,
   Strikethrough,
+  Subscript,
   Superscript,
   Type,
   Underline as UnderlineIcon,
@@ -69,6 +73,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { useAppSettings, useUpdateSettings } from "@/hooks/use-app";
 import { useDocument, useSaveDocument } from "@/hooks/use-document";
+import { useFonts } from "@/hooks/use-fonts";
 import { api } from "@/lib/api";
 import { saveBlob } from "@/lib/download";
 import { createEditorExtensions } from "@/lib/editor-extensions";
@@ -101,6 +106,7 @@ import {
   type FigureTarget,
 } from "@/lib/editor-reference";
 import { findMatches } from "@/lib/editor-search";
+import { collectFontFamilies, cssFontFamily, ensureImportedFontsLoaded, sanitizeFontFamily } from "@/lib/fonts";
 import { formulaInsertionContent } from "@/lib/formula-insertion";
 import { resolveLocale } from "@/lib/format";
 import { normalizeLinkUrl } from "@/lib/link";
@@ -110,6 +116,7 @@ import { countCharacters, countWords } from "@/lib/text";
 import { cn } from "@/lib/utils";
 import { DocumentLayoutDialog } from "./document-layout-dialog";
 import { EditorTableMenu } from "./editor-table-menu";
+import { FontLibraryDialog } from "./font-library-dialog";
 import { RevisionDialog } from "./revision-dialog";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
@@ -177,6 +184,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
 
   const documentQuery = useDocument(projectId);
   const settingsQuery = useAppSettings();
+  const fontsQuery = useFonts();
   const updateSettings = useUpdateSettings();
   const errorMessage = useApiErrorMessage();
   const { mutateAsync: saveDocument, isPending: isSaving } = useSaveDocument(projectId);
@@ -204,6 +212,8 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
   const [linkError, setLinkError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [layoutOpen, setLayoutOpen] = useState(false);
+  const [fontOpen, setFontOpen] = useState(false);
+  const [fontLoadMissing, setFontLoadMissing] = useState<string[]>([]);
   const [figureSelection, setFigureSelection] = useState<SelectedFigure | null>(null);
   const [figureOpen, setFigureOpen] = useState(false);
   const [figureCaption, setFigureCaption] = useState("");
@@ -789,6 +799,65 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
       (editor.isActive("link") || !editor.state.selection.empty),
   );
 
+  const currentFontFamily = editor
+    ? sanitizeFontFamily(editor.getAttributes("textStyle").fontFamily)
+    : "";
+  // The stored JSON is the source of truth, so a restored document or a paste
+  // is checked with the same walk the exporters use. `revision` and
+  // `initialized` only exist to recompute after each edit; the body does not
+  // read them.
+  /* eslint-disable react-hooks/exhaustive-deps */
+  const usedFontFamilies = useMemo(
+    () => collectFontFamilies(editor?.getJSON()),
+    [editor, revision, initialized],
+  );
+  /* eslint-enable react-hooks/exhaustive-deps */
+
+  useEffect(() => {
+    if (!fontsQuery.data) return;
+    let cancelled = false;
+    void ensureImportedFontsLoaded(fontsQuery.data.families, usedFontFamilies).then(
+      (result) => {
+        if (!cancelled) setFontLoadMissing(result.missing);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [fontsQuery.data, usedFontFamilies]);
+
+  const missingFamilies = useMemo(() => {
+    if (!fontsQuery.data) return [];
+    const available = new Set(
+      fontsQuery.data.families.map((family) => family.name.toLocaleLowerCase()),
+    );
+    const unlisted = usedFontFamilies.filter(
+      (name) => !available.has(name.toLocaleLowerCase()),
+    );
+    return [...new Set([...unlisted, ...fontLoadMissing])];
+  }, [fontsQuery.data, usedFontFamilies, fontLoadMissing]);
+
+  const applyFontFamily = useCallback(
+    (family: string | null) => {
+      if (!editor) return;
+      const name = family ? sanitizeFontFamily(family) : "";
+      if (!name) {
+        editor.chain().focus().unsetFontFamily().run();
+        return;
+      }
+      // Store the quoted form so the generated inline style is valid CSS for
+      // family names that contain characters unquoted CSS cannot represent.
+      // Exports and lookups strip the quotes again.
+      const value = cssFontFamily(name);
+      const catalogued = fontsQuery.data?.families.find((entry) => entry.name === name);
+      if (catalogued && fontsQuery.data) {
+        void ensureImportedFontsLoaded(fontsQuery.data.families, [name]);
+      }
+      editor.chain().focus().setFontFamily(value).run();
+    },
+    [editor, fontsQuery.data],
+  );
+
   return (
     <section className={cn("flex h-full min-h-0 flex-col bg-background/20", className)}>
       <header className="flex h-panel shrink-0 items-center gap-2 border-b border-border/60 bg-background/35 px-3">
@@ -977,6 +1046,29 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           </SelectContent>
         </Select>
 
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={t("editor.font.label")}
+          title={t("editor.font.label")}
+          disabled={!editor?.isEditable}
+          onClick={() => setFontOpen(true)}
+          className="h-control-xs max-w-40 gap-1 px-2 text-xs"
+        >
+          <ALargeSmall className="size-3.5 shrink-0 text-muted-foreground" />
+          <span
+            className={cn("truncate", !currentFontFamily && "text-muted-foreground")}
+            style={
+              currentFontFamily
+                ? { fontFamily: cssFontFamily(currentFontFamily) }
+                : undefined
+            }
+          >
+            {currentFontFamily || t("editor.font.default")}
+          </span>
+          <ChevronDown className="size-3 shrink-0 opacity-60" />
+        </Button>
+
         <Separator orientation="vertical" className="mx-1 h-5" />
 
         <ToolbarButton
@@ -1006,6 +1098,20 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           active={editor?.isActive("strike")}
           disabled={!editor?.isEditable}
           onClick={() => editor?.chain().focus().toggleStrike().run()}
+        />
+        <ToolbarButton
+          label={t("editor.superscript")}
+          icon={Superscript}
+          active={editor?.isActive("superscript")}
+          disabled={!editor?.isEditable}
+          onClick={() => editor?.chain().focus().toggleSuperscript().run()}
+        />
+        <ToolbarButton
+          label={t("editor.subscript")}
+          icon={Subscript}
+          active={editor?.isActive("subscript")}
+          disabled={!editor?.isEditable}
+          onClick={() => editor?.chain().focus().toggleSubscript().run()}
         />
         <ToolbarButton
           label={editor?.isActive("link") ? t("editor.link.edit") : t("editor.link.open")}
@@ -1087,7 +1193,7 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
 
         <ToolbarButton
           label={t("editor.footnote.label")}
-          icon={Superscript}
+          icon={NotebookPen}
           active={Boolean(footnoteSelection)}
           disabled={!editor?.isEditable}
           onClick={openFootnoteDialog}
@@ -1116,6 +1222,13 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           disabled={!editor?.isEditable}
           onClick={() => editor?.chain().focus().setTextAlign("right").run()}
         />
+        <ToolbarButton
+          label={t("editor.alignJustify")}
+          icon={AlignJustify}
+          active={editor?.isActive({ textAlign: "justify" })}
+          disabled={!editor?.isEditable}
+          onClick={() => editor?.chain().focus().setTextAlign("justify").run()}
+        />
 
         <Separator orientation="vertical" className="mx-1 h-5" />
 
@@ -1127,6 +1240,26 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
           onClick={() => (findOpen ? closeFind() : openFind())}
         />
       </div>
+
+      {missingFamilies.length > 0 ? (
+        <div
+          role="status"
+          className="flex items-center gap-2 border-b border-warning/30 bg-warning/10 px-3 py-1.5 text-xs text-warning"
+        >
+          <CircleAlert className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate">
+            {t("editor.font.missing", { families: missingFamilies.join(", ") })}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs text-warning hover:bg-warning/15"
+            onClick={() => setFontOpen(true)}
+          >
+            {t("editor.font.manage")}
+          </Button>
+        </div>
+      ) : null}
 
       {findOpen ? (
         <div
@@ -1727,6 +1860,13 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
         currentText={plainText}
         ensureSaved={saveSnapshot}
         onRestored={applyRestoredDocument}
+      />
+
+      <FontLibraryDialog
+        open={fontOpen}
+        onOpenChange={setFontOpen}
+        onSelectFamily={applyFontFamily}
+        selectedFamily={currentFontFamily || null}
       />
     </section>
   );

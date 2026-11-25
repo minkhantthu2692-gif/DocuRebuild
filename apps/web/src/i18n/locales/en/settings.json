@@ -75,7 +75,10 @@
     "description": "Used for the document editor and future exports. Interface typography stays independent.",
     "serif": "Serif",
     "sans": "Sans-serif",
-    "preview": "The quick brown fox jumps over the lazy dog. မြန်မာစာ စမ်းသပ်ချက်။"
+    "preview": "The quick brown fox jumps over the lazy dog. မြန်မာစာ စမ်းသပ်ချက်။",
+    "fonts": "Font library",
+    "fontsDescription": "Import fonts for scientific text and keep them on this device. They are used by the editor and embedded in exports when licensing allows.",
+    "manageFonts": "Manage fonts"
   },
   "export": {
     "title": "PDF layout",

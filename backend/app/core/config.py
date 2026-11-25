@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     def backups_dir(self) -> Path:
         return self.data_dir / "backups"
 
+    @property
+    def fonts_dir(self) -> Path:
+        """Imported font files, kept with the local application data."""
+        return self.data_dir / "fonts"
+
     def ensure_layout(self) -> None:
         for path in (
             self.data_dir,
@@ -102,6 +107,7 @@ class Settings(BaseSettings):
             self.trash_dir,
             self.tmp_dir,
             self.backups_dir,
+            self.fonts_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)
 

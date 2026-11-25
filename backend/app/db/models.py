@@ -55,6 +55,30 @@ class AppSetting(Base):
     )
 
 
+class ImportedFont(Base):
+    """One font face imported by the user and stored in the data folder.
+
+    System fonts are detected from their installed files on every listing, so
+    only user-imported faces live here. Removing a row removes its stored file.
+    """
+
+    __tablename__ = "imported_fonts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    family: Mapped[str] = mapped_column(String(160), nullable=False)
+    style: Mapped[str] = mapped_column(String(80), nullable=False, default="Regular")
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    stored_name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    format: Mapped[str] = mapped_column(String(8), nullable=False)
+    weight: Mapped[int] = mapped_column(Integer, nullable=False, default=400)
+    italic: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
 class AiUsage(Base):
     """One AI request attempt, stored as metadata only.
 

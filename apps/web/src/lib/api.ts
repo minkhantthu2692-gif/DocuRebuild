@@ -54,6 +54,8 @@ import type {
   ElementTableResponse,
   ExportSettings,
   FactoryResetResult,
+  FontFaceSummary,
+  FontsResponse,
   HealthStatus,
   HistoryEvent,
   ImportJob,
@@ -188,6 +190,32 @@ export const api = {
   getSettings: () => request<AppSettings>("/settings"),
   updateSettings: (patch: SettingsPatch) =>
     request<AppSettings>("/settings", { method: "PATCH", body: JSON.stringify(patch) }),
+
+  listFonts: (refresh = false) =>
+    request<FontsResponse>(`/fonts${refresh ? "?refresh=true" : ""}`),
+  importFont: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<FontFaceSummary>("/fonts/import", { method: "POST", body: form });
+  },
+  deleteFont: (fontId: string) =>
+    request<void>(`/fonts/${encodeURIComponent(fontId)}`, { method: "DELETE" }),
+  // Font files are fetched with the desktop bearer token and registered through
+  // the FontFace API. A plain CSS URL would not be authenticated.
+  getFontFile: async (fontId: string): Promise<ArrayBuffer> => {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE}/fonts/${encodeURIComponent(fontId)}/file`, {
+        headers: desktopAuthHeaders(),
+      });
+    } catch {
+      throw new ApiError("network_unreachable", "The local backend is not reachable.", 0);
+    }
+    if (!response.ok) {
+      throw await errorFromResponse(response);
+    }
+    return response.arrayBuffer();
+  },
 
   listProjects: () => request<ProjectSummary[]>("/projects"),
   getProject: (projectId: string) => request<ProjectDetail>(`/projects/${projectId}`),

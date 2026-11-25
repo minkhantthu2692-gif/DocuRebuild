@@ -60,6 +60,38 @@ export interface AppSettings {
 }
 
 /* -------------------------------------------------------------------------- */
+/*                                   Fonts                                    */
+/* -------------------------------------------------------------------------- */
+
+export type FontSource = "system" | "imported";
+export type FontFamilySource = "system" | "imported" | "mixed";
+
+export interface FontFaceSummary {
+  id: string | null;
+  family: string;
+  style: string;
+  weight: number;
+  italic: boolean;
+  source: FontSource;
+  format: string;
+  file_name: string | null;
+}
+
+export interface FontFamilySummary {
+  name: string;
+  source: FontFamilySource;
+  faces: FontFaceSummary[];
+  available: boolean;
+}
+
+export interface FontsResponse {
+  families: FontFamilySummary[];
+  imported_count: number;
+  system_count: number;
+  system_directories: string[];
+}
+
+/* -------------------------------------------------------------------------- */
 /*                                  Projects                                  */
 /* -------------------------------------------------------------------------- */
 

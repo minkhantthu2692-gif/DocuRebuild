@@ -67,13 +67,14 @@ def test_byok_migration_preserves_legacy_usage_rows(tmp_path, monkeypatch) -> No
             ).fetchone()
 
         assert row == ("ollama", "qwen2.5:7b", "text", "success", None, None, None, None)
-        assert revision == ("0003_ai_byok",)
+        assert revision == ("0004_imported_fonts",)
         assert {
             "ai_connections",
             "ai_connection_keys",
             "ai_models",
             "ai_model_preferences",
             "ai_task_routes",
+            "imported_fonts",
         } <= tables
 
         command.downgrade(config, "0002_ai_usage")

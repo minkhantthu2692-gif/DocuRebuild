@@ -90,7 +90,8 @@ DocuRebuild.exe (Electron)
 | `services.layout` | Shared deterministic block classification (heading, list, caption, equation, table-like grid, running header/footer, page number) for OCR and embedded PDF text |
 | `services.documents` | Document row, Tiptap JSON persistence, timestamps, coalesced revision snapshots, manual checkpoints and restore |
 | `services.document_layout` | Per-project page header/footer text for paginated exports: stored layout row, default page-number choice and token-ready plain text |
-| `services.document_export` | Deterministic Tiptap-to-Markdown/TXT/DOCX/PDF rendering, escaping, OMML equations, figure and inline-image embedding, native footnotes, PDF layout, page header/footer rendering and download names |
+| `services.document_export` | Deterministic Tiptap-to-Markdown/TXT/DOCX/PDF rendering, escaping, OMML equations, figure and inline-image embedding, native footnotes, per-run font family, superscript/subscript, embedded Word/PDF fonts, PDF layout, page header/footer rendering and download names |
+| `services.fonts` | Local font catalogue: Windows/system directory discovery with a short cache, import validation and WOFF/WOFF2 conversion to sfnt, duplicate-safe storage in the data folder, face grouping and the embeddable faces used by exports |
 | `services.project_backup` | Verified local zip creation, safe validation/extraction and additive restore as a new project |
 | `services.backup_crypto` | Optional `.drbz` container for downloaded backups: scrypt key derivation, chunked AES-256-GCM, password and corruption errors |
 | `services.local_backups` | Local backup vault: verified copy creation, retention pruning, safe name resolution and opt-in automatic copies |
@@ -126,6 +127,7 @@ The application database (`app.db`) contains only global state:
 - `ai_model_preferences` — per-model favorite flag and last-use metadata
 - `ai_task_routes` — one row per task (`default`, `ocr_cleanup`, `region_proposals`, `equation_transcription`, `table_structure`) with connection/model, fallback, temperature, timeout and request limit
 - `ai_usage` — local AI request metadata: provider, model, task, connection/key, outcome, error code, reported tokens, verified cost/source, project/page/block ids and timestamp; never document text or replies
+- `imported_fonts` — one row per user-imported font face: family, style, weight, italic flag, normalised sfnt format, original and stored file name, byte size, SHA-256 for duplicate detection and timestamp; system fonts are never copied into the database
 - `schema_migrations` — created by Alembic
 
 Each project owns a portable folder and its own `project.db`:
@@ -160,19 +162,19 @@ projects/<project-id>/
 ```
 
 The data directory also holds `app.db`, a `secrets/` folder for encrypted provider
-keys, a shared `trash/` for deleted projects, a
-shared `backups/<project_id>/` vault for verified copies and a short-lived `tmp/`
-folder used only while building or restoring a backup. Relative asset references are
-stored in SQLite so a project folder can be moved without rewriting paths.
-`resolve_within` rejects path traversal.
+keys, a `fonts/` folder for imported font files, a shared `trash/` for deleted
+projects, a shared `backups/<project_id>/` vault for verified copies and a
+short-lived `tmp/` folder used only while building or restoring a backup.
+Relative asset references are stored in SQLite so a project folder can be moved
+without rewriting paths. `resolve_within` rejects path traversal.
 
 The factory reset (`POST /api/system/reset`) removes exactly the entries the
 application owns inside that data folder — `projects/`, `trash/`, `tmp/`,
-`backups/`, `secrets/` and the `app.db` files — stops import/OCR workers and
-disposes the connection pool first, then recreates the folder layout and an empty
-migrated database. Unrelated files in a user-chosen `DOCUREBUILD_DATA_DIR` are
-left alone, and the installed application, its logs and window state are not
-touched. A drive root or the home directory is refused.
+`backups/`, `secrets/`, `fonts/` and the `app.db` files — stops import/OCR
+workers and disposes the connection pool first, then recreates the folder layout
+and an empty migrated database. Unrelated files in a user-chosen
+`DOCUREBUILD_DATA_DIR` are left alone, and the installed application, its logs
+and window state are not touched. A drive root or the home directory is refused.
 
 Deleting a project moves its folder into `trash/`, but only when the stored
 absolute path resolves inside the current data folder; otherwise the request
@@ -266,6 +268,10 @@ GET    /api/ai/usage/history
 DELETE /api/ai/usage
 GET    /api/settings
 PATCH  /api/settings
+GET    /api/fonts?refresh=true|false
+POST   /api/fonts/import
+GET    /api/fonts/{font_id}/file
+DELETE /api/fonts/{font_id}
 POST   /api/system/reset
 GET    /api/projects
 POST   /api/projects
@@ -867,6 +873,52 @@ src/
   footnote edits without changing the document content.
 - Footnotes are not detected automatically: OCR and AI never create one, and the
   text is typed by the user from the source page.
+
+### Typography and fonts
+
+- Each text run may carry a `textStyle` mark with `fontFamily`. The stored JSON
+  is the only source of truth: save/reopen, Markdown, TXT, Word and PDF all read
+  the same value, so a font choice cannot exist only in the DOM.
+- `Superscript` and `Subscript` marks map to `<sup>`/`<sub>` in the editor and
+  Markdown, and to real Word superscript/subscript runs. Their `Mod-.` and
+  `Mod-,` shortcuts come from the Tiptap extensions. The superscript parser
+  ignores a `<sup>` that carries a footnote attribute, so a footnote marker is
+  never converted into a plain superscript during an HTML round-trip.
+- The toolbar font picker and Settings → Editor → Font library share one
+  `FontLibraryDialog`. It lists installed faces, searches by family, imports
+  `.ttf`/`.otf`/`.woff`/`.woff2`, removes imported faces and labels each family
+  as system, imported or mixed.
+- System families come from the Windows font folders (`%WINDIR%\Fonts` and the
+  per-user `%LOCALAPPDATA%\Microsoft\Windows\Fonts`); `DOCUREBUILD_SYSTEM_FONT_DIRS`
+  overrides the scan for tests. The scan is cached for five minutes and keyed by
+  each folder's modification time; `?refresh=true` forces a new scan.
+- Imported files are identified by their own header, parsed with fontTools,
+  converted to a plain sfnt when they are WOFF/WOFF2, deduplicated by SHA-256 and
+  written under the data folder's `fonts/` directory with a generated name. The
+  original file name is metadata only and is never used as a path. A 20 MB
+  per-file limit and typed `422` errors guard the import.
+- Imported faces are served by `GET /api/fonts/{id}/file`. The renderer fetches
+  them with the desktop bearer token and registers them through `FontFace`,
+  because a CSS `url()` cannot attach that token. Registration uses the family,
+  weight and italic style, so bold and italic runs select the matching face.
+- A family that is referenced but unavailable is reported in a status banner; the
+  editor still renders with the platform fallback and the stored document is not
+  changed. Missing families are skipped by exports instead of failing them.
+- Word export writes `w:rFonts` (`ascii`, `hAnsi`, `cs`, `eastAsia`) for each run
+  and embeds up to four faces per family as `word/fonts/fontN.odttf`, obfuscated
+  with the per-font GUID and linked from `fontTable.xml`; `w:embedTrueTypeFonts`
+  is set in `settings.xml`. Faces whose OS/2 `fsType` forbids embedding, and
+  collection faces that cannot be extracted, are skipped; the run keeps the
+  family name so a locally installed copy still renders. The embed step is capped
+  at 48 MB.
+- PDF export resolves the same faces into an `Archive` and emits one
+  `@font-face` per weight/style under a generated alias (`docu-family-N`), so
+  bold and italic runs use the real face. When a face cannot be embedded, the
+  alias falls back to the quoted family name. Myanmar text still uses the
+  existing `docu` font path.
+- No font bytes, font catalogue or import file name is written to logs, the AI
+  usage ledger or history events; only the document's own `fontFamily` value is
+  stored with the document.
 
 ### Document export
 

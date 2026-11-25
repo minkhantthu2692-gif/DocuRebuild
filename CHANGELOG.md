@@ -4,6 +4,37 @@ All notable changes to DocuRebuild are recorded here. This project follows
 [Semantic Versioning](https://semver.org/) and the desktop application is the
 supported 1.0 distribution.
 
+## [Unreleased]
+
+### Added
+
+- **Font family management in the editor.** A font picker on the toolbar and in
+  Settings -> Editor lists installed Windows fonts and imported fonts, imports
+  TTF/OTF/WOFF/WOFF2 (up to 20 MB), and removes imported faces. Imported fonts
+  are stored locally, served through the authenticated font API and registered
+  with the FontFace API so they work in the packaged desktop app.
+- **Superscript and subscript.** Toolbar buttons and Mod-. / Mod-, shortcuts
+  for scientific notation (x2, H2O), preserved through save, reopen, Markdown,
+  Word and PDF export.
+- **Justify alignment.** A new toolbar button aligns paragraphs evenly along
+  both margins; preserved through save, reopen, Word and PDF export.
+- **Font embedding.** Word export embeds up to four faces per family as
+  obfuscated parts with w:embedTrueTypeFonts; PDF export emits @font-face
+  rules per weight/style under generated aliases. Faces whose licence forbids
+  embedding or that cannot be extracted are skipped gracefully.
+
+### Changed
+
+- The ImportedFont table (migration 0004) and onts/ data directory store
+  imported font faces; system fonts are still detected live.
+- onttools and rotli are now runtime dependencies for font parsing and
+  WOFF/WOFF2 conversion.
+
+### Verified
+
+- 431 backend tests and 312 web tests pass; typecheck, ESLint and the production
+  build are clean.
+
 ## [1.0.2] - 2026-11-24
 
 A maintenance release for the 1.0 desktop application. It modernises the form

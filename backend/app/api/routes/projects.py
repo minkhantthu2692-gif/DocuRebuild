@@ -526,6 +526,7 @@ def export_document_file(
         pdf_page_size=export_prefs.pdf_page_size,
         pdf_margin=export_prefs.pdf_margin,
         layout=layout,
+        session=session,
     )
     ascii_name = safe_filename(project.name, export_format)
     project_service.record_history(

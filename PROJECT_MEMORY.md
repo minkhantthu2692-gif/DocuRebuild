@@ -4,7 +4,7 @@ This is the durable context file for DocuRebuild. A new AI agent (or a new human
 developer) should be able to read this document and `AGENTS.md`, clone the
 repository, run the checks and continue work without any previous conversation.
 
-Last updated: 2026-11-22 (final stabilization for the 1.0.0 Windows release).
+Last updated: 2026-11-25 (typography and scientific formatting features added).
 
 ## 1. What the product is
 

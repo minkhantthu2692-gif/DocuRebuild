@@ -29,6 +29,7 @@ import html
 import io
 import os
 import re
+import uuid
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
@@ -47,10 +48,11 @@ from docx.opc.part import Part
 from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import nsdecls, qn
 from docx.shared import Inches, Pt
+from lxml import etree
 from PIL import Image
 
 from app.core.errors import AppError
-from app.services import documents, pages
+from app.services import documents, fonts as font_service, pages
 
 ExportFormat = Literal["markdown", "txt", "docx", "pdf"]
 TextExportFormat = Literal["markdown", "txt"]
@@ -142,6 +144,12 @@ def _render_marks(text: str, marks: list[dict[str, Any]] | None) -> str:
     if "underline" in kinds:
         # Markdown has no underline; inline HTML is the only faithful option.
         rendered = f"<u>{rendered}</u>"
+    if "superscript" in kinds:
+        # Markdown has no superscript syntax either. Inline HTML preserves the
+        # mathematical meaning for renderers that support raw HTML.
+        rendered = f"<sup>{rendered}</sup>"
+    if "subscript" in kinds:
+        rendered = f"<sub>{rendered}</sub>"
     if href:
         rendered = f"[{rendered}]({href})"
     return rendered
@@ -894,6 +902,164 @@ def _attach_footnotes(document: Any, notes: list[str]) -> None:
     document.part.relate_to(part, RT.FOOTNOTES)
 
 
+# --- Word typography ----------------------------------------------------
+
+_DOCX_FONT_RELATIONSHIP = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font"
+)
+_DOCX_OBFUSCATED_FONT_TYPE = (
+    "application/vnd.openxmlformats-officedocument.obfuscatedFont"
+)
+# Word embeds at most these four faces for one family.
+_DOCX_FONT_VARIANTS = (
+    ("embedRegular", False, 400),
+    ("embedBold", False, 700),
+    ("embedItalic", True, 400),
+    ("embedBoldItalic", True, 700),
+)
+# A document with many families must not become a multi-hundred-megabyte file.
+_DOCX_MAX_EMBEDDED_BYTES = 48 * 1024 * 1024
+
+
+def _docx_font_family(marks: dict[str, Any]) -> str:
+    text_style = marks.get("textStyle")
+    if not isinstance(text_style, dict):
+        return ""
+    return font_service.sanitize_family(text_style.get("fontFamily"))
+
+
+def _docx_fonts_element(properties: Any, family: str) -> Any:
+    """Create a ``w:rFonts`` element that applies to every script in the run."""
+    fonts = OxmlElement("w:rFonts")
+    for attribute in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
+        fonts.set(qn(attribute), family)
+    properties.append(fonts)
+    return fonts
+
+
+def _docx_apply_font_family(run: Any, marks: dict[str, Any]) -> None:
+    family = _docx_font_family(marks)
+    if not family:
+        return
+    run.font.name = family
+    properties = run._element.get_or_add_rPr()
+    fonts = properties.find(qn("w:rFonts"))
+    if fonts is None:
+        fonts = OxmlElement("w:rFonts")
+        properties.insert(0, fonts)
+    for attribute in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
+        fonts.set(qn(attribute), family)
+
+
+def _closest_face(
+    faces: list[Any], *, italic: bool, weight: int
+) -> Any | None:
+    """Pick the face matching a style axis, allowing a non-standard weight."""
+    candidates = [face for face in faces if face.italic == italic]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda face: abs(face.weight - weight))
+
+
+def _docx_obfuscate_font(data: bytes, font_key: str) -> bytes:
+    """Apply Word's embedded-font obfuscation to the first 32 bytes."""
+    key = bytes.fromhex(font_key.replace("-", ""))
+    mask = key[::-1] * 2
+    result = bytearray(data)
+    for index in range(min(32, len(result))):
+        result[index] ^= mask[index]
+    return bytes(result)
+
+
+def _docx_font_table(document: Any) -> Any | None:
+    for part in document.part.package.iter_parts():
+        if str(part.partname) == "/word/fontTable.xml":
+            return part
+    return None
+
+
+def _docx_font_entry(root: Any, family: str) -> Any:
+    """Return the existing ``w:font`` entry for a family, or add one."""
+    namespace = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    for entry in root.findall(f"{namespace}font"):
+        if (entry.get(f"{namespace}name") or "").casefold() == family.casefold():
+            return entry
+    entry = etree.SubElement(root, f"{namespace}font")
+    entry.set(f"{namespace}name", family)
+    for tag, value in (("charset", "00"), ("family", "auto"), ("pitch", "variable")):
+        child = etree.SubElement(entry, f"{namespace}{tag}")
+        child.set(f"{namespace}val", value)
+    return entry
+
+
+def _docx_enable_font_embedding(document: Any) -> None:
+    settings = document.settings.element
+    if settings.find(qn("w:embedTrueTypeFonts")) is not None:
+        return
+    element = OxmlElement("w:embedTrueTypeFonts")
+    zoom = settings.find(qn("w:zoom"))
+    if zoom is not None:
+        zoom.addnext(element)
+    else:
+        settings.insert(0, element)
+
+
+def _embed_docx_fonts(document: Any, content: dict[str, Any], session: Any) -> None:
+    """Add the used local font faces to a Word package.
+
+    Word reads embedded faces from ``word/fonts/*.odttf``, linked from
+    ``fontTable.xml`` and obfuscated with the per-font GUID. Only faces whose
+    licence allows embedding are copied, so an export never bypasses ``fsType``.
+    """
+    families = font_service.export_faces_for_document(content, session)
+    if not families:
+        return
+    font_table = _docx_font_table(document)
+    if font_table is None:
+        return
+    root = etree.fromstring(font_table.blob)
+    embedded = 0
+    total = 0
+    seen_faces: set[tuple[str, int]] = set()
+    for faces in families.values():
+        family = faces[0].family
+        entry = None
+        for tag, italic, weight in _DOCX_FONT_VARIANTS:
+            face = _closest_face(faces, italic=italic, weight=weight)
+            if face is None or not font_service.embedding_allowed(face):
+                continue
+            identity = (str(face.path), face.index)
+            if identity in seen_faces:
+                continue
+            data = font_service.face_bytes(face)
+            if not data:
+                continue
+            if total + len(data) > _DOCX_MAX_EMBEDDED_BYTES:
+                break
+            seen_faces.add(identity)
+            font_key = str(uuid.uuid4()).upper()
+            embedded += 1
+            part = Part(
+                PackURI(f"/word/fonts/font{embedded}.odttf"),
+                _DOCX_OBFUSCATED_FONT_TYPE,
+                _docx_obfuscate_font(data, font_key),
+                document.part.package,
+            )
+            relationship_id = font_table.relate_to(part, _DOCX_FONT_RELATIONSHIP)
+            if entry is None:
+                entry = _docx_font_entry(root, family)
+            child = etree.SubElement(entry, qn(f"w:{tag}"))
+            child.set(qn("r:id"), relationship_id)
+            child.set(qn("w:fontKey"), "{" + font_key + "}")
+            total += len(data)
+    if not embedded:
+        return
+    _docx_enable_font_embedding(document)
+    font_table._blob = etree.tostring(
+        root, xml_declaration=True, encoding="UTF-8", standalone=True
+    )
+
+
 _EQUATION_ARRAY_ENVIRONMENTS = (
     "alignedat",
     "aligned",
@@ -1157,6 +1323,12 @@ class _DocxRenderer:
         if "code" in marks:
             run.font.name = "Consolas"
             run.font.size = Pt(10)
+        else:
+            _docx_apply_font_family(run, marks)
+        if "superscript" in marks:
+            run.font.superscript = True
+        elif "subscript" in marks:
+            run.font.subscript = True
 
     def _add_hyperlink(
         self, paragraph: Any, text: str, url: str, marks: dict[str, Any]
@@ -1166,6 +1338,9 @@ class _DocxRenderer:
         hyperlink.set(qn("r:id"), relationship_id)
         run = OxmlElement("w:r")
         properties = OxmlElement("w:rPr")
+        family = _docx_font_family(marks)
+        if family:
+            _docx_fonts_element(properties, family)
         if "bold" in marks:
             properties.append(OxmlElement("w:b"))
         if "italic" in marks:
@@ -1178,6 +1353,14 @@ class _DocxRenderer:
         underline = OxmlElement("w:u")
         underline.set(qn("w:val"), "single")
         properties.append(underline)
+        if "superscript" in marks:
+            vertical = OxmlElement("w:vertAlign")
+            vertical.set(qn("w:val"), "superscript")
+            properties.append(vertical)
+        elif "subscript" in marks:
+            vertical = OxmlElement("w:vertAlign")
+            vertical.set(qn("w:val"), "subscript")
+            properties.append(vertical)
         run.append(properties)
         value = OxmlElement("w:t")
         value.text = text
@@ -1717,6 +1900,7 @@ def render_docx(
     header_text: str = "",
     footer_text: str = "",
     show_page_numbers: bool = True,
+    session: Any = None,
 ) -> bytes:
     """Render the document as a Word file, embedding local figures and OMML."""
     document = Document()
@@ -1734,6 +1918,7 @@ def render_docx(
     renderer.equation_numbers = _equation_number_map(content)
     renderer.add_blocks(document, content.get("content") or [])
     _attach_footnotes(document, renderer.footnotes)
+    _embed_docx_fonts(document, content, session)
     buffer = io.BytesIO()
     document.save(buffer)
     return buffer.getvalue()
@@ -1853,7 +2038,7 @@ def _has_myanmar(value: Any) -> bool:
     return False
 
 
-def _pdf_css(font_file: str | None) -> str:
+def _pdf_css(font_file: str | None, extra: str = "") -> str:
     """Styles for the HTML story. Only trusted, generated values are inserted."""
     if font_file:
         face = (
@@ -1862,10 +2047,10 @@ def _pdf_css(font_file: str | None) -> str:
         )
     else:
         face = "body { font-family: sans-serif; }"
-    return "\n".join(
-        [
-            face,
-            "body { margin: 0; font-size: 11pt; line-height: 1.45; color: #111; }",
+    rules = [
+        face,
+        extra,
+        "body { margin: 0; font-size: 11pt; line-height: 1.45; color: #111; }",
             "h1 { font-size: 21pt; margin: 16pt 0 8pt; }",
             "h2 { font-size: 17pt; margin: 14pt 0 7pt; }",
             "h3 { font-size: 14pt; margin: 12pt 0 6pt; }",
@@ -1919,7 +2104,66 @@ def _pdf_css(font_file: str | None) -> str:
             ".notes { font-size: 9pt; margin-left: 16pt; }",
             ".notes li { margin-bottom: 3pt; }",
         ]
-    )
+    return "\n".join(rule for rule in rules if rule)
+
+
+class _PdfFontRegistry:
+    """Map document font families to embedded faces for the PDF story.
+
+    MuPDF accepts several ``@font-face`` rules for one family with ``font-weight``
+    and ``font-style`` descriptors, so bold and italic runs select the matching
+    face instead of a synthesised approximation.
+    """
+
+    def __init__(self, archive: Any, families: dict[str, list[Any]]) -> None:
+        self._aliases: dict[str, str] = {}
+        self._rules: list[str] = []
+        index = 0
+        for faces in families.values():
+            if not faces:
+                continue
+            index += 1
+            token = f"docu-family-{index}"
+            embedded = False
+            for _tag, italic, weight in _DOCX_FONT_VARIANTS:
+                face = _closest_face(faces, italic=italic, weight=weight)
+                if face is None or not font_service.embedding_allowed(face):
+                    continue
+                data = font_service.face_bytes(face)
+                if not data:
+                    continue
+                suffix = ".otf" if data[:4] == b"OTTO" else ".ttf"
+                name = f"docu-family-{index}-{abs(weight)}-{'i' if italic else 'r'}{suffix}"
+                try:
+                    archive.add(data, name)
+                except Exception:
+                    continue
+                descriptor = ""
+                if weight >= 600:
+                    descriptor += "font-weight: bold;"
+                if italic:
+                    descriptor += "font-style: italic;"
+                self._rules.append(
+                    f"@font-face {{ font-family: {token}; src: url({name});"
+                    f"{descriptor} }}"
+                )
+                embedded = True
+            if embedded:
+                self._aliases[faces[0].family.casefold()] = token
+            else:
+                # Naming the family still lets a local installation render it;
+                # the PDF will fall back to a generic face when it is absent.
+                safe = faces[0].family.replace('"', "")
+                self._aliases[faces[0].family.casefold()] = f'"{safe}"'
+
+    def css(self) -> str:
+        return "\n".join(self._rules)
+
+    def span_style(self, family: str) -> str | None:
+        alias = self._aliases.get(family.casefold())
+        if alias is None:
+            return None
+        return f"font-family: {alias}"
 
 
 class _PdfRenderer:
@@ -1932,12 +2176,14 @@ class _PdfRenderer:
         archive: pymupdf.Archive,
         text_width: float,
         max_image_height: float,
+        fonts: _PdfFontRegistry | None = None,
     ) -> None:
         self.content = content
         self.project_dir = project_dir
         self.archive = archive
         self.text_width = text_width
         self.max_image_height = max_image_height
+        self.fonts = fonts
         self.figure_numbers = _figure_number_map(content)
         self.equation_numbers = _equation_number_map(content)
         self.footnotes: list[str] = []
@@ -2213,6 +2459,17 @@ class _PdfRenderer:
             rendered = f"<s>{rendered}</s>"
         if "underline" in kinds:
             rendered = f"<u>{rendered}</u>"
+        if "superscript" in kinds:
+            rendered = f"<sup>{rendered}</sup>"
+        elif "subscript" in kinds:
+            rendered = f"<sub>{rendered}</sub>"
+        family = font_service.sanitize_family(
+            ((kinds.get("textStyle") or {}).get("attrs") or {}).get("fontFamily")
+        )
+        if family and self.fonts is not None:
+            style = self.fonts.span_style(family)
+            if style:
+                rendered = f'<span style="{style}">{rendered}</span>'
         href = _safe_link(
             ((kinds.get("link") or {}).get("attrs") or {}).get("href")
         )
@@ -2389,6 +2646,7 @@ def render_pdf(
     header_text: str = "",
     footer_text: str = "",
     show_page_numbers: bool = True,
+    session: Any = None,
 ) -> bytes:
     """Render the document as an A4 or Letter PDF, fully locally."""
     paper = _PDF_PAGE_SIZES.get(page_size, "a4")
@@ -2431,11 +2689,18 @@ def render_pdf(
             ) from exc
 
     renderer = _PdfRenderer(
-        content, project_dir, archive, text_width, max_image_height
+        content,
+        project_dir,
+        archive,
+        text_width,
+        max_image_height,
+        fonts=_PdfFontRegistry(
+            archive, font_service.export_faces_for_document(content, session)
+        ),
     )
     story = pymupdf.Story(
         html=renderer.render(),
-        user_css=_pdf_css(font_file),
+        user_css=_pdf_css(font_file, renderer.fonts.css() if renderer.fonts else ""),
         archive=archive,
     )
     text_rect = media_box + (margin_pt, margin_pt, -margin_pt, -margin_pt)
@@ -2537,6 +2802,7 @@ def export_document(
     pdf_page_size: str = "a4",
     pdf_margin: str = "normal",
     layout: dict[str, Any] | None = None,
+    session: Any = None,
 ) -> tuple[bytes, str, str]:
     """Return ``(body, filename, content_type)`` for the stored document.
 
@@ -2556,6 +2822,7 @@ def export_document(
             header_text=header_text,
             footer_text=footer_text,
             show_page_numbers=show_page_numbers,
+            session=session,
         )
     elif fmt == "pdf":
         body = render_pdf(
@@ -2567,6 +2834,7 @@ def export_document(
             header_text=header_text,
             footer_text=footer_text,
             show_page_numbers=show_page_numbers,
+            session=session,
         )
     else:
         body = render(document["content"], fmt).encode("utf-8")

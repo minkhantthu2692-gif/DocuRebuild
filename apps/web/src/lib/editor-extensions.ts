@@ -1,7 +1,11 @@
-import Placeholder from "@tiptap/extension-placeholder";
+import FontFamily from "@tiptap/extension-font-family";
 import { InlineMath } from "@tiptap/extension-mathematics";
+import Placeholder from "@tiptap/extension-placeholder";
+import Subscript from "@tiptap/extension-subscript";
+import Superscript from "@tiptap/extension-superscript";
 import { TableKit } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
+import { TextStyle } from "@tiptap/extension-text-style";
 import StarterKit from "@tiptap/starter-kit";
 
 import { NumberedBlockMath } from "./editor-equation";
@@ -11,6 +15,37 @@ import { FigureNode } from "./editor-figure";
 import { InlineImageNode } from "./editor-inline-image";
 import { FigureReference } from "./editor-reference";
 import { normalizeLinkUrl } from "./link";
+
+/**
+ * Footnote markers are also rendered as `<sup>`, so the superscript mark must
+ * not claim them: the footnote atom owns that element and stores the note text
+ * in it. Without this guard a pasted or re-parsed document would turn a
+ * footnote into a plain superscript and silently drop the note.
+ */
+const SuperscriptWithFootnotes = Superscript.extend({
+  parseHTML() {
+    const ownsFootnote = (value: unknown): boolean => {
+      const element = value as HTMLElement | null | undefined;
+      return Boolean(
+        element &&
+          typeof element.hasAttribute === "function" &&
+          (element.hasAttribute("data-footnote-id") ||
+            element.hasAttribute("data-footnote-text")),
+      );
+    };
+
+    return [
+      {
+        tag: "sup",
+        getAttrs: (value) => (ownsFootnote(value) ? false : null),
+      },
+      {
+        style: "vertical-align",
+        getAttrs: (value) => (value === "super" ? null : false),
+      },
+    ];
+  },
+});
 
 /**
  * One extension list for the workspace editor and the editor tests, so a table
@@ -35,6 +70,15 @@ export function createEditorExtensions(placeholder: () => string) {
       },
     }),
     TextAlign.configure({ types: ["heading", "paragraph"] }),
+    // Per-selection typography. TextStyle stores the mark; FontFamily adds the
+    // fontFamily attribute that Word and PDF exports read from the saved JSON.
+    TextStyle,
+    FontFamily,
+    // Scientific notation marks. Their Mod-. and Mod-, shortcuts match the
+    // superscript/subscript controls in the toolbar. Superscript is the guarded
+    // variant so footnote markers keep parsing as footnote atoms.
+    SuperscriptWithFootnotes,
+    Subscript,
     // Column resizing is deliberately off: stored pixel widths would make the
     // document layout depend on one screen size, and Markdown cannot keep them.
     TableKit.configure({

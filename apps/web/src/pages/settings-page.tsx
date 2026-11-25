@@ -39,6 +39,7 @@ import type {
 
 import { AiSettings } from "@/components/settings/ai-settings";
 import { FactoryResetDialog } from "@/components/settings/factory-reset-dialog";
+import { FontLibraryDialog } from "@/components/workspace/font-library-dialog";
 import {
   SettingRow,
   SettingsSection,
@@ -122,6 +123,7 @@ export function SettingsPage() {
   const errorMessage = useApiErrorMessage();
   const [copied, setCopied] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [fontLibraryOpen, setFontLibraryOpen] = useState(false);
 
   const settings = settingsQuery.data;
   const appearance = settings?.appearance;
@@ -400,6 +402,19 @@ export function SettingsPage() {
               >
                 {t("editor.preview")}
               </div>
+              <SettingRow
+                title={t("editor.fonts")}
+                description={t("editor.fontsDescription")}
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFontLibraryOpen(true)}
+                >
+                  <Type />
+                  {t("editor.manageFonts")}
+                </Button>
+              </SettingRow>
             </SettingsSection>
 
             <SettingsSection id="export" icon={FileDown} title={t("sections.export")}>
@@ -793,6 +808,8 @@ export function SettingsPage() {
         onOpenChange={setResetOpen}
         dataDir={health?.data_dir}
       />
+
+      <FontLibraryDialog open={fontLibraryOpen} onOpenChange={setFontLibraryOpen} />
     </div>
   );
 }
