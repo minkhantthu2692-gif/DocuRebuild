@@ -1,10 +1,10 @@
 # ROADMAP.md — DocuRebuild status and next work
 
-This is the short, current roadmap for the 1.0 Windows desktop release.
+This is the short, current roadmap for the Windows x64 desktop release.
 `docs/roadmap.md` keeps the detailed phase-by-phase implementation history;
 `PROJECT_MEMORY.md` records architecture and handover context.
 
-Last updated: 2026-11-26.
+Last updated: 2026-11-26 (v1.1.0 released).
 
 ## Release status
 
@@ -28,7 +28,7 @@ adjustments.
 the factory reset, dashboard multi-select bulk delete and a guard that refuses
 to delete a project folder outside the data folder.
 
-## Completed — 1.0 MUST HAVE
+## Completed — 1.x MUST HAVE
 
 | Area | Delivered |
 | --- | --- |
@@ -49,8 +49,8 @@ to delete a project folder outside the data folder.
 
 ## Remaining MUST HAVE before a wider (non-Windows) production release
 
-These are quality/reach gaps, not missing 1.0 features. They are deliberately
-**not** implemented in this archived state.
+These are quality/reach gaps, not missing 1.x features. They are deliberately
+**not** implemented in this release.
 
 1. **Real-scan OCR validation.** Build a redacted corpus of real English,
    Burmese and mixed documents and publish CER/WER alongside the synthetic
@@ -88,7 +88,7 @@ These are quality/reach gaps, not missing 1.0 features. They are deliberately
   design; no cloud account is planned).
 - Plugins or scripting for custom reconstruction rules.
 
-## Explicitly out of scope for 1.0
+## Explicitly out of scope for 1.x
 
 - Mobile application, PWA install, camera import and device pairing.
 - Cloud accounts, mandatory cloud storage or telemetry.
@@ -97,7 +97,7 @@ These are quality/reach gaps, not missing 1.0 features. They are deliberately
 
 ## Known limitations
 
-See `PROJECT_MEMORY.md` §12 and `CHANGELOG.md` §1.0.0. The headline limits are:
-Windows x64 only, ~202 MB installer / ~643 MB installed, synthetic-only OCR
+See `PROJECT_MEMORY.md` §12 and `CHANGELOG.md` §1.1.0. The headline limits are:
+Windows x64 only, ~204 MB installer / ~650 MB installed, synthetic-only OCR
 benchmark, incomplete page-wide equation/figure recognition, no code signing,
 no desktop E2E suite, and one accepted low-severity KaTeX advisory.

@@ -4,7 +4,7 @@ This is the durable context file for DocuRebuild. A new AI agent (or a new human
 developer) should be able to read this document and `AGENTS.md`, clone the
 repository, run the checks and continue work without any previous conversation.
 
-Last updated: 2026-11-25 (typography and scientific formatting features added).
+Last updated: 2026-11-26 (v1.1.0 released with OCR layout reconstruction and editor typography).
 
 ## 1. What the product is
 
@@ -15,7 +15,7 @@ text, Word (`.docx`) or PDF. Optional bring-your-own-key AI can clean up OCR,
 propose regions, transcribe an equation crop or read a table crop, but every AI
 result is a reviewable proposal and the application works fully without AI.
 
-The 1.0 distribution is a **Windows x64 desktop application**:
+The 1.0/1.1 distribution is a **Windows x64 desktop application**:
 
 - Electron 45 shell (`apps/desktop`) with a context-isolated preload bridge.
 - Python 3.12 FastAPI backend packaged as a PyInstaller one-folder sidecar.
@@ -23,7 +23,7 @@ The 1.0 distribution is a **Windows x64 desktop application**:
 - Per-user NSIS installer; no Node.js, Python, Tesseract or admin rights needed.
 - SQLite databases and project folders stored under the user's local app data.
 
-Mobile, PWA, camera import and device pairing are **out of scope for 1.0** and
+Mobile, PWA, camera import and device pairing are **out of scope for 1.x** and
 were deliberately removed. Do not reintroduce them without an approved scope
 change.
 

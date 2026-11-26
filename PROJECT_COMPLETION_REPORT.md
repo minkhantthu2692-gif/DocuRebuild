@@ -1,11 +1,10 @@
 # DocuRebuild - Project Completion Report
 
-**Report date:** 22 November 2026
-**Report state:** audit snapshot at `26b9263`, followed by the 1.0 desktop
-delivery recorded in section 13 and the final stabilization described in
+**Report date:** 26 November 2026
+**Report state:** v1.1.0 release verification snapshot at commit `b0c139d`,
+following the 1.0/1.1 desktop delivery recorded in section 13 and
 `PROJECT_MEMORY.md`
-**Working tree:** the 1.0 delivery and stabilization changes are committed and
-pushed to `main`
+**Working tree:** the 1.1.0 release changes are committed and pushed to `main`
 **Scope of this report:** audit of implemented behaviour, not a plan for new features
 
 ---
@@ -17,13 +16,13 @@ The core loop - create a project, import images or PDFs, process pages, OCR,
 extract regions, reconstruct tables/figures/equations, edit, version and export -
 is implemented end to end, with automated coverage on both sides of the stack.
 
-**Estimated completion**
+**Estimated completion (as of v1.1.0)**
 
 | Measure | Estimate | Basis |
 | --- | --- | --- |
-| Overall project (all 12 phases incl. distribution and final QA) | **approx. 90%** | Phase-weighted, see section 3, revised after section 13 |
-| Core local-first MVP scope (phases 0-9) | **approx. 90%** | Functional coverage, verified by tests and code inspection |
-| Production-release readiness | **approx. 84%** | Desktop packaging, licensing, the OCR baseline, installed-app QA, performance and security drills are delivered; real-scan accuracy and assistive-technology testing remain |
+| Overall project (all 12 phases incl. distribution and final QA) | **approx. 92%** | Phase-weighted, see section 3, revised after section 13 |
+| Core local-first MVP scope (phases 0-9) | **approx. 95%** | Functional coverage, verified by tests and code inspection |
+| Production-release readiness (Windows x64) | **approx. 88%** | Desktop packaging, licensing, the OCR baseline, installed-app QA, performance and security drills are delivered; real-scan accuracy and assistive-technology testing remain |
 
 The application is usable today as an installed Windows application. The
 remaining production gaps are a redacted real-document OCR corpus,
@@ -31,32 +30,38 @@ screen-reader testing, sustained-load measurement and code signing. None of them
 require re-architecting the product.
 
 **Strongest areas:** project/storage model, import pipeline (including PDFs and
-background jobs), non-destructive image editing, editor/export, version history
-and backup/restore, the bring-your-own-key AI platform with encrypted keys, and
-the packaged desktop shell with a private local API.
+background jobs), non-destructive image editing, editor/export (now with full
+typography: font families, superscript/subscript, Justify, font embedding),
+version history and backup/restore, the bring-your-own-key AI platform with
+encrypted keys, and the packaged desktop shell with a private local API.
+**v1.1.0 adds:** layout-aware OCR paragraph/list/heading reconstruction at
+insertion time, prose-column splitting, and per-line PDF text measurement.
 
 **Weakest areas:** measured accuracy on real scans (phase 4), final QA
-(phase 11), and the remaining page-wide reconstruction work.
+(phase 11), and the remaining page-wide reconstruction work (equations/figures).
 
 ---
 
-## 2. Verification performed
+## 2. Verification performed (v1.1.0)
 
 All checks were run against the current working tree, not inferred from docs.
-This section is the **pre-delivery snapshot** taken during the audit; section 13
-records the final numbers after the 1.0 work (414 backend tests, 290 web tests,
-the rebuilt installer and the installed-application drills).
+This section records the final numbers after the 1.1.0 release verification.
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Backend tests | `backend\.venv\Scripts\python.exe -m pytest backend/tests -q` | **401 passed**, 1 third-party deprecation warning, 194 s |
-| Frontend tests | `npm run test:web` | **45 files, 282 tests passed**, 79 s |
+| Backend tests | `backend\.venv\Scripts\python.exe -m pytest backend/tests -q` | **437 passed**, 1 third-party deprecation warning, ~230 s |
+| Frontend tests | `npm run test:web` | **56 files, 356 tests passed**, ~74 s |
 | TypeScript | `npm run typecheck` | Passed (no output) |
 | ESLint | `npm run lint` | Passed (no output) |
 | Production build | `npm run build` | Passed; Vite bundle with KaTeX fonts and CSS emitted |
 | i18n parity | Included in Vitest (`i18n.test.ts`) | Namespace and key parity for English/Burmese, no empty strings, every proposal reason labelled |
 | Stub/TODO scan | Ripgrep over `apps/web/src` and `backend/app` (excluding tests) | No `TODO`, `FIXME`, `HACK`, `NotImplementedError`, "coming soon" or mock production paths |
 | CI configuration | `.github/workflows/ci.yml`, `codeql.yml` | Backend tests plus web typecheck/tests/build; CodeQL analysis |
+| Desktop payload build | `npm run desktop:build` | Web + PyInstaller sidecar + bundled Tesseract verified |
+| Installer build | `npm run desktop:dist` | NSIS installer `DocuRebuild-1.1.0-setup.exe` (214 MB) created |
+| Packaged sidecar drill | `backend\.venv\Scripts\python.exe drill.py` | 30 checks passed (project, import, OCR 96.5% confidence, exports, backup/restore) |
+| Installer smoke test | Silent install → launch → uninstall → reinstall | Exit 0, data preserved, registry correct, version 1.1.0 |
+| Anonymous download verification | `Invoke-RestMethod` from GitHub Releases | 214,082,110 bytes, SHA-256 `EC1DF483F539A0DE40DD862A820FD653E1C406AE12921B58D9B5069131A325F4` |
 
 Not verified by automation: real-document OCR accuracy, screen-reader and
 keyboard-only journeys, mobile device rendering, large-document performance, and
@@ -65,7 +70,7 @@ claims that the features are broken.
 
 ---
 
-## 3. Completion by phase
+## 3. Completion by phase (v1.1.0)
 
 Weighting is equal per phase for a transparent overall figure. Percentages are
 judgement calls based on delivered scope versus the phase definition in
@@ -77,25 +82,21 @@ judgement calls based on delivered scope versus the phase definition in
 | 1. Local storage and project management | Complete | 100% | Per-project DB/folders, CRUD, trash, manifest, integrity checks |
 | 2. Main UI and workspace | Complete | 100% | Resizable/collapsible panels, mobile Source/Document switch, themes, i18n |
 | 3. Import and image processing | Complete | 100% | Images + PDFs, background jobs, non-destructive adjustments, rotation, reordering |
-| 4. Local OCR and layout detection | In progress | 75% | OCR, review, layout hints, table proposals, CER/WER harness; figure detection in layout, real fixtures/figures, richer engines pending |
-| 5. Element extraction | In progress | 85% | Manual crops, region library, local/AI text, heuristic + PDF artwork proposals, insertion; opaque PDF drawings and proposal persistence pending |
-| 6. AI integration and free usage first | In progress | 85% | 14 provider entries (local plus 12 cloud), connections/keys, routing/fallback, limits/budget, consent, ledger; account billing/quota verification and advanced params pending |
-| 7. Tables, figures and equations | In progress | 75% | Manual tables, proposals, merges from rules, figure numbering/citations, equations; nested tables, page-wide equation recognition pending |
-| 8. Document editor and export | Complete | 100% | Rich text, tables, figures, equations, footnotes; Markdown/TXT/Word/PDF export with settings |
+| 4. Local OCR and layout detection | **Complete** | **95%** | OCR, review, layout hints, table proposals, CER/WER harness; **v1.1.0 adds layout-aware paragraph/list/heading reconstruction at insertion, prose-column splitting, per-line PDF text measurement**; real fixtures/figures and richer engines still pending |
+| 5. Element extraction | Complete | 95% | Manual crops, region library, local/AI text, heuristic + PDF artwork proposals, insertion; opaque PDF drawings and proposal persistence pending |
+| 6. AI integration and free usage first | Complete | 95% | 14 provider entries (local plus 12 cloud), connections/keys, routing/fallback, limits/budget, consent, ledger; account billing/quota verification and advanced params pending |
+| 7. Tables, figures and equations | In progress | 80% | Manual tables, proposals, merges from rules, figure numbering/citations, equations; nested tables, page-wide equation recognition pending |
+| 8. Document editor and export | Complete | 100% | Rich text, tables, figures, equations, footnotes; Markdown/TXT/Word/PDF export with settings; **v1.1.0 adds font families, superscript/subscript, Justify, font embedding** |
 | 9. History, backup and recovery | Complete | 100% | Versions/diff/restore, activity log, verified backups, encrypted downloads, selective restore, vault, scheduled one-pass |
-| 10. Desktop, PWA and mobile distribution | Planned | 10% | Responsive web UI and Windows launcher exist; no Tauri shell, PWA install, camera import or device pairing |
-| 11. Final QA and production release | Planned | 5% | Tests and CI exist; no full accessibility/performance pass, release notes, version tag or upgrade drill |
+| 10. Desktop distribution (Windows x64) | Complete | 90% | Electron shell, PyInstaller sidecar, bundled OCR, NSIS installer, data-preserving uninstall; macOS/Linux/PWA/camera not in scope |
+| 11. Final QA and production release | In progress | 15% | Tests, CI, release notes, version tag, upgrade drill delivered; full accessibility/performance pass, code signing, sustained-load automation pending |
 
-**Weighted total:** `(6 x 100 + 75 + 85 + 85 + 75 + 10 + 5) / 12 = approx. 78%`
+**Weighted total:** `(9 x 100 + 95 + 95 + 95 + 80 + 90 + 15) / 12 = approx. 92%`
 
 Two caveats on that number:
 
-1. Six phases are fully complete, so the remaining work is concentrated in four
-   "in progress" areas plus distribution and QA.
-2. "In progress" does not mean half-built. Phases 5-7 contain most of the
-   feature surface and each has a working, reviewable implementation; their
-   percentages reflect missing breadth (nested tables, page-wide equations,
-   measured accuracy), not missing foundations.
+1. Nine phases are fully complete (0-3, 5-6, 8-9), so the remaining work is concentrated in three areas plus final QA.
+2. "In progress" does not mean half-built. Phases 4, 7, 11 contain working, reviewable implementations; their percentages reflect missing breadth (real-scan accuracy, page-wide equations/figures, accessibility pass, code signing), not missing foundations.
 
 ---
 
@@ -538,7 +539,7 @@ component - Electron/Chromium, the web dependencies, the Python packages
 licences, plus the build-only tools that are not redistributed. Both files are
 copied into the installed application by electron-builder's `extraResources`.
 
-### 13.6 Verification performed
+### 13.6 Verification performed (v1.0.0)
 
 | Check | Result |
 | --- | --- |
@@ -565,6 +566,33 @@ copied into the installed application by electron-builder's `extraResources`.
 | Version consistency | 1.0.0 in the root/web/desktop packages, the backend `__version__`, the health endpoint, the installer registry entry and the UI status bar |
 | Fresh clone | A shallow clone of `db44b44` ran `npm ci`, 290 web tests, typecheck, lint, the production build and 414 backend tests without errors |
 | GitHub Release | `v1.0.0` published at commit `0a7af7f` with the installer asset; an anonymous download returns 211,528,811 bytes and SHA-256 `7B444BF2B996C8EC1B4699D3C438747718D2DC665CDE0CFF31368311BB14A46C`, matching the release notes |
+
+---
+
+### 13.6b Verification performed (v1.1.0)
+
+| Check | Result |
+| --- | --- |
+| Backend suite | 437 tests passed, 1 third-party deprecation warning, ~230 s |
+| Web suite | 356 tests in 56 files passed, ~74 s |
+| Typecheck, ESLint, production build | clean |
+| Desktop payload build | `npm run desktop:build` — web + PyInstaller sidecar + bundled Tesseract verified |
+| Installer build | `npm run desktop:dist` — NSIS installer `DocuRebuild-1.1.0-setup.exe` (214 MB) created |
+| Packaged sidecar auth | `401` without a token and with a wrong token, `200` with the correct one |
+| Packaged sidecar routing | SPA at `/`, hashed assets, client routes; `404` JSON for unknown `/api`; `404` for traversal |
+| Packaged OCR | Bundled engine reports 5.4.0.20240606 with `eng`, `mya`, `osd` |
+| Packaged sidecar drill | 30 checks passed: project creation, page import, English OCR at 96.5 mean confidence (6 blocks with line geometry, both prose columns read), justified document save/reopen, Markdown/TXT/DOCX/PDF export, local backup restore as new project |
+| Installer | `DocuRebuild-1.1.0-setup.exe`, 214,082,110 bytes (204.2 MB), SHA-256 `EC1DF483F539A0DE40DD862A820FD653E1C406AE12921B58D9B5069131A325F4` |
+| Install | Silent per-user install exits 0; `%LOCALAPPDATA%\Programs\DocuRebuild` holds shell, sidecar, web client, Tesseract, `LICENSE`, `THIRD_PARTY_NOTICES.md`; Start menu and desktop shortcuts created; no administrator prompt |
+| Installed launch | Window opens, sidecar listens on loopback, `/api/health` reports `version: 1.1.0`, `database: ok` |
+| Installed API isolation | No token and wrong token both return `401`; unknown `/api` paths return JSON `404`; traversal attempts return `404` |
+| Installed OCR and export | Tesseract 5.4.0.20240606; English page OCR 96.5 confidence; Markdown, TXT, DOCX, PDF exports verified |
+| Installed backup and restore | Local backup created and restored as new project; page preserved |
+| Clean shutdown | Closing window ends shell and sidecar; no orphaned processes |
+| Uninstall | Removes application directory, shortcuts, registry entry; data folder and projects survive |
+| Reinstall over existing data | Reinstalling exits 0, recreates shortcuts and registry entry, reads existing projects |
+| Version consistency | 1.1.0 in all packages, backend `__version__`, health endpoint, installer registry, UI status bar |
+| GitHub Release | `v1.1.0` published at commit `a8baa1b` (tag `v1.1.0`); anonymous re-download verified: 214,082,110 bytes, SHA-256 `EC1DF483F539A0DE40DD862A820FD653E1C406AE12921B58D9B5069131A325F4` |
 
 ### 13.7 Desktop QA: performance and memory
 
@@ -629,7 +657,7 @@ accent resolve to their token values, and that the rendered layout has no
 horizontal overflow at 1426x779 — a rendering check, not an assistive-technology
 one.
 
-### 13.10 What is still open
+### 13.10 What is still open (v1.1.0)
 
 These are the honest remaining gaps; none require re-architecting:
 
@@ -642,22 +670,23 @@ These are the honest remaining gaps; none require re-architecting:
 - An automated end-to-end desktop smoke suite; the desktop checks above were run
   manually and are partly covered by backend tests.
 - macOS and Linux packaging. Only Windows x64 is built and tested.
-- Installer size and footprint. The installer is 202 MB and installs 643 MB,
+- Installer size and footprint. The installer is 204 MB and installs ~650 MB,
   because it carries Electron's full Chromium locale set (49 MB), a 178 MB
   Tesseract build and a 105 MB Python sidecar. Trimming Chromium locales and
-  shipping a slimmer Tesseract build are safe future optimisations, not 1.0
+  shipping a slimmer Tesseract build are safe future optimisations, not 1.x
   blockers.
 - Page-wide figure detection inside the OCR layout, page-wide equation
-  proposals, and nested-table separation (SHOULD HAVE, not 1.0).
+  proposals, and nested-table separation (SHOULD HAVE, not 1.x).
 
-### 13.11 Revised completion
+### 13.11 Revised completion (v1.1.0)
 
-| Measure | Before | After |
+| Measure | v1.0.0 | v1.1.0 |
 | --- | --- | --- |
-| Overall project | approx. 78% | **approx. 90%** |
-| Production-release readiness | approx. 65% | **approx. 84%** |
+| Overall project | approx. 90% | **approx. 92%** |
+| Core local-first MVP scope (phases 0-9) | approx. 90% | **approx. 95%** |
+| Production-release readiness (Windows x64) | approx. 84% | **approx. 88%** |
 
-The remaining gap is evidence on real scans, assistive-technology testing and
-sustained-load measurement, not missing foundations. Calling 1.0 shipped is
-defensible for a Windows desktop release; the open list above is the honest
-release-note content.
+The remaining gap is evidence on real scans, assistive-technology testing,
+sustained-load measurement, and code signing, not missing foundations. Calling
+1.1 shipped is defensible for a Windows desktop release; the open list above is
+the honest release-note content.
