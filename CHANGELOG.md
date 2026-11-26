@@ -47,6 +47,26 @@ Existing projects need no migration.
 
 - 437 backend tests and 356 web tests pass; typecheck, ESLint and the production
   build are clean.
+- The rebuilt packaged sidecar was started against an empty data folder: the
+  database migrated from scratch, `/api/health` reported `version: 1.1.0`, an
+  unauthenticated request returned `401`, the bundled client was served from the
+  same origin, and bundled Tesseract 5.4 was detected.
+- The packaged sidecar passed a 30-check drill: create a project, import a
+  rendered page, run English OCR at 96.5 mean confidence (6 blocks, all with line
+  geometry, both prose columns and the closing paragraph read), save and reopen a
+  justified document, export Markdown/TXT/DOCX/PDF, and restore a local backup as
+  a new project with its page.
+- The installer was installed silently (exit 0); the executable and registry
+  entry report 1.1.0; launching the installed application with an empty
+  temporary data folder started its sidecar and created a new database there,
+  leaving existing projects untouched. Uninstalling removed the program files
+  and registry entry and kept the data folder; reinstalling restored the per-user
+  install and the `DocuRebuild 1.1.0` registry entry.
+- The `v1.1.0` GitHub Release was published with the installer and marked latest;
+  an anonymous re-download matched 214,082,110 bytes and the SHA-256 below.
+- Local installer `DocuRebuild-1.1.0-setup.exe`: 214,082,110 bytes (204.2 MB),
+  SHA-256
+  `EC1DF483F539A0DE40DD862A820FD653E1C406AE12921B58D9B5069131A325F4`.
 
 ## [1.0.2] - 2026-11-24
 

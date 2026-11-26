@@ -331,24 +331,32 @@ secret scan.
 
 - Version 1.1.0 everywhere. License AGPL-3.0-or-later.
 - Repository: <https://github.com/minkhantthu2692-gif/DocuRebuild>
-- Current release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.0.2>,
-  published 24 November 2026 from tag `v1.0.2` at commit `dae6ffd`, and marked
+- Current release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.0>,
+  published 26 November 2026 from tag `v1.1.0` at commit `a8baa1b`, and marked
   latest.
-- 1.0.2 installer asset:
-  <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/download/v1.0.2/DocuRebuild-1.0.2-setup.exe>,
-  211,540,824 bytes (201.7 MB), SHA-256
-  `E501B0427371ED64B185A56E67089945896B417C9B19057130802455A1A03F47`, built on
-  24 November 2026 from the UI polish tree.
-- 1.0.2 unifies checkboxes, switches and radios behind shared themed primitives
-  and makes Edit Image apply adjustments in place: the dialog and preview stay
-  mounted while a debounced, serialised render arrives, and edits are flushed on
-  close instead of on every slider tick.
-- 1.0.2 verification: 423 backend and 304 web tests pass; the installed sidecar
-  created a project, imported a page, ran bundled English OCR at 95.8 mean
-  confidence, exported Markdown/TXT/DOCX/PDF, and restored a backup zip as a new
-  project. Uninstall kept the data folder unchanged and reinstall restored the
-  per-user install. The published asset was re-downloaded anonymously: same size
-  and SHA-256.
+- 1.1.0 installer asset:
+  <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/download/v1.1.0/DocuRebuild-1.1.0-setup.exe>,
+  214,082,110 bytes (204.2 MB), SHA-256
+  `EC1DF483F539A0DE40DD862A820FD653E1C406AE12921B58D9B5069131A325F4`, built on
+  26 November 2026 from the typography and OCR reconstruction tree.
+- 1.1.0 adds document typography (font family selection and import,
+  superscript/subscript, Justify, Word/PDF font embedding) and layout-aware OCR
+  insertion: reviewed blocks become flowing paragraphs, real lists and headings,
+  prose columns merged by Tesseract are split, and side-by-side columns stay
+  apart. Embedded PDF text is measured per line so page titles classify as
+  headings.
+- 1.1.0 verification: 437 backend and 356 web tests pass; the packaged sidecar
+  passed a 30-check drill (project, page import, English OCR at 96.5 mean
+  confidence with line geometry, save/reopen of a justified document, four
+  exports, backup restore as a new project); the installer installed, launched
+  with an empty temporary data folder, uninstalled keeping data, and reinstalled
+  at 1.1.0. The published asset was re-downloaded anonymously: same size and
+  SHA-256.
+- 1.0.2 history: tag `v1.0.2` at commit `dae6ffd`, published 24 November 2026;
+  installer `DocuRebuild-1.0.2-setup.exe`, 211,540,824 bytes, SHA-256
+  `E501B0427371ED64B185A56E67089945896B417C9B19057130802455A1A03F47`, downloaded
+  anonymously and verified. It unified checkboxes, switches and radios behind
+  shared themed primitives and made Edit Image apply adjustments in place.
 - 1.0.1 history: tag `v1.0.1` at commit `a6ca946`, published 23 November 2026;
   installer `DocuRebuild-1.0.1-setup.exe`, 211,539,463 bytes, SHA-256
   `9729E2116DA4E2790314BF687A0AD2D81E70F1ABE18D9D7A246892145E9B5792`, downloaded
