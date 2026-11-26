@@ -2,6 +2,8 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 
 import type { DocumentRecord } from "@docurebuild/shared-types";
 
+import type { OcrReconstructionBlock } from "@/lib/ocr-reconstruction";
+
 import {
   WorkspaceActionsContext,
   type EquationInsertionInput,
@@ -18,9 +20,22 @@ export function WorkspaceActionsProvider({ children }: { children: ReactNode }) 
   const [pendingDocumentRestore, setPendingDocumentRestore] =
     useState<DocumentRecord | null>(null);
 
-  const insertText = useCallback((text: string, note?: string | null) => {
-    setInsertion({ id: nextInsertionId++, type: "text", text, note: note ?? null });
-  }, []);
+  const insertText = useCallback(
+    (
+      text: string,
+      note?: string | null,
+      blocks?: OcrReconstructionBlock[],
+    ) => {
+      setInsertion({
+        id: nextInsertionId++,
+        type: "text",
+        text,
+        note: note ?? null,
+        ...(blocks && blocks.length > 0 ? { blocks } : {}),
+      });
+    },
+    [],
+  );
 
   const insertFigure = useCallback((figure: FigureInsertionInput) => {
     setInsertion({ id: nextInsertionId++, type: "figure", ...figure });

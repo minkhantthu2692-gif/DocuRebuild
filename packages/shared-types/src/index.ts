@@ -344,6 +344,15 @@ export type OcrBlockKind =
   | "header"
   | "footer";
 
+export interface OcrLine {
+  /** Line text exactly as the engine produced it. */
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface OcrBlock {
   id: string;
   run_id: string;
@@ -358,6 +367,8 @@ export interface OcrBlock {
   height: number | null;
   line_count: number;
   word_count: number;
+  /** Visual line geometry; empty when the engine stored no word boxes. */
+  lines: OcrLine[];
   verified: boolean;
   corrected: boolean;
   created_at: string;

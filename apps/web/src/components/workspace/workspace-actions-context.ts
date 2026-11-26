@@ -5,11 +5,19 @@ import type {
   TableAlignment,
 } from "@docurebuild/shared-types";
 
+import type { OcrReconstructionBlock } from "@/lib/ocr-reconstruction";
+
 export interface WorkspaceTextInsertion {
   id: number;
   type: "text";
   text: string;
   note: string | null;
+  /**
+   * Reviewed OCR blocks with their source geometry. When present the editor
+   * reconstructs paragraphs from the layout instead of splitting on blank
+   * lines; plain extracted text keeps the older text-only behaviour.
+   */
+  blocks?: OcrReconstructionBlock[];
 }
 
 export interface WorkspaceFigureInsertion {
@@ -71,7 +79,11 @@ export type EquationInsertionInput = Omit<WorkspaceEquationInsertion, "id" | "ty
 
 export interface WorkspaceActions {
   insertion: WorkspaceInsertion | null;
-  insertText: (text: string, note?: string | null) => void;
+  insertText: (
+    text: string,
+    note?: string | null,
+    blocks?: OcrReconstructionBlock[],
+  ) => void;
   insertFigure: (figure: FigureInsertionInput) => void;
   insertInlineImage: (image: InlineImageInsertionInput) => void;
   insertTable: (table: TableInsertionInput) => void;

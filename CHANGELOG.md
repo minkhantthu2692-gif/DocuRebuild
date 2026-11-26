@@ -4,10 +4,23 @@ All notable changes to DocuRebuild are recorded here. This project follows
 [Semantic Versioning](https://semver.org/) and the desktop application is the
 supported 1.0 distribution.
 
-## [Unreleased]
+## [1.1.0] - 2026-11-26
+
+A feature release for the Windows x64 desktop application. It adds document
+typography controls - font families, superscript and subscript, and Justify -
+and reconstructs reviewed OCR output as real paragraphs, lists and headings.
+Existing projects need no migration.
 
 ### Added
 
+- **Paragraph reconstruction from OCR layout.** Reviewed OCR blocks are now
+  inserted as the document's real structure instead of one paragraph per line:
+  wrapped lines flow into editable paragraphs (so Justify and reflow work),
+  continuation blocks in the same column are joined, side-by-side columns stay
+  apart and read in order, headings remain headings, numbered/bulleted markers
+  become real lists, and table/equation blocks keep their line layout. Sparse
+  Tesseract output (PSM 11) and automatic layout (PSM 3) reconstruct to the same
+  document. Per-block review, correction and verification are unchanged.
 - **Font family management in the editor.** A font picker on the toolbar and in
   Settings -> Editor lists installed Windows fonts and imported fonts, imports
   TTF/OTF/WOFF/WOFF2 (up to 20 MB), and removes imported faces. Imported fonts
@@ -25,14 +38,14 @@ supported 1.0 distribution.
 
 ### Changed
 
-- The ImportedFont table (migration 0004) and onts/ data directory store
+- The ImportedFont table (migration 0004) and fonts/ data directory store
   imported font faces; system fonts are still detected live.
-- onttools and rotli are now runtime dependencies for font parsing and
+- fonttools and brotli are now runtime dependencies for font parsing and
   WOFF/WOFF2 conversion.
 
 ### Verified
 
-- 431 backend tests and 312 web tests pass; typecheck, ESLint and the production
+- 437 backend tests and 356 web tests pass; typecheck, ESLint and the production
   build are clean.
 
 ## [1.0.2] - 2026-11-24

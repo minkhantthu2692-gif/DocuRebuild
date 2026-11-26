@@ -111,6 +111,7 @@ import { formulaInsertionContent } from "@/lib/formula-insertion";
 import { resolveLocale } from "@/lib/format";
 import { normalizeLinkUrl } from "@/lib/link";
 import { ocrInsertionContent } from "@/lib/ocr-insertion";
+import { ocrReconstructionContent } from "@/lib/ocr-reconstruction";
 import { tableInsertionContent } from "@/lib/table-insertion";
 import { countCharacters, countWords } from "@/lib/text";
 import { cn } from "@/lib/utils";
@@ -304,7 +305,9 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
     if (!editor || !initialized || !insertion) return;
     const content =
       insertion.type === "text"
-        ? ocrInsertionContent(insertion.text, insertion.note)
+        ? insertion.blocks && insertion.blocks.length > 0
+          ? ocrReconstructionContent(insertion.blocks, insertion.note)
+          : ocrInsertionContent(insertion.text, insertion.note)
         : insertion.type === "figure"
           ? figureInsertionContent(insertion)
           : insertion.type === "inlineImage"

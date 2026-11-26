@@ -21,6 +21,7 @@ function block(
     height: 10,
     line_count: 1,
     word_count: 1,
+    lines: [],
     verified: false,
     corrected: false,
     created_at: "2026-11-10T00:00:00Z",

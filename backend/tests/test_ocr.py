@@ -311,6 +311,110 @@ def test_parse_tsv_keeps_scaled_word_boxes_per_block() -> None:
     assert table["words"][1]["confidence"] == 90.0
 
 
+def test_parse_tsv_splits_side_by_side_prose_columns() -> None:
+    from app.services import ocr
+
+    header = (
+        "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\t"
+        "left\ttop\twidth\theight\tconf\ttext"
+    )
+
+    def word(line: int, number: int, left: int, text: str) -> str:
+        top = 100 + (line - 1) * 30
+        return (
+            f"5\t1\t1\t1\t{line}\t{number}\t{left}\t{top}\t40\t20\t90\t{text}"
+        )
+
+    rows = [header]
+    left_text = [["left", "one", "two", "three"], ["left", "four", "five", "six"], ["left", "seven", "eight", "nine"]]
+    right_text = [["right", "one", "two"], ["right", "three", "four"], ["right", "five", "six"]]
+    for line in range(1, 4):
+        for number, text in enumerate(left_text[line - 1], start=1):
+            rows.append(word(line, number, (number - 1) * 50, text))
+        for number, text in enumerate(right_text[line - 1], start=1):
+            rows.append(word(line, number, 300 + (number - 1) * 50, text))
+
+    _text, blocks, _confidence = ocr._parse_tsv("\n".join(rows), 1.0, (1000, 1000))
+
+    assert [block["text"] for block in blocks] == [
+        "left one two three\nleft four five six\nleft seven eight nine",
+        "right one two\nright three four\nright five six",
+    ]
+    # The left column comes first and the two columns keep their own boxes.
+    assert blocks[0]["x"] == 0
+    assert blocks[1]["x"] == 300
+
+
+def test_parse_tsv_keeps_a_real_table_in_one_block() -> None:
+    from app.services import ocr
+
+    header = (
+        "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\t"
+        "left\ttop\twidth\theight\tconf\ttext"
+    )
+
+    def word(line: int, number: int, left: int, text: str) -> str:
+        top = 100 + (line - 1) * 30
+        return (
+            f"5\t1\t1\t1\t{line}\t{number}\t{left}\t{top}\t40\t20\t90\t{text}"
+        )
+
+    tsv = "\n".join(
+        [
+            header,
+            word(1, 1, 0, "Name"),
+            word(1, 2, 300, "Value"),
+            word(2, 1, 0, "Mass"),
+            word(2, 2, 300, "2"),
+            word(3, 1, 0, "Cost"),
+            word(3, 2, 300, "5"),
+        ]
+    )
+    _text, blocks, _confidence = ocr._parse_tsv(tsv, 1.0, (1000, 1000))
+
+    assert len(blocks) == 1
+    assert blocks[0]["text"] == "Name Value\nMass 2\nCost 5"
+    assert blocks[0]["kind"] == "table"
+
+
+def test_block_lines_pairs_stored_text_with_word_geometry() -> None:
+    from app.services import ocr
+
+    block = {
+        "text": "First line\nSecond line",
+        "words": [
+            {"text": "First", "x": 10, "y": 20, "width": 30, "height": 12, "line": 0},
+            {"text": "line", "x": 50, "y": 20, "width": 20, "height": 12, "line": 0},
+            {"text": "Second", "x": 10, "y": 50, "width": 40, "height": 12, "line": 1},
+            {"text": "line", "x": 60, "y": 50, "width": 20, "height": 12, "line": 1},
+        ],
+    }
+
+    lines = ocr._block_lines(block)
+
+    assert lines == [
+        {"text": "First line", "x": 10, "y": 20, "width": 60, "height": 12},
+        {"text": "Second line", "x": 10, "y": 50, "width": 70, "height": 12},
+    ]
+    # Text is taken from the block, never rebuilt from word boxes.
+    assert lines[0]["text"] == "First line"
+
+
+def test_block_lines_returns_empty_when_geometry_does_not_match() -> None:
+    from app.services import ocr
+
+    block = {
+        "text": "One line only",
+        "words": [
+            {"text": "One", "x": 10, "y": 20, "width": 30, "height": 12, "line": 0},
+            {"text": "line", "x": 50, "y": 20, "width": 20, "height": 12, "line": 0},
+            {"text": "only", "x": 80, "y": 50, "width": 30, "height": 12, "line": 1},
+        ],
+    }
+
+    assert ocr._block_lines(block) == []
+
+
 def test_parse_version_accepts_common_tesseract_output() -> None:
     from app.services import ocr
 

@@ -4,20 +4,25 @@ This is the short, current roadmap for the 1.0 Windows desktop release.
 `docs/roadmap.md` keeps the detailed phase-by-phase implementation history;
 `PROJECT_MEMORY.md` records architecture and handover context.
 
-Last updated: 2026-11-25.
+Last updated: 2026-11-26.
 
 ## Release status
 
-**DocuRebuild 1.0.2 is the current release for the Windows x64 desktop scope
-(published 24 November 2026).** The installer, bundled OCR, local
+**DocuRebuild 1.1.0 is the current release for the Windows x64 desktop scope
+(published 26 November 2026).** The installer, bundled OCR, local
 database/storage, BYOK AI, backup/restore and export are implemented and
 verified. Everything below labelled *Complete* ships in
-`DocuRebuild-1.0.2-setup.exe`.
+`DocuRebuild-1.1.0-setup.exe`.
 
-**1.0.2** unifies checkboxes, switches and radios across the workspace and fixes
+**1.1.0** adds document typography controls (font family selection with custom
+font import, superscript/subscript and Justify) and layout-aware paragraph
+reconstruction: reviewed OCR blocks are inserted as flowing paragraphs, real
+lists and headings while side-by-side columns stay apart. It supersedes
+`DocuRebuild-1.0.2-setup.exe`; upgrading keeps existing projects.
+
+**1.0.2** unified checkboxes, switches and radios across the workspace and fixed
 the Edit Image dialog reloading, resetting its controls or flickering during
-adjustments. It supersedes `DocuRebuild-1.0.1-setup.exe`; upgrading keeps
-existing projects.
+adjustments.
 
 **1.0.1** fixed image/thumbnail/figure loading in the installed build and added
 the factory reset, dashboard multi-select bulk delete and a guard that refuses
@@ -31,7 +36,7 @@ to delete a project folder outside the data folder.
 | Projects and storage | Local app/project databases, project folders, manifest, create/open/rename/delete-to-trash, dashboard multi-select bulk delete, integrity checks |
 | Import | Images (JPG/PNG/WebP/BMP/TIFF) and PDFs, immutable originals, EXIF, checksums, 150 DPI PDF rendering, background jobs with progress and cancellation, PDF text-layer extraction |
 | Image processing | Non-destructive crop, perspective, deskew, grayscale, contrast, brightness, sharpness, denoise, threshold, shadow/background cleanup, before/after preview, reset |
-| OCR | Bundled Tesseract 5.4 `eng`/`mya`/`osd`, page segmentation choice, confidence, editable/verifiable blocks, stale detection, layout hints and overlay, local CER/WER benchmark |
+| OCR | Bundled Tesseract 5.4 `eng`/`mya`/`osd`, page segmentation choice, confidence, editable/verifiable blocks, stale detection, layout hints and overlay, layout-aware paragraph/list/heading reconstruction on insert, local CER/WER benchmark |
 | Tables | Editable tables, merge/split, word-box proposals, page-level row grouping, drawn-rule grids with merged cells, per-cell alignment and correction, local/AI reading of a saved crop |
 | Figures and equations | Manual crops, local text extraction, PDF/raster region proposals, inline images, captions, numbering, cross-references, LaTeX equations with KaTeX, Word OMML, optional vision transcription |
 | Editor and export | Tiptap editor with links, find/replace, tables, figures, equations, footnotes and headers/footers; typography and scientific formatting: font family selection with Windows font detection and custom font import, superscript/subscript, text justification; Markdown, TXT, DOCX and PDF export with configurable page/margin, embedded fonts |

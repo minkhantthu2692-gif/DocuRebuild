@@ -303,7 +303,19 @@ export function OcrDialog({
           status: allVerified ? t("ocr.verified") : t("ocr.unverified"),
         })
       : null;
-    insertText(combinedText, note);
+    insertText(
+      combinedText,
+      note,
+      selectedBlocks.map((block) => ({
+        kind: block.kind,
+        text: drafts[block.id] ?? block.text,
+        x: block.x,
+        y: block.y,
+        width: block.width,
+        height: block.height,
+        lines: block.lines,
+      })),
+    );
     toast.success(t("ocr.inserted"));
     onOpenChange(false);
     onInserted?.();

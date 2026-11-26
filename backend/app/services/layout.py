@@ -121,12 +121,6 @@ def classify_text_block(
     if _is_page_number(stripped) and position in {"top", "bottom"}:
         return "page_number"
 
-    if position and line_count == 1 and word_count <= 12:
-        if position == "top":
-            return "header"
-        if position == "bottom":
-            return "footer"
-
     if _is_caption(stripped, line_count, word_count):
         return "caption"
 
@@ -148,4 +142,14 @@ def classify_text_block(
         return "heading"
     if first_line and first_line.isupper() and len(first_line) <= 80 and word_count <= 12:
         return "heading"
+
+    # A running header or footer is only a fallback: a larger title at the top
+    # of a page is a heading, and a list or caption in the margin keeps its
+    # real role.
+    if position and line_count == 1 and word_count <= 12:
+        if position == "top":
+            return "header"
+        if position == "bottom":
+            return "footer"
+
     return "paragraph"

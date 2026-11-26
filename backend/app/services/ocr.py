@@ -613,6 +613,200 @@ def _classify_block(
     )
 
 
+def _word_center(word: dict[str, Any]) -> float:
+    return float(word["left"]) + float(word["width"]) / 2
+
+
+def _line_word_groups(block_words: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    lines: dict[int, list[dict[str, Any]]] = {}
+    for word in block_words:
+        lines.setdefault(word["line"], []).append(word)
+    for line_words in lines.values():
+        line_words.sort(key=lambda item: item["word"])
+    return [lines[key] for key in sorted(lines)]
+
+
+def _is_prose_columns(
+    lines: list[list[dict[str, Any]]], gutter: float
+) -> bool:
+    """Tell wrapped prose columns apart from short table cells.
+
+    A table and a two-column text block both show a repeated vertical gap. The
+    deciding signal is how many words sit on each side: prose columns contain
+    several words per line, while a table cell is usually a token or two.
+    """
+    both_sides = 0
+    segment_word_counts: list[int] = []
+    for line_words in lines:
+        left = [word for word in line_words if _word_center(word) < gutter]
+        right = [word for word in line_words if _word_center(word) >= gutter]
+        if left and right:
+            both_sides += 1
+        for segment in (left, right):
+            if segment:
+                segment_word_counts.append(len(segment))
+    if both_sides < 2 or not segment_word_counts:
+        return False
+    return sum(segment_word_counts) / len(segment_word_counts) >= 3.0
+
+
+def _find_prose_gutter(
+    lines: list[list[dict[str, Any]]], median_line_height: float
+) -> float | None:
+    gap_threshold = max(median_line_height * 1.2, 8.0)
+    tolerance = max(median_line_height * 0.75, 6.0)
+    entries: list[tuple[int, float]] = []
+    for index, line_words in enumerate(lines):
+        ordered = sorted(line_words, key=lambda item: item["left"])
+        for previous, following in zip(ordered, ordered[1:]):
+            gap = float(following["left"]) - float(
+                previous["left"] + previous["width"]
+            )
+            if gap >= gap_threshold:
+                entries.append(
+                    (
+                        index,
+                        (
+                            float(previous["left"] + previous["width"])
+                            + float(following["left"])
+                        )
+                        / 2,
+                    )
+                )
+    if not entries:
+        return None
+
+    entries.sort(key=lambda item: item[1])
+    clusters: list[list[tuple[int, float]]] = []
+    for entry in entries:
+        if clusters and entry[1] - clusters[-1][-1][1] <= tolerance:
+            clusters[-1].append(entry)
+        else:
+            clusters.append([entry])
+
+    def score(cluster: list[tuple[int, float]]) -> tuple[int, float]:
+        distinct_lines = len({index for index, _ in cluster})
+        spread = max(center for _, center in cluster) - min(
+            center for _, center in cluster
+        )
+        return distinct_lines, spread
+
+    cluster = max(clusters, key=score)
+    distinct_lines = len({index for index, _ in cluster})
+    if distinct_lines < max(2, (len(lines) + 1) // 2):
+        return None
+
+    gutter = sum(center for _, center in cluster) / len(cluster)
+    return gutter if _is_prose_columns(lines, gutter) else None
+
+
+def _split_prose_columns(
+    block_words: list[dict[str, Any]], median_line_height: float
+) -> list[list[dict[str, Any]]]:
+    """Split a block that Tesseract merged across side-by-side prose columns.
+
+    Tesseract's automatic layout analysis sometimes puts two newspaper-like
+    columns in one block and interleaves their lines. The original word boxes
+    still separate the columns, so this returns one word list per column in
+    left-to-right order. Real tables are left untouched.
+    """
+    lines = _line_word_groups(block_words)
+    if len(lines) < 2:
+        return [block_words]
+    gutter = _find_prose_gutter(lines, median_line_height)
+    if gutter is None:
+        return [block_words]
+
+    left: list[dict[str, Any]] = []
+    right: list[dict[str, Any]] = []
+    for word in block_words:
+        (left if _word_center(word) < gutter else right).append(word)
+    if not left or not right:
+        return [block_words]
+    return _split_prose_columns(left, median_line_height) + _split_prose_columns(
+        right, median_line_height
+    )
+
+
+def _prepare_block(
+    block_number: int,
+    paragraph_number: int,
+    block_words: list[dict[str, Any]],
+    scale: float,
+) -> dict[str, Any] | None:
+    """Build one stored block from a group of word boxes."""
+    block_words = sorted(block_words, key=lambda item: (item["line"], item["word"]))
+    lines: dict[int, list[dict[str, Any]]] = {}
+    for word in block_words:
+        lines.setdefault(word["line"], []).append(word)
+
+    line_texts: list[str] = []
+    line_heights_for_block: list[float] = []
+    line_spans: list[list[tuple[float, float]]] = []
+    left = top = None
+    right = bottom = None
+    for line_number in sorted(lines):
+        line_words = lines[line_number]
+        line_text = " ".join(word["text"] for word in line_words).strip()
+        if not line_text:
+            continue
+        line_texts.append(line_text)
+        line_spans.append(
+            sorted(
+                (float(word["left"]), float(word["left"] + word["width"]))
+                for word in line_words
+            )
+        )
+        line_left = min(word["left"] for word in line_words)
+        line_top = min(word["top"] for word in line_words)
+        line_right = max(word["left"] + word["width"] for word in line_words)
+        line_bottom = max(word["top"] + word["height"] for word in line_words)
+        line_heights_for_block.append(float(line_bottom - line_top))
+        left = line_left if left is None else min(left, line_left)
+        top = line_top if top is None else min(top, line_top)
+        right = line_right if right is None else max(right, line_right)
+        bottom = line_bottom if bottom is None else max(bottom, line_bottom)
+
+    if not line_texts or left is None or top is None or right is None or bottom is None:
+        return None
+
+    confidences = [
+        word["confidence"] for word in block_words if word["confidence"] is not None
+    ]
+    confidence = round(sum(confidences) / len(confidences), 1) if confidences else None
+    # Keep the engine's word boxes so a table proposal can be built later
+    # without running OCR again. Line numbers are normalised to the block so
+    # a consumer never has to know Tesseract's page-level numbering.
+    line_order = {line: index for index, line in enumerate(sorted(lines))}
+    block_words.sort(key=lambda item: (line_order[item["line"]], item["word"]))
+    return {
+        "block_number": block_number,
+        "paragraph_number": paragraph_number,
+        "text": "\n".join(line_texts),
+        "confidence": confidence,
+        "x": _scale(left, scale),
+        "y": _scale(top, scale),
+        "width": _scale(right - left, scale),
+        "height": _scale(bottom - top, scale),
+        "line_count": len(line_texts),
+        "word_count": sum(len(line.split()) for line in line_texts),
+        "max_line_height": max(line_heights_for_block),
+        "line_spans": line_spans,
+        "words": [
+            {
+                "text": word["text"],
+                "confidence": word["confidence"],
+                "x": _scale(word["left"], scale),
+                "y": _scale(word["top"], scale),
+                "width": _scale(word["width"], scale),
+                "height": _scale(word["height"], scale),
+                "line": line_order[word["line"]],
+            }
+            for word in block_words
+        ],
+    }
+
+
 def _parse_tsv(
     tsv: str, scale: float, page_size: tuple[int, int] | None = None
 ) -> tuple[str, list[dict[str, Any]], float | None]:
@@ -660,94 +854,42 @@ def _parse_tsv(
     if not words:
         return "", [], None
 
+    # The median line height describes the body text and is used by both the
+    # layout classifier and the column splitter.
+    line_boxes: dict[tuple[int, int, int], tuple[int, int]] = {}
+    for word in words:
+        key = (word["block"], word["paragraph"], word["line"])
+        top = word["top"]
+        bottom = word["top"] + word["height"]
+        current = line_boxes.get(key)
+        line_boxes[key] = (
+            (top, bottom) if current is None else (min(current[0], top), max(current[1], bottom))
+        )
+    line_heights = [float(bottom - top) for top, bottom in line_boxes.values()]
+    median_height = median(line_heights) if line_heights else 1.0
+
     grouped: dict[tuple[int, int], list[dict[str, Any]]] = {}
     for word in words:
         grouped.setdefault((word["block"], word["paragraph"]), []).append(word)
 
-    line_heights: list[float] = []
     prepared: list[dict[str, Any]] = []
     for (block_number, paragraph_number), block_words in grouped.items():
-        block_words.sort(key=lambda item: (item["line"], item["word"]))
-        lines: dict[int, list[dict[str, Any]]] = {}
-        for word in block_words:
-            lines.setdefault(word["line"], []).append(word)
-
-        line_texts: list[str] = []
-        line_heights_for_block: list[float] = []
-        line_spans: list[list[tuple[float, float]]] = []
-        left = top = None
-        right = bottom = None
-        for line_number in sorted(lines):
-            line_words = lines[line_number]
-            line_text = " ".join(word["text"] for word in line_words).strip()
-            if not line_text:
-                continue
-            line_texts.append(line_text)
-            line_spans.append(
-                sorted(
-                    (float(word["left"]), float(word["left"] + word["width"]))
-                    for word in line_words
-                )
-            )
-            line_left = min(word["left"] for word in line_words)
-            line_top = min(word["top"] for word in line_words)
-            line_right = max(word["left"] + word["width"] for word in line_words)
-            line_bottom = max(word["top"] + word["height"] for word in line_words)
-            line_heights_for_block.append(float(line_bottom - line_top))
-            line_heights.append(float(line_bottom - line_top))
-            left = line_left if left is None else min(left, line_left)
-            top = line_top if top is None else min(top, line_top)
-            right = line_right if right is None else max(right, line_right)
-            bottom = line_bottom if bottom is None else max(bottom, line_bottom)
-
-        if not line_texts or left is None or top is None or right is None or bottom is None:
-            continue
-
-        confidences = [
-            word["confidence"] for word in block_words if word["confidence"] is not None
-        ]
-        confidence = (
-            round(sum(confidences) / len(confidences), 1) if confidences else None
-        )
-        # Keep the engine's word boxes so a table proposal can be built later
-        # without running OCR again. Line numbers are normalised to the block so
-        # a consumer never has to know Tesseract's page-level numbering.
-        line_order = {line: index for index, line in enumerate(sorted(lines))}
-        block_words.sort(key=lambda item: (line_order[item["line"]], item["word"]))
-        prepared.append(
-            {
-                "block_number": block_number,
-                "paragraph_number": paragraph_number,
-                "text": "\n".join(line_texts),
-                "confidence": confidence,
-                "x": _scale(left, scale),
-                "y": _scale(top, scale),
-                "width": _scale(right - left, scale),
-                "height": _scale(bottom - top, scale),
-                "line_count": len(line_texts),
-                "word_count": sum(len(line.split()) for line in line_texts),
-                "max_line_height": max(line_heights_for_block),
-                "line_spans": line_spans,
-                "words": [
-                    {
-                        "text": word["text"],
-                        "confidence": word["confidence"],
-                        "x": _scale(word["left"], scale),
-                        "y": _scale(word["top"], scale),
-                        "width": _scale(word["width"], scale),
-                        "height": _scale(word["height"], scale),
-                        "line": line_order[word["line"]],
-                    }
-                    for word in block_words
-                ],
-            }
-        )
+        for column_words in _split_prose_columns(block_words, median_height):
+            item = _prepare_block(block_number, paragraph_number, column_words, scale)
+            if item is not None:
+                prepared.append(item)
 
     if not prepared:
         return "", [], None
 
-    median_height = median(line_heights) if line_heights else 1.0
-    prepared.sort(key=lambda item: (item["block_number"], item["paragraph_number"]))
+    prepared.sort(
+        key=lambda item: (
+            item["block_number"],
+            item["paragraph_number"],
+            item["x"],
+            item["y"],
+        )
+    )
     blocks: list[dict[str, Any]] = []
     for index, item in enumerate(prepared, start=1):
         blocks.append(
@@ -945,6 +1087,86 @@ def extract_image_text(
     }
 
 
+def _block_lines(block) -> list[dict[str, Any]]:
+    """Return one geometry record per stored text line.
+
+    The text is taken from the block's own text so recognition output is never
+    rewritten. Word boxes only supply the line rectangle. When the stored word
+    geometry cannot be matched to the text lines the list stays empty and the
+    client falls back to the block box.
+    """
+    raw_text = (block["text"] or "").replace("\r\n", "\n").replace("\r", "\n")
+    text_lines = raw_text.split("\n") if raw_text else []
+    if not text_lines:
+        return []
+
+    raw_words = block["words"] if "words" in block.keys() else None
+    if not raw_words:
+        return []
+    if isinstance(raw_words, str):
+        try:
+            words = json.loads(raw_words)
+        except (TypeError, ValueError):
+            return []
+    else:
+        words = raw_words
+    if not isinstance(words, list) or not words:
+        return []
+
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    for word in words:
+        if not isinstance(word, dict):
+            continue
+        try:
+            line_index = int(word.get("line", 0))
+        except (TypeError, ValueError):
+            continue
+        grouped.setdefault(line_index, []).append(word)
+    ordered = [grouped[key] for key in sorted(grouped)]
+
+    pairs: list[tuple[str, list[dict[str, Any]]]]
+    if len(ordered) == len(text_lines):
+        pairs = list(zip(text_lines, ordered))
+    else:
+        # PDF text can contain blank lines that carry no word boxes. Pair the
+        # non-empty lines by order and drop the blanks from the geometry list.
+        non_empty = [line for line in text_lines if line.strip()]
+        if len(ordered) != len(non_empty):
+            return []
+        pairs = list(zip(non_empty, ordered))
+
+    lines: list[dict[str, Any]] = []
+    for line_text, line_words in pairs:
+        lefts: list[float] = []
+        tops: list[float] = []
+        rights: list[float] = []
+        bottoms: list[float] = []
+        for word in line_words:
+            try:
+                x = float(word.get("x", 0))
+                y = float(word.get("y", 0))
+                width = float(word.get("width", 0))
+                height = float(word.get("height", 0))
+            except (TypeError, ValueError):
+                continue
+            lefts.append(x)
+            tops.append(y)
+            rights.append(x + width)
+            bottoms.append(y + height)
+        if not lefts:
+            return []
+        lines.append(
+            {
+                "text": line_text,
+                "x": int(round(min(lefts))),
+                "y": int(round(min(tops))),
+                "width": max(1, int(round(max(rights) - min(lefts)))),
+                "height": max(1, int(round(max(bottoms) - min(tops)))),
+            }
+        )
+    return lines
+
+
 def _run_payload(conn, run) -> dict[str, Any]:
     blocks = conn.execute(
         "SELECT * FROM ocr_blocks WHERE run_id = ? ORDER BY block_index ASC",
@@ -982,6 +1204,7 @@ def _run_payload(conn, run) -> dict[str, Any]:
                 **dict(block),
                 "verified": bool(block["verified"]),
                 "corrected": bool(block["corrected"]),
+                "lines": _block_lines(block),
             }
             for block in blocks
         ],

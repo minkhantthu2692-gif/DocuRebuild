@@ -187,6 +187,15 @@ automation, and account-level AI billing verification.
   with `ocr_invalid_segmentation_mode`; they are never silently replaced.
 - Burmese default: a language set containing `mya` preselects sparse text (11),
   because automatic layout merges Burmese rows.
+- Paragraph reconstruction: stored blocks keep word boxes and one normalised
+  line rectangle per text line. `_parse_tsv` splits a block that Tesseract
+  merged across two prose columns only when both sides are prose-like; real
+  table grids stay whole. At insertion, `apps/web/src/lib/ocr-reconstruction.ts`
+  joins wrapped lines and continuation blocks by column, spacing, indentation
+  and sentence continuation, keeps columns separate, and emits heading, list,
+  paragraph and verbatim table/equation nodes. It never rewrites characters.
+  `apps/web/src/test/ocr-reconstruction-fixtures.test.ts` locks the same
+  document for real PSM 3 and PSM 11 output.
 - Benchmark: `backend/app/ocr_benchmark.py` plus committed synthetic fixtures
   under `backend/tests/fixtures/ocr-synthetic/`. Run with
   `python -m app.ocr_benchmark --help`. Results and caveats are in
@@ -320,7 +329,7 @@ secret scan.
 
 ## 13. Release state
 
-- Version 1.0.2 everywhere. License AGPL-3.0-or-later.
+- Version 1.1.0 everywhere. License AGPL-3.0-or-later.
 - Repository: <https://github.com/minkhantthu2692-gif/DocuRebuild>
 - Current release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.0.2>,
   published 24 November 2026 from tag `v1.0.2` at commit `dae6ffd`, and marked

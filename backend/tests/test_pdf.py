@@ -148,6 +148,28 @@ def test_extract_text_attaches_real_word_boxes_to_blocks() -> None:
     ]
 
 
+def test_extract_text_uses_line_height_not_block_height_for_headings() -> None:
+    from app.services import pdf
+
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=595, height=842)
+        page.insert_text((72, 72), "Chapter Title", fontsize=24)
+        body = (
+            "This body paragraph is long enough to wrap across several visual lines "
+            "inside one text box. Its block height is much larger than a single line, "
+            "so a heading check that used the block height would miss the title above."
+        )
+        page.insert_textbox(pymupdf.Rect(72, 100, 523, 240), body, fontsize=11)
+        _text, blocks = pdf.extract_text(document, 0, 1.0)
+    finally:
+        document.close()
+
+    assert [block["kind"] for block in blocks] == ["heading", "paragraph"]
+    # The title is measured from its own line, not from the taller body block.
+    assert blocks[0]["height"] < blocks[1]["height"]
+
+
 def test_image_regions_convert_pdf_boxes_to_rendered_pixels() -> None:
     from app.services import pdf
 

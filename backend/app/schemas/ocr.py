@@ -28,6 +28,21 @@ class OcrBlockUpdate(BaseModel):
     verified: bool | None = None
 
 
+class OcrLineOut(BaseModel):
+    """One visual text line inside a reviewable block.
+
+    Text is always the line text the engine produced; only the geometry comes
+    from the stored word boxes. A consumer can therefore reconstruct paragraphs
+    without altering the recognised characters.
+    """
+
+    text: str
+    x: int
+    y: int
+    width: int
+    height: int
+
+
 class OcrBlockOut(BaseModel):
     id: str
     run_id: str
@@ -44,6 +59,9 @@ class OcrBlockOut(BaseModel):
     word_count: int
     verified: bool
     corrected: bool
+    # Empty when word geometry is unavailable or does not line up with the
+    # stored text; consumers then fall back to the block box.
+    lines: list[OcrLineOut] = Field(default_factory=list)
     created_at: str
     updated_at: str
 

@@ -366,6 +366,7 @@ def extract_text(
             continue
         lines: list[str] = []
         line_spans: list[list[tuple[float, float]]] = []
+        block_line_heights: list[float] = []
         max_height = 0.0
         for line in block.get("lines", []):
             spans = [span for span in line.get("spans", []) if span.get("text")]
@@ -382,13 +383,26 @@ def extract_text(
             )
             size = max((float(span.get("size", 0) or 0) for span in spans), default=0.0)
             max_height = max(max_height, size)
+            # Measure the line itself, not the whole block. A multi-line body
+            # block would otherwise inflate the page median and hide a real
+            # heading above it.
+            span_boxes = [
+                tuple(float(value) for value in span["bbox"])
+                for span in spans
+                if len(span.get("bbox", ())) >= 4
+            ]
+            line_height = max(
+                (box[3] - box[1] for box in span_boxes), default=0.0
+            )
+            line_height = max(line_height, size * 1.2, 1.0)
+            block_line_heights.append(line_height)
+            line_heights.append(line_height)
         text = "\n".join(lines).strip()
         if not text:
             continue
         x0, y0, x1, y1 = (float(value) for value in block.get("bbox", (0, 0, 0, 0)))
-        height = max(y1 - y0, max_height * 1.2, 1.0)
+        height = max(y1 - y0, max(block_line_heights, default=0.0), 1.0)
         width = max(x1 - x0, 1.0)
-        line_heights.append(height)
         prepared.append(
             {
                 "text": text,
@@ -398,7 +412,9 @@ def extract_text(
                 "height": round(height * scale),
                 "line_count": len(lines),
                 "word_count": sum(len(line.split()) for line in lines),
-                "max_line_height": height,
+                "max_line_height": max(
+                    block_line_heights, default=max(max_height * 1.2, 1.0)
+                ),
                 "bbox": (x0, y0, x1, y1),
                 "line_spans": line_spans,
                 "words": [],

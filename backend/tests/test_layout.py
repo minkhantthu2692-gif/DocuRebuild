@@ -52,6 +52,21 @@ def test_header_and_footer_need_page_margins() -> None:
     )
 
 
+def test_large_title_in_top_margin_stays_a_heading() -> None:
+    assert (
+        classify_text_block(
+            "Chapter One: Reconstruction",
+            30.0,
+            10.0,
+            3,
+            y=20.0,
+            height=40.0,
+            page_height=1000.0,
+        )
+        == "heading"
+    )
+
+
 def test_caption_candidates_require_a_label_and_boundary() -> None:
     assert (
         classify_text_block(

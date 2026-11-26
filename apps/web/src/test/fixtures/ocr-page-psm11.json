@@ -1,0 +1,325 @@
+[
+  {
+    "kind": "heading",
+    "text": "Chapter One: Reconstruction",
+    "x": 122,
+    "y": 138,
+    "width": 607,
+    "height": 41,
+    "lines": [
+      {
+        "text": "Chapter One: Reconstruction",
+        "x": 122,
+        "y": 138,
+        "width": 607,
+        "height": 41
+      }
+    ]
+  },
+  {
+    "kind": "paragraph",
+    "text": "This is the first paragraph of the document. It contains several sentences",
+    "x": 121,
+    "y": 206,
+    "width": 967,
+    "height": 28,
+    "lines": [
+      {
+        "text": "This is the first paragraph of the document. It contains several sentences",
+        "x": 121,
+        "y": 206,
+        "width": 967,
+        "height": 28
+      }
+    ]
+  },
+  {
+    "kind": "paragraph",
+    "text": "that should flow together as one continuous block of text when the page is",
+    "x": 120,
+    "y": 248,
+    "width": 987,
+    "height": 28,
+    "lines": [
+      {
+        "text": "that should flow together as one continuous block of text when the page is",
+        "x": 120,
+        "y": 248,
+        "width": 987,
+        "height": 28
+      }
+    ]
+  },
+  {
+    "kind": "paragraph",
+    "text": "reconstructed in the editor, rather than becoming one paragraph per line.",
+    "x": 122,
+    "y": 290,
+    "width": 969,
+    "height": 28,
+    "lines": [
+      {
+        "text": "reconstructed in the editor, rather than becoming one paragraph per line.",
+        "x": 122,
+        "y": 290,
+        "width": 969,
+        "height": 28
+      }
+    ]
+  },
+  {
+    "kind": "paragraph",
+    "text": "This is the second paragraph. It starts after a clear vertical gap and has its",
+    "x": 121,
+    "y": 368,
+    "width": 985,
+    "height": 28,
+    "lines": [
+      {
+        "text": "This is the second paragraph. It starts after a clear vertical gap and has its",
+        "x": 121,
+        "y": 368,
+        "width": 985,
+        "height": 28
+      }
+    ]
+  },
+  {
+    "kind": "paragraph",
+    "text": "own first line. It should remain separate from the paragraph above even",
+    "x": 121,
+    "y": 410,
+    "width": 952,
+    "height": 28,
+    "lines": [
+      {
+        "text": "own first line. It should remain separate from the paragraph above even",
+        "x": 121,
+        "y": 410,
+        "width": 952,
+        "height": 28
+      }
+    ]
+  },
+  {
+    "kind": "paragraph",
+    "text": "though both paragraphs share the same left and right margins.",
+    "x": 120,
+    "y": 452,
+    "width": 834,
+    "height": 28,
+    "lines": [
+      {
+        "text": "though both paragraphs share the same left and right margins.",
+        "x": 120,
+        "y": 452,
+        "width": 834,
+        "height": 28
+      }
+    ]
+  },
+  {
+    "kind": "list_item",
+    "text": "1. First numbered item",
+    "x": 123,
+    "y": 530,
+    "width": 296,
+    "height": 22,
+    "lines": [
+      {
+        "text": "1. First numbered item",
+        "x": 123,
+        "y": 530,
+        "width": 296,
+        "height": 22
+      }
+    ]
+  },
+  {
+    "kind": "list_item",
+    "text": "2. Second numbered item",
+    "x": 121,
+    "y": 574,
+    "width": 343,
+    "height": 22,
+    "lines": [
+      {
+        "text": "2. Second numbered item",
+        "x": 121,
+        "y": 574,
+        "width": 343,
+        "height": 22
+      }
+    ]
+  },
+  {
+    "kind": "list_item",
+    "text": "3. Third numbered item",
+    "x": 121,
+    "y": 618,
+    "width": 309,
+    "height": 22,
+    "lines": [
+      {
+        "text": "3. Third numbered item",
+        "x": 121,
+        "y": 618,
+        "width": 309,
+        "height": 22
+      }
+    ]
+  },
+  {
+    "kind": "paragraph",
+    "text": "The left column contains a short",
+    "x": 121,
+    "y": 677,
+    "width": 361,
+    "height": 19,
+    "lines": [
+      {
+        "text": "The left column contains a short",
+        "x": 121,
+        "y": 677,
+        "width": 361,
+        "height": 19
+      }
+    ]
+  },
+  {
+    "kind": "paragraph",
+    "text": "The right column is a separate reading",
+    "x": 651,
+    "y": 677,
+    "width": 434,
+    "height": 24,
+    "lines": [
+      {
+        "text": "The right column is a separate reading",
+        "x": 651,
+        "y": 677,
+        "width": 434,
+        "height": 24
+      }
+    ]
+  },
+  {
+    "kind": "paragraph",
+    "text": "paragraph that must not be merged with",
+    "x": 122,
+    "y": 713,
+    "width": 449,
+    "height": 24,
+    "lines": [
+      {
+        "text": "paragraph that must not be merged with",
+        "x": 122,
+        "y": 713,
+        "width": 449,
+        "height": 24
+      }
+    ]
+  },
+  {
+    "kind": "paragraph",
+    "text": "stream. Column-aware reconstruction",
+    "x": 651,
+    "y": 713,
+    "width": 427,
+    "height": 19,
+    "lines": [
+      {
+        "text": "stream. Column-aware reconstruction",
+        "x": 651,
+        "y": 713,
+        "width": 427,
+        "height": 19
+      }
+    ]
+  },
+  {
+    "kind": "paragraph",
+    "text": "the right column even though the lines",
+    "x": 120,
+    "y": 749,
+    "width": 429,
+    "height": 24,
+    "lines": [
+      {
+        "text": "the right column even though the lines",
+        "x": 120,
+        "y": 749,
+        "width": 429,
+        "height": 24
+      }
+    ]
+  },
+  {
+    "kind": "paragraph",
+    "text": "keeps its lines together and in order.",
+    "x": 652,
+    "y": 749,
+    "width": 407,
+    "height": 24,
+    "lines": [
+      {
+        "text": "keeps its lines together and in order.",
+        "x": 652,
+        "y": 749,
+        "width": 407,
+        "height": 24
+      }
+    ]
+  },
+  {
+    "kind": "paragraph",
+    "text": "are close together vertically.",
+    "x": 121,
+    "y": 785,
+    "width": 316,
+    "height": 24,
+    "lines": [
+      {
+        "text": "are close together vertically.",
+        "x": 121,
+        "y": 785,
+        "width": 316,
+        "height": 24
+      }
+    ]
+  },
+  {
+    "kind": "heading",
+    "text": "A final full-width paragraph closes the page. It should join the lines above",
+    "x": 116,
+    "y": 868,
+    "width": 979,
+    "height": 36,
+    "lines": [
+      {
+        "text": "A final full-width paragraph closes the page. It should join the lines above",
+        "x": 116,
+        "y": 868,
+        "width": 979,
+        "height": 36
+      }
+    ]
+  },
+  {
+    "kind": "paragraph",
+    "text": "into a single editable paragraph with normal wrapping.",
+    "x": 122,
+    "y": 914,
+    "width": 723,
+    "height": 28,
+    "lines": [
+      {
+        "text": "into a single editable paragraph with normal wrapping.",
+        "x": 122,
+        "y": 914,
+        "width": 723,
+        "height": 28
+      }
+    ]
+  }
+]

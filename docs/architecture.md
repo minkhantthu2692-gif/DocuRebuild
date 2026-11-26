@@ -100,7 +100,7 @@ DocuRebuild.exe (Electron)
 | `services.elements` | Manual region extraction: source-pixel validation, immutable crops, element verification, staleness and trash-safe deletion |
 | `services.regions` | Deterministic, read-only region suggestions from the latest OCR layout, raster-page ink, and embedded PDF raster-image placement and vector-drawing geometry |
 | `services.settings` | Persisted appearance, language, editor, export and backup settings, plus global AI limits (`ai_preferences`) |
-| `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes, corrections, staleness, and word-box extraction from a standalone crop |
+| `services.ocr` | Tesseract detection, language packs, bounded OCR jobs, block persistence with per-word boxes and normalised line geometry, prose-column splitting, corrections, staleness, and word-box extraction from a standalone crop |
 | `services.table_rules` | Bounded detection of long, straight horizontal and vertical strokes in a raster image: one decoded grayscale scan reused across regions, per-region dark/light thresholding, gap bridging, thick-stroke merging and original-pixel coordinates for the table builder |
 | `services.table_structure` | Reviewable table proposals: word-box row clustering and whitespace column bands, plus exact merged-cell grids from a PDF's drawn rules or a raster page's or crop's visible borders; cell text/confidence/flags/alignment, page-level grouping of vertically contiguous row blocks, local reading of one saved crop, vector/OCR de-duplication, source pixel box, size caps and typed refusal errors |
 | `app.ocr_benchmark` | Local CER/WER measurement against checked reference transcripts, by running the OCR adapter or scoring a stored transcript; validates fixtures and never uploads |
@@ -559,6 +559,23 @@ src/
 - Selected blocks are appended to the Tiptap document through the workspace
   actions context. The insertion is a normal document edit and is autosaved; an
   optional localized source note records the page and verification status.
+- Paragraph reconstruction happens at insertion, not in storage:
+  `apps/web/src/lib/ocr-reconstruction.ts` receives the reviewed block text with
+  its source geometry and emits ordinary Tiptap nodes. Wrapped lines become one
+  flowing paragraph (no hard breaks), so Justify and reflow work; continuation
+  blocks in the same column are joined using vertical spacing, indentation and
+  sentence continuation; side-by-side columns stay separate and read left to
+  right; headings keep a heading node; numbered and bulleted markers become real
+  list nodes; table and equation blocks keep their internal line layout. Only
+  line breaks are resolved - characters are never rewritten, and Myanmar/CJK
+  line breaks join without an inserted space. The review dialog still edits one
+  stored block at a time, so per-block correction and verification are unchanged.
+- `services.ocr._parse_tsv` stores word boxes with block-normalised line indices
+  and exposes one `lines` rectangle per stored text line through the OCR API.
+  When automatic layout merges two prose columns into one block, the parser
+  splits them at the repeated word gap only if both sides contain prose-like
+  word counts; a real table grid stays in one block. Blocks with no matching
+  word geometry simply omit `lines`, and the client falls back to the block box.
 - OCR settings are environment-driven: `DOCUREBUILD_TESSERACT_CMD`,
   `DOCUREBUILD_TESSDATA_DIR`, timeout, maximum edge and worker limits. PDF
   rendering uses `DOCUREBUILD_PDF_RENDER_DPI` and `DOCUREBUILD_PDF_MAX_PAGES`.
