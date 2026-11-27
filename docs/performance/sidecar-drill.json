@@ -1,0 +1,429 @@
+{
+  "machine": {
+    "os": "Windows 11 (10.0.26300)",
+    "cpu": "Intel(R) N100",
+    "logical_cores": 4,
+    "ram_gb": 15.7,
+    "python": "3.12.10",
+    "recorded_at": "2026-11-27T13:34:01+00:00"
+  },
+  "sidecar": "dist/desktop/backend/docurebuild-backend.exe",
+  "sidecar_version": "1.1.0",
+  "startup_seconds": 3.43,
+  "idle_working_set_mb": 149.8,
+  "imports": [
+    {
+      "pages_requested": 1,
+      "status": "succeeded",
+      "duration_seconds": 0.49,
+      "seconds_per_page": 0.494,
+      "imported_pages": 1,
+      "page_rows": 1,
+      "progress_samples": 3,
+      "working_set_start_mb": 149.9,
+      "working_set_peak_mb": 163.2,
+      "working_set_end_mb": 156.0,
+      "project_storage_mb": 1.3,
+      "tmp_files_before": 0,
+      "tmp_files_after": 0
+    },
+    {
+      "pages_requested": 10,
+      "status": "succeeded",
+      "duration_seconds": 2.82,
+      "seconds_per_page": 0.282,
+      "imported_pages": 10,
+      "page_rows": 10,
+      "progress_samples": 21,
+      "working_set_start_mb": 156.1,
+      "working_set_peak_mb": 192.1,
+      "working_set_end_mb": 154.5,
+      "project_storage_mb": 11.1,
+      "tmp_files_before": 0,
+      "tmp_files_after": 0
+    },
+    {
+      "pages_requested": 50,
+      "status": "succeeded",
+      "duration_seconds": 12.95,
+      "seconds_per_page": 0.259,
+      "imported_pages": 50,
+      "page_rows": 50,
+      "progress_samples": 102,
+      "working_set_start_mb": 154.6,
+      "working_set_peak_mb": 193.7,
+      "working_set_end_mb": 154.7,
+      "project_storage_mb": 46.4,
+      "tmp_files_before": 0,
+      "tmp_files_after": 0
+    },
+    {
+      "pages_requested": 200,
+      "status": "succeeded",
+      "duration_seconds": 52.38,
+      "seconds_per_page": 0.262,
+      "imported_pages": 200,
+      "page_rows": 200,
+      "progress_samples": 410,
+      "working_set_start_mb": 154.8,
+      "working_set_peak_mb": 196.1,
+      "working_set_end_mb": 156.4,
+      "project_storage_mb": 178.8,
+      "tmp_files_before": 0,
+      "tmp_files_after": 0
+    },
+    {
+      "pages_requested": 400,
+      "status": "succeeded",
+      "duration_seconds": 106.68,
+      "seconds_per_page": 0.267,
+      "imported_pages": 400,
+      "page_rows": 400,
+      "progress_samples": 811,
+      "working_set_start_mb": 156.5,
+      "working_set_peak_mb": 197.3,
+      "working_set_end_mb": 157.2,
+      "project_storage_mb": 355.3,
+      "tmp_files_before": 0,
+      "tmp_files_after": 0
+    }
+  ],
+  "render": [
+    {
+      "pages": 1,
+      "samples": [
+        {
+          "page_index": 0,
+          "bytes": 897292,
+          "seconds": 0.014
+        }
+      ]
+    },
+    {
+      "pages": 10,
+      "samples": [
+        {
+          "page_index": 0,
+          "bytes": 897292,
+          "seconds": 0.015
+        },
+        {
+          "page_index": 5,
+          "bytes": 885152,
+          "seconds": 0.017
+        },
+        {
+          "page_index": 9,
+          "bytes": 884934,
+          "seconds": 0.013
+        }
+      ]
+    },
+    {
+      "pages": 50,
+      "samples": [
+        {
+          "page_index": 0,
+          "bytes": 897292,
+          "seconds": 0.013
+        },
+        {
+          "page_index": 25,
+          "bytes": 884934,
+          "seconds": 0.014
+        },
+        {
+          "page_index": 49,
+          "bytes": 884934,
+          "seconds": 0.019
+        }
+      ]
+    },
+    {
+      "pages": 200,
+      "samples": [
+        {
+          "page_index": 0,
+          "bytes": 897292,
+          "seconds": 0.012
+        },
+        {
+          "page_index": 100,
+          "bytes": 898325,
+          "seconds": 0.012
+        },
+        {
+          "page_index": 199,
+          "bytes": 889996,
+          "seconds": 0.012
+        }
+      ]
+    },
+    {
+      "pages": 400,
+      "samples": [
+        {
+          "page_index": 0,
+          "bytes": 897292,
+          "seconds": 0.012
+        },
+        {
+          "page_index": 200,
+          "bytes": 897292,
+          "seconds": 0.012
+        },
+        {
+          "page_index": 399,
+          "bytes": 889996,
+          "seconds": 0.012
+        }
+      ]
+    }
+  ],
+  "ocr": [
+    {
+      "page_index": 0,
+      "status": "succeeded",
+      "seconds": 2.38,
+      "mean_confidence": 96.2,
+      "blocks": 16,
+      "working_set_peak_mb": 174.0
+    },
+    {
+      "page_index": 200,
+      "status": "succeeded",
+      "seconds": 2.26,
+      "mean_confidence": 96.2,
+      "blocks": 16,
+      "working_set_peak_mb": 174.1
+    },
+    {
+      "page_index": 399,
+      "status": "succeeded",
+      "seconds": 2.48,
+      "mean_confidence": 96.1,
+      "blocks": 16,
+      "working_set_peak_mb": 174.2
+    }
+  ],
+  "document": [
+    {
+      "paragraphs": 300,
+      "characters": 253744,
+      "write_seconds": 0.05,
+      "read_seconds": 0.02,
+      "read_peak_working_set_mb": 160.1,
+      "stored_characters": 253744,
+      "exports": {
+        "markdown": {
+          "bytes": 253745,
+          "seconds": 0.07
+        },
+        "txt": {
+          "bytes": 253745,
+          "seconds": 0.02
+        },
+        "docx": {
+          "bytes": 40445,
+          "seconds": 0.1
+        },
+        "pdf": {
+          "bytes": 106694,
+          "seconds": 0.24
+        }
+      }
+    },
+    {
+      "paragraphs": 1200,
+      "characters": 1015143,
+      "write_seconds": 0.17,
+      "read_seconds": 0.04,
+      "read_peak_working_set_mb": 159.9,
+      "stored_characters": 1015143,
+      "exports": {
+        "markdown": {
+          "bytes": 1015144,
+          "seconds": 0.12
+        },
+        "txt": {
+          "bytes": 1015144,
+          "seconds": 0.03
+        },
+        "docx": {
+          "bytes": 49040,
+          "seconds": 0.37
+        },
+        "pdf": {
+          "bytes": 324924,
+          "seconds": 0.95
+        }
+      }
+    }
+  ],
+  "cancellation": [
+    {
+      "repeat": 1,
+      "status_at_cancel": "running",
+      "imported_at_cancel": 7,
+      "final_status": "cancelled",
+      "final_imported_pages": 0,
+      "cancel_to_terminal_seconds": 0.21,
+      "page_rows": 0,
+      "pages_match_imported": true,
+      "processed_files": 0,
+      "thumbnail_files": 0,
+      "source_pdfs": 0,
+      "files_match_pages": true,
+      "tmp_files_after": 0,
+      "tesseract_processes": 0
+    },
+    {
+      "repeat": 2,
+      "status_at_cancel": "running",
+      "imported_at_cancel": 7,
+      "final_status": "cancelled",
+      "final_imported_pages": 0,
+      "cancel_to_terminal_seconds": 0.14,
+      "page_rows": 0,
+      "pages_match_imported": true,
+      "processed_files": 0,
+      "thumbnail_files": 0,
+      "source_pdfs": 0,
+      "files_match_pages": true,
+      "tmp_files_after": 0,
+      "tesseract_processes": 0
+    },
+    {
+      "repeat": 3,
+      "status_at_cancel": "running",
+      "imported_at_cancel": 8,
+      "final_status": "cancelled",
+      "final_imported_pages": 0,
+      "cancel_to_terminal_seconds": 0.27,
+      "page_rows": 0,
+      "pages_match_imported": true,
+      "processed_files": 0,
+      "thumbnail_files": 0,
+      "source_pdfs": 0,
+      "files_match_pages": true,
+      "tmp_files_after": 0,
+      "tesseract_processes": 0
+    }
+  ],
+  "queue": {
+    "cancelled_job": "cancelled",
+    "cancelled_job_error": null,
+    "completed_job": "succeeded",
+    "completed_job_error": null,
+    "completed_pages": 50,
+    "page_rows": 50
+  },
+  "restart_recovery": {
+    "crash_after_imported_pages": 3,
+    "job_status_after_restart": "failed",
+    "error_code": "import_interrupted",
+    "imported_pages_kept": 3,
+    "page_rows_kept": 3,
+    "post_restart_import_status": "succeeded",
+    "post_restart_total_pages": 23,
+    "processed_files": 24,
+    "thumbnail_files": 23,
+    "tmp_files_after_restart": 0,
+    "orphan_processes_after_kill": {}
+  },
+  "shutdown_during_ocr": {
+    "run_id": "3ae79c6b-0860-4eb4-8c6a-bfedc0fdd4d0",
+    "run_status_at_shutdown": "running",
+    "orphan_processes": {},
+    "tmp_files_after_shutdown": 1,
+    "run_status_after_restart": "running",
+    "stale": false
+  },
+  "orphans": {},
+  "fixtures": {
+    "1": {
+      "path": "scanned-1.pdf",
+      "bytes": 290070
+    },
+    "10": {
+      "path": "scanned-10.pdf",
+      "bytes": 2289837
+    },
+    "20": {
+      "path": "scanned-20.pdf",
+      "bytes": 2291195
+    },
+    "50": {
+      "path": "scanned-50.pdf",
+      "bytes": 2295267
+    },
+    "200": {
+      "path": "scanned-200.pdf",
+      "bytes": 2315878
+    },
+    "400": {
+      "path": "scanned-400.pdf",
+      "bytes": 2343428
+    }
+  },
+  "memory_stability": [
+    {
+      "repeat": 1,
+      "status": "succeeded",
+      "working_set_mb": 156.8
+    },
+    {
+      "repeat": 2,
+      "status": "succeeded",
+      "working_set_mb": 156.5
+    },
+    {
+      "repeat": 3,
+      "status": "succeeded",
+      "working_set_mb": 158.3
+    },
+    {
+      "repeat": 4,
+      "status": "succeeded",
+      "working_set_mb": 157.0
+    },
+    {
+      "repeat": 5,
+      "status": "succeeded",
+      "working_set_mb": 157.0
+    },
+    {
+      "repeat": 6,
+      "status": "succeeded",
+      "working_set_mb": 156.7
+    },
+    {
+      "repeat": 7,
+      "status": "succeeded",
+      "working_set_mb": 158.8
+    },
+    {
+      "repeat": 8,
+      "status": "succeeded",
+      "working_set_mb": 157.3
+    },
+    {
+      "repeat": 9,
+      "status": "succeeded",
+      "working_set_mb": 157.2
+    },
+    {
+      "repeat": 10,
+      "status": "succeeded",
+      "working_set_mb": 157.2
+    }
+  ],
+  "ocr_idle_working_set_mb": 158.1,
+  "tmp_files_after_ocr": 0,
+  "tesseract_after_ocr": 0,
+  "cancellation_after_import": {
+    "status": "succeeded",
+    "imported_pages": 20,
+    "total_page_rows": 20
+  }
+}

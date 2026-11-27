@@ -29,6 +29,31 @@ def _require_support():
     return pymupdf
 
 
+def release_store() -> None:
+    """Release PyMuPDF's global store after a document has been closed.
+
+    PyMuPDF keeps native buffers for a closed document in its process-wide
+    store. Without a shrink those buffers accumulate for every imported PDF and
+    every PDF export, so a long session with many imports grows the sidecar's
+    committed memory without bound. The store only frees unreferenced entries,
+    so a concurrent render is not affected.
+    """
+    if pymupdf is None:
+        return
+    try:
+        pymupdf.TOOLS.store_shrink(100)
+    except Exception:  # pragma: no cover - defensive across PyMuPDF versions.
+        pass
+
+
+def close_document(document) -> None:
+    """Close a PDF document and release its native memory."""
+    try:
+        document.close()
+    finally:
+        release_store()
+
+
 def open_document(path: Path):
     """Open and validate a PDF, converting library errors to typed app errors."""
     module = _require_support()
@@ -37,14 +62,14 @@ def open_document(path: Path):
     except Exception as exc:
         raise AppError(422, "pdf_unreadable", "The PDF file could not be read.") from exc
     if document.needs_pass:
-        document.close()
+        close_document(document)
         raise AppError(
             422,
             "pdf_encrypted",
             "Password-protected PDFs are not supported. Remove the password first.",
         )
     if document.page_count == 0:
-        document.close()
+        close_document(document)
         raise AppError(422, "pdf_empty", "The PDF does not contain any pages.")
     return document
 
@@ -60,7 +85,7 @@ def validate_document(path: Path, max_pages: int) -> int:
             )
         return int(document.page_count)
     finally:
-        document.close()
+        close_document(document)
 
 
 def render_page(document, index: int, dpi: int) -> Image.Image:

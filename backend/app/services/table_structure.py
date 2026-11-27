@@ -1163,7 +1163,7 @@ def _pdf_vector_candidates(
         return []
     finally:
         if document is not None:
-            document.close()
+            pdf_service.close_document(document)
 
 
 def _choose_rule_candidate(

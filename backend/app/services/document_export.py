@@ -52,7 +52,7 @@ from lxml import etree
 from PIL import Image
 
 from app.core.errors import AppError
-from app.services import documents, fonts as font_service, pages
+from app.services import documents, fonts as font_service, pages, pdf as pdf_service
 
 ExportFormat = Literal["markdown", "txt", "docx", "pdf"]
 TextExportFormat = Literal["markdown", "txt"]
@@ -2786,12 +2786,15 @@ def render_pdf(
             "modDate": "",
         }
     )
-    return document.tobytes(
-        garbage=4,
-        deflate=True,
-        no_new_id=True,
-        reproducible=True,
-    )
+    try:
+        return document.tobytes(
+            garbage=4,
+            deflate=True,
+            no_new_id=True,
+            reproducible=True,
+        )
+    finally:
+        pdf_service.close_document(document)
 
 
 def export_document(

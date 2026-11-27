@@ -10,7 +10,9 @@ following the 1.0/1.1 desktop delivery recorded in section 13 and
 **Later work:** after this snapshot, a real-scan OCR corpus and its measured
 CER/WER results were added (`backend/tests/fixtures/ocr-real/` and
 `docs/ocr-benchmark.md`). Statements below about a missing real-scan corpus
-describe the state at `b0c139d`.
+describe the state at `b0c139d`. A large-document performance, cancellation and
+recovery drill was also run on 27 November 2026; section 14 records its results
+and closes the sustained-load item left open in section 13.10.
 
 **Practical supplied-file check:** on 27 November 2026, the normal workflow
 imported 8 PDF pages and 5 attached JPG scans. Source rendering and PDF text
@@ -251,8 +253,10 @@ Two caveats on that number:
   launcher, not an installer.
 
 ### Phase 11 - Final QA (approx. 5%)
-- No full accessibility audit (keyboard-only flows, focus order, contrast,
-  screen-reader labels beyond component-level ARIA).
+- The contrast audit is automated and component-level keyboard/focus coverage
+  now includes skip navigation, dialog Escape/restoration and native form
+  controls. A full installed-app keyboard-only walkthrough and NVDA/Narrator
+  pass remain open.
 - No formal responsive device pass; breakpoints and a mobile panel switch exist
   and are tested at component level.
 - No large-document performance/load profiling.
@@ -628,7 +632,8 @@ N100 reference machine (4 cores, 16 GB RAM, Windows 11):
 The backend stayed between 147 MB and 193 MB across the whole drill, so the
 import and OCR paths do not leak unbounded memory for this document size. A
 multiply-cancelled job and a much larger PDF (hundreds of pages) were not
-measured; that stays on the open list instead of being claimed.
+measured at the time of this snapshot. Both are measured in section 14; that
+drill found and fixed a native-memory accumulation on repeated imports.
 
 ### 13.8 Desktop QA: security review
 
@@ -661,14 +666,19 @@ removed. A token audit measured every text and UI pair used by the theme:
   fails the suite if any of those pairs drops below its threshold, so the fix
   cannot silently regress.
 
-Not performed, and therefore still open: a keyboard-only walkthrough of the
-installed application with focus-visibility screenshots, and a screen-reader
-pass (NVDA or Narrator). Radix primitives supply labelled dialogs and controls,
-but that is an argument, not a verified result. What *was* checked on the
-installed build is that the dashboard paints, that the saved dark theme and teal
-accent resolve to their token values, and that the rendered layout has no
-horizontal overflow at 1426x779 — a rendering check, not an assistive-technology
-one.
+Completed on 27 November 2026: the current web baseline now provides a
+visible-on-focus skip link, main landmark target and labelled editor toolbar.
+Automated tests verify dialog Escape dismissal and trigger-focus restoration,
+native checkbox/switch/radio roles and English/Burmese key parity. The installed
+`DocuRebuild.exe` launched successfully on Windows NT 10.0.26300.0.
+
+Not performed: an interactive keyboard-only walkthrough and NVDA/Narrator pass
+on the installed application. NVDA and Narrator were neither running nor
+available in this environment, and no browser automation was available for a
+reliable desktop assistive-technology pass. These remain open and are documented
+without claiming full WCAG certification. Radix primitives supply labelled
+dialogs and controls, but that is not a substitute for a verified screen-reader
+result.
 
 ### 13.10 What is still open (v1.1.0)
 
@@ -676,8 +686,9 @@ These are the honest remaining gaps; none require re-architecting:
 
 - A redacted real-scan OCR corpus (English, Burmese, mixed, at least one table
   and one multi-column page) scored with the existing harness.
-- A keyboard-only and screen-reader accessibility pass on the installed
-  application.
+- An interactive keyboard-only walkthrough and NVDA/Narrator accessibility pass
+  on the installed application. Contrast and component-level keyboard/focus
+  checks are now covered, but full AT certification remains open.
 - A sustained large-document performance and cancellation drill (hundreds of
   pages, repeated cancelled imports).
 - An automated end-to-end desktop smoke suite; the desktop checks above were run
@@ -703,3 +714,48 @@ The remaining gap is evidence on real scans, assistive-technology testing,
 sustained-load measurement, and code signing, not missing foundations. Calling
 1.1 shipped is defensible for a Windows desktop release; the open list above is
 the honest release-note content.
+
+## 14. Addendum - large-document performance and cancellation (27 November 2026)
+
+This closes the sustained-load measurement listed as open in section 13.10 and
+the "Performance and reliability pass" MUST HAVE in section 8. The full
+methodology, tables, limitations and reproduction commands are in
+`docs/performance.md`; raw data is in `docs/performance/sidecar-drill.json` and
+`docs/performance/editor-drill.json`.
+
+Measured on the same N100/16 GB reference machine with the packaged Electron
+shell and a PyInstaller sidecar rebuilt from this tree, using disposable data:
+
+| Journey | Result |
+| --- | --- |
+| Import 1 / 10 / 50 / 200 / 400-page raster PDFs | 0.49 / 2.82 / 12.95 / 52.38 / 106.68 s (0.259-0.267 s/page from 10 pages) |
+| Peak sidecar working set during the 400-page import | 197.3 MB, returning to 157.2 MB |
+| Ten consecutive 10-page imports | 156.5-158.8 MB, no step growth |
+| OCR sample pages 0/200/399 | 2.26-2.48 s each, 96.1-96.2 mean confidence |
+| Save / read 1,015,143-character document | 0.17 s / 0.04 s |
+| Export that document (DOCX / PDF) | 0.37 s / 0.95 s |
+| Editor typing, 144,753 characters | 4.70 s total; median 37 ms per 1,200-character input, p95 60 ms |
+| Autosave / reload | 0.99 s after last input / 0.57 s to restore the text |
+| Three repeated cancellations of a 400-page import | 0.14-0.27 s to `cancelled`, no temp files, project still usable |
+| Two concurrent 50-page imports | One cancelled, one succeeded with 50 pages |
+| Hard kill after 3 pages of a 200-page import | Restart recovered the job as `failed`/`import_interrupted`, kept 3 pages, next import succeeded |
+| Window close | Shell exited in 3.35 s; 0 shell, backend or Tesseract processes |
+
+Two defects were found and fixed as part of the measurement:
+
+1. PyMuPDF retained native buffers for closed documents in its process-wide
+   store. Before the fix the drill grew from 149.8 MB idle to 235.9 MB after the
+   400-page import, with about 19 MB added per repeated import. PDF closes now
+   go through `pdf.close_document()`, which releases the store; memory is flat
+   across repeated imports.
+2. Two import jobs in one project allocated the same page number and the second
+   failed with `UNIQUE constraint failed: pages.page_number`. Imports are now
+   serialised per project (different projects still run in parallel), with a
+   regression test in `backend/tests/test_import_jobs.py`.
+
+Not fixed, and recorded as known gaps: OCR has no cancel action and an OCR run
+interrupted by a crash stays `running` after restart; a crash can leave one
+preparation PNG in `tmp/` or one unreferenced processed image from an in-flight
+page. A 1,000-page import, low-memory hardware, network storage and thermal/
+power variations remain unmeasured. The backend suite passes **439 tests** after
+these changes.

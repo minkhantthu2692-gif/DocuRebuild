@@ -82,6 +82,7 @@
     "confirm": "Delete page"
   },
   "editor": {
+    "toolbar": "Editor toolbar",
     "placeholder": "Start typing, or import a page and reconstruct it here.",
     "undo": "Undo",
     "redo": "Redo",

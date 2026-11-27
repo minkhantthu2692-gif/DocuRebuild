@@ -81,6 +81,47 @@ def test_import_job_reports_progress_and_completes(
     assert cancelled.json()["detail"]["code"] == "import_not_running"
 
 
+def test_two_import_jobs_in_one_project_do_not_collide_on_page_numbers(
+    client: TestClient, project: dict
+) -> None:
+    """Page numbers are allocated per import; concurrent jobs must serialise."""
+    project_id = project["id"]
+    first = start_job(
+        client,
+        project_id,
+        [
+            (
+                "files",
+                ("first.pdf", make_pdf([f"First {index}" for index in range(12)]), "application/pdf"),
+            )
+        ],
+    )
+    second = start_job(
+        client,
+        project_id,
+        [
+            (
+                "files",
+                (
+                    "second.pdf",
+                    make_pdf([f"Second {index}" for index in range(12)]),
+                    "application/pdf",
+                ),
+            )
+        ],
+    )
+
+    first_final = wait_for_job(client, project_id, first["id"])
+    second_final = wait_for_job(client, project_id, second["id"])
+    assert first_final["status"] == "succeeded", first_final
+    assert second_final["status"] == "succeeded", second_final
+
+    pages = client.get(f"/api/projects/{project_id}/pages").json()
+    numbers = sorted(page["page_number"] for page in pages)
+    assert numbers == list(range(1, 25))
+    assert len({page["id"] for page in pages}) == 24
+
+
 def test_import_job_reports_a_localizable_failure_and_rolls_back(
     client: TestClient, project: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -6,8 +6,26 @@ supported 1.0 distribution.
 
 ## [Unreleased]
 
+### Fixed
+
+- Importing many PDFs in one session no longer grows the local backend's memory
+  without bound. PyMuPDF kept native buffers for closed documents; every PDF
+  import, page re-render, artwork/table analysis and PDF export now releases
+  them. Ten repeated imports kept the sidecar between 156.5 and 158.8 MB instead
+  of climbing by about 19 MB per import.
+- Two import jobs started in one project at the same time no longer collide on
+  page numbers and fail with `UNIQUE constraint failed: pages.page_number`.
+  Imports in the same project are serialised; different projects still import
+  in parallel.
+
 ### Verified
 
+- Added accessibility audit coverage for the installed Windows desktop scope:
+  a skip link and labelled main landmark, a labelled editor toolbar, English
+  and Burmese localization parity, and automated tests for dialog Escape
+  dismissal/focus restoration and native checkbox/switch/radio semantics.
+  NVDA and Narrator could not be exercised because neither tooling was active
+  or available in this environment; this is not claimed as WCAG certification.
 - Added a 27 November 2026 practical-file check covering 8 PDF pages and 5
   attached JPG scans. Import and source rendering were verified, PDF page 1's
   embedded text was usable, a Burmese schedule image preserved recognizable

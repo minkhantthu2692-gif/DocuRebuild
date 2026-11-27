@@ -1,0 +1,153 @@
+{
+  "machine": {
+    "os": "win32 10.0.26300",
+    "cpu": "Intel(R) N100",
+    "logical_cores": 4,
+    "ram_gb": 16,
+    "app": "dist/desktop-installer/win-unpacked/DocuRebuild.exe",
+    "recorded_at": "2026-11-27T13:33:12.606Z"
+  },
+  "startup": {
+    "shell_ready_seconds": 3.999,
+    "backend_port": "64463",
+    "shell_processes": [
+      {
+        "name": "DocuRebuild.exe",
+        "pid": 6944,
+        "workingSetMb": 104.9140625
+      },
+      {
+        "name": "DocuRebuild.exe",
+        "pid": 16488,
+        "workingSetMb": 153.31640625
+      },
+      {
+        "name": "DocuRebuild.exe",
+        "pid": 10516,
+        "workingSetMb": 48.8046875
+      },
+      {
+        "name": "DocuRebuild.exe",
+        "pid": 15512,
+        "workingSetMb": 95.28515625
+      }
+    ],
+    "backend_processes": [
+      {
+        "name": "docurebuild-backend.exe",
+        "pid": 11536,
+        "workingSetMb": 150.5546875
+      }
+    ],
+    "workspace_ready_seconds": 0.501
+  },
+  "typing": {
+    "chunks": 120,
+    "chunk_size": 1200,
+    "characters": 144753,
+    "total_seconds": 4.7,
+    "median_ms": 37,
+    "p95_ms": 60,
+    "longest_ms": 75,
+    "editor_characters": 144753
+  },
+  "autosave": {
+    "seconds_after_last_input": 0.99,
+    "stored_characters": 144753,
+    "expected_characters": 144753,
+    "saved": true
+  },
+  "reopen": {
+    "seconds": 0.57,
+    "editor_characters": 144753
+  },
+  "export": {
+    "markdown": {
+      "bytes": 144753,
+      "milliseconds": 57,
+      "ok": true
+    },
+    "docx": {
+      "bytes": 42103,
+      "milliseconds": 95,
+      "ok": true
+    },
+    "pdf": {
+      "bytes": 79375,
+      "milliseconds": 173,
+      "ok": true
+    }
+  },
+  "memory": {
+    "before_typing": {
+      "js_heap_used_mb": 10.5,
+      "js_heap_total_mb": 19,
+      "nodes": 555,
+      "documents": 2,
+      "listeners": 681
+    },
+    "after_20_chunks": {
+      "js_heap_used_mb": 17.6,
+      "js_heap_total_mb": 29.2,
+      "nodes": 559,
+      "documents": 2,
+      "listeners": 681
+    },
+    "after_40_chunks": {
+      "js_heap_used_mb": 19.2,
+      "js_heap_total_mb": 39,
+      "nodes": 487,
+      "documents": 1,
+      "listeners": 632
+    },
+    "after_60_chunks": {
+      "js_heap_used_mb": 34.4,
+      "js_heap_total_mb": 57.8,
+      "nodes": 487,
+      "documents": 1,
+      "listeners": 632
+    },
+    "after_80_chunks": {
+      "js_heap_used_mb": 32.3,
+      "js_heap_total_mb": 58.8,
+      "nodes": 487,
+      "documents": 1,
+      "listeners": 632
+    },
+    "after_100_chunks": {
+      "js_heap_used_mb": 33.1,
+      "js_heap_total_mb": 71.3,
+      "nodes": 487,
+      "documents": 1,
+      "listeners": 632
+    },
+    "after_120_chunks": {
+      "js_heap_used_mb": 35.1,
+      "js_heap_total_mb": 88.2,
+      "nodes": 487,
+      "documents": 1,
+      "listeners": 632
+    },
+    "after_typing": {
+      "js_heap_used_mb": 35.1,
+      "js_heap_total_mb": 88.2,
+      "nodes": 487,
+      "documents": 1,
+      "listeners": 632
+    },
+    "after_reopen": {
+      "js_heap_used_mb": 46.2,
+      "js_heap_total_mb": 84.6,
+      "nodes": 957,
+      "documents": 3,
+      "listeners": 1309
+    }
+  },
+  "shutdown": {
+    "window_close_seconds": 3.35,
+    "shell_exited": true,
+    "remaining_shell_processes": 0,
+    "remaining_backend_processes": 0,
+    "remaining_tesseract_processes": 0
+  }
+}

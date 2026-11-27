@@ -301,12 +301,30 @@ AI credentials are configured in the application, not in environment files.
     never re-initialise an open dialog. The Edit Image dialog keeps the preview
     node mounted, debounces expensive renders, and serialises commits so the last
     confirmed render always matches the newest local adjustment.
+13. **Desktop accessibility is evidence-based.** The supported desktop shell
+    provides a skip link and main landmark, and formatting controls are exposed
+    as a labelled toolbar. Component tests cover native control roles and dialog
+    Escape/restoration; contrast remains token-guarded. An installed-app
+    keyboard or NVDA/Narrator result is recorded only after it is actually run,
+    never inferred from component primitives.
+14. **Imports are serialised per project.** Page numbers are allocated from the
+    highest existing page, so two concurrent import jobs in one project used to
+    read the same starting number and fail on the `pages.page_number` unique
+    index. `pages.import_uploads()` holds a per-project lock for the whole
+    import; different projects still import in parallel. Do not remove the lock
+    without replacing page-number allocation with an atomic equivalent.
+15. **PDF documents are closed through `pdf.close_document()`.** PyMuPDF keeps
+    native buffers for closed documents in a process-wide store. The measured
+    effect was ~19 MB of committed memory per import. The helper closes the
+    document and calls `TOOLS.store_shrink(100)`; imports, re-renders, artwork
+    and table analysis, and PDF export all use it. New PDF code must do the
+    same instead of calling `document.close()` directly.
 
 ## 11. Verification commands and current results
 
 ```powershell
-backend/.venv/Scripts/python -m pytest backend/tests -q   # 423 passed
-npm run test:web                                          # 304 tests / 51 files
+backend/.venv/Scripts/python -m pytest backend/tests -q   # 439 passed
+npm run test:web                                          # 358 tests / 57 files
 npm run typecheck                                         # clean
 npm run lint                                              # clean
 npm run build                                             # production build
@@ -343,6 +361,11 @@ secret scan.
   factory reset against a copy of real data.
 - The local vault is plaintext by design; only explicit downloads can be
   password-encrypted, and a forgotten password cannot be recovered.
+- OCR has no cancel action, and an OCR run interrupted by a process crash stays
+  `running` after restart. Import jobs are recovered as `import_interrupted`;
+  OCR needs equivalent stale-state recovery. A crash during OCR also leaves one
+  preparation PNG in `tmp/`, and a crash mid-import can leave one unreferenced
+  processed image from the in-flight page. See `docs/performance.md`.
 
 ## 13. Release state
 

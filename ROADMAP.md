@@ -4,7 +4,8 @@ This is the short, current roadmap for the Windows x64 desktop release.
 `docs/roadmap.md` keeps the detailed phase-by-phase implementation history;
 `PROJECT_MEMORY.md` records architecture and handover context.
 
-Last updated: 2026-11-27 (real-scan OCR validation added after 1.1.0).
+Last updated: 2026-11-27 (large-document performance drill and real-scan OCR
+validation added after 1.1.0).
 
 ## Release status
 
@@ -58,6 +59,21 @@ manual date/number review, and handwriting/mixed-script areas remained
 low-confidence OCR. No reproducible code defect or source-file change was
 found. The brief record is in `PROGRESS.md`.
 
+**Large-document performance and cancellation (27 November 2026).** The
+installed-equivalent Electron shell and packaged Python sidecar were profiled on
+the N100/16 GB reference machine with raster PDFs from 1 to 400 pages, a
+145k-character editor document, three repeated cancellations, concurrent import
+jobs, a hard kill mid-import and shutdowns during OCR. Imports stayed linear at
+0.259-0.267 s/page (400 pages in 106.7 s, peak 197 MB); ten repeated imports kept
+the sidecar between 156.5 and 158.8 MB; the editor took 4.70 s for 144,753 typed
+characters, autosaved 0.99 s after the last input and reopened in 0.57 s;
+cancellation reached `cancelled` in 0.14-0.27 s with no temp files; and a crash
+recovered 3 committed pages as `import_interrupted` before a clean import. Two
+defects were found and fixed: PyMuPDF native stores accumulated ~19 MB per import
+(now released after every PDF close/export) and concurrent imports in one
+project collided on `page_number` (imports are now serialised per project). Full
+evidence, limitations and reproduction commands are in `docs/performance.md`.
+
 **Real-scan OCR validation (27 November 2026).** A three-page public-domain
 corpus with transcripts typed from the page now lives in
 `backend/tests/fixtures/ocr-real/`, and `docs/ocr-benchmark.md` publishes the
@@ -90,12 +106,18 @@ adapter rather than the engine's ceiling.
 These are quality/reach gaps, not missing 1.x features. They are deliberately
 **not** implemented in this release.
 
-1. **Accessibility certification.** Keyboard-only and screen-reader passes on the
-   installed application; contrast is already automated.
+1. **Accessibility certification.** Contrast automation and component-level
+   keyboard/focus tests are present, including a skip link, editor toolbar
+   name and dialog Escape/restoration checks. An interactive keyboard-only
+   journey and NVDA/Narrator pass on the installed application remain open
+   because this environment has neither screen reader available.
 2. **Desktop end-to-end automation.** A repeatable installed-app smoke suite
    (install → launch → import → OCR → export → backup/restore → uninstall).
-3. **Sustained-load and cancellation measurement** on large projects and long
-   OCR/import batches.
+3. **OCR cancellation and crash recovery.** OCR runs cannot be cancelled from
+   the API or UI, and a run interrupted by a crash stays `running` after
+   restart. Imports already recover as `import_interrupted`; OCR needs the same
+   treatment. A hard kill during import can also leave one unreferenced
+   processed image from the in-flight page.
 4. **Code signing.** A certificate and signed installer/release process.
 5. **macOS/Linux packaging** if those platforms become supported.
 
@@ -136,4 +158,7 @@ See `PROJECT_MEMORY.md` §12 and `CHANGELOG.md` §1.1.0. The headline limits are
 Windows x64 only, ~204 MB installer / ~650 MB installed, a three-page real-scan
 OCR corpus (not a population estimate, one transcriber, no scored Burmese-only
 case), incomplete page-wide equation/figure recognition, no code signing, no
-desktop E2E suite, and one accepted low-severity KaTeX advisory.
+desktop E2E suite, no OCR cancellation or stale-run recovery, and one accepted
+low-severity KaTeX advisory. Performance and memory were measured to 400 pages
+on one N100/16 GB machine (`docs/performance.md`); a 1,000-page import,
+low-memory hardware and low-power/thermal variations remain unmeasured.

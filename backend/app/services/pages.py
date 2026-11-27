@@ -44,6 +44,25 @@ class ImportProgress:
 
 ProgressCallback = Callable[[ImportProgress], None]
 
+
+# Imports allocate page numbers from the highest existing page. Two import jobs
+# for the same project would otherwise read the same starting number and collide
+# on the page_number unique index, so imports are serialised per project. Work
+# still runs in parallel across projects and while the previous import commits.
+_import_locks: dict[str, threading.Lock] = {}
+_import_locks_guard = threading.Lock()
+
+
+def _project_import_lock(project_dir: Path) -> threading.Lock:
+    key = str(project_dir.resolve())
+    with _import_locks_guard:
+        lock = _import_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _import_locks[key] = lock
+        return lock
+
+
 # Formats the browser can display directly.
 BROWSER_SAFE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
@@ -464,7 +483,7 @@ def _import_pdf_file(
             if on_page is not None:
                 on_page(row)
     finally:
-        document.close()
+        pdf_service.close_document(document)
     return rows
 
 
@@ -616,6 +635,9 @@ def import_uploads(
     committed per file (and per PDF page) so progress survives a long batch and a
     cancellation only has to undo the file currently being processed.
 
+    Imports for one project are serialised so concurrent jobs cannot allocate the
+    same page number; different projects still import in parallel.
+
     ``keep_completed_on_failure`` keeps pages from files that finished before an
     error or cancellation. The synchronous compatibility wrapper leaves it off
     to preserve all-or-nothing behaviour for simple clients.
@@ -623,6 +645,26 @@ def import_uploads(
     if not uploads:
         raise AppError(400, "no_files", "No files were provided.")
 
+    with _project_import_lock(project_dir):
+        return _import_uploads_locked(
+            project_dir,
+            uploads,
+            inspected=inspected,
+            cancel=cancel,
+            on_progress=on_progress,
+            keep_completed_on_failure=keep_completed_on_failure,
+        )
+
+
+def _import_uploads_locked(
+    project_dir: Path,
+    uploads: list[tuple[str, Path]],
+    *,
+    inspected: list[dict[str, Any]] | None = None,
+    cancel: threading.Event | None = None,
+    on_progress: ProgressCallback | None = None,
+    keep_completed_on_failure: bool = False,
+) -> list[dict[str, Any]]:
     items = inspected if inspected is not None else inspect_uploads(uploads)
     total_pages = sum(int(item.get("page_count", 1)) for item in items)
     next_number = _next_page_number(project_dir)
@@ -778,7 +820,7 @@ def _load_page_source(conn, project_dir: Path, page) -> Image.Image:
             index = max(0, int(page["pdf_page_number"] or 1) - 1)
             return pdf_service.render_page(document, index, settings.pdf_render_dpi)
         finally:
-            document.close()
+            pdf_service.close_document(document)
     return _load_image(original_path)
 
 

@@ -1004,7 +1004,11 @@ export function EditorPanel({ projectId, className }: EditorPanelProps) {
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-0.5 border-b border-border/60 bg-background/30 px-2 py-1.5">
+      <div
+        role="toolbar"
+        aria-label={t("editor.toolbar")}
+        className="flex flex-wrap items-center gap-0.5 border-b border-border/60 bg-background/30 px-2 py-1.5"
+      >
         <ToolbarButton
           label={t("editor.undo")}
           icon={Undo2}

@@ -529,7 +529,7 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
                     int(page_height),
                 )
             finally:
-                document.close()
+                pdf_service.close_document(document)
     elif raster_source is not None:
         raster_rects = artwork_service.artwork_regions(
             raster_source, blocks, int(page_width), int(page_height)
