@@ -17,7 +17,7 @@ win.
 | 1. Local storage and project management | **Complete** | App/project DBs, folders, manifest, CRUD, trash |
 | 2. Main UI and workspace | **Complete** | Header navigation, dashboard, two-panel workspace, settings, i18n |
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
-| 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates), deterministic figure suggestions from embedded PDF images and vector drawings, a local CER/WER benchmark with committed synthetic English, Burmese and mixed fixtures, user-selectable page segmentation and measured results in `docs/ocr-benchmark.md` done; a redacted real-document corpus and figure detection in the OCR layout pending |
+| 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates), deterministic figure suggestions from embedded PDF images and vector drawings, a local CER/WER benchmark with committed synthetic and real-scan English, Burmese and mixed fixtures, user-selectable page segmentation and measured results in `docs/ocr-benchmark.md` done; a larger real-scan corpus and figure detection in the OCR layout pending |
 | 5. Element extraction | **In progress** | Manual region crop, local region text extraction, OCR-layout, embedded-PDF-image, vector-drawing and raster-page ink region suggestions with a named source in the extraction dialog, library, verification and figure/text insertion, reviewed equation crops inserted as real equations, on-demand AI transcription of one equation crop into reviewable LaTeX, and structured table reconstruction from one saved crop locally (drawn rules or word boxes) and with AI done; page-wide table detection pending |
 | 6. AI integration and free usage first | **In progress** | Unified BYOK provider platform with local Ollama, custom OpenAI-compatible and 12 cloud adapters, dynamic model discovery, multiple connections and encrypted keys, key rotation/cooldown/failover, per-task routing with fallbacks, remote-consent and HTTPS boundary, daily/task/connection limits, verified-cost budget, metadata-only usage ledger and history, reviewable OCR cleanup, optional vision region proposals, equation-crop transcription and table-crop reading done; account-level billing/quota verification pending |
 | 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, merged cells from a PDF's drawn rules and from a scanned page's or saved crop's visible cell borders, structured reading of one saved table crop with local OCR or an optional vision model, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, inserting a reviewed equation crop as a real numbered equation, optional vision-model transcription of one saved equation crop into reviewable LaTeX, and faithful Markdown/TXT/Word/PDF export; merged-cell detection for text-only tables and automatic page-wide equation recognition pending |
@@ -184,9 +184,13 @@ image processing uses Pillow with no OpenCV dependency.
   Page-wide equation detection and transcription are still pending.
 - OCR accuracy benchmarks (CER/WER) for English, Burmese and mixed pages. A
   local harness, committed synthetic fixtures and a measured baseline now exist
-  in `docs/ocr-benchmark.md`; a corpus of real scans is still needed before
-  claiming real-world accuracy. The page-segmentation comparison (Burmese PSM 3
-  versus PSM 11) is reproducible with `--segmentation-mode`.
+  in `docs/ocr-benchmark.md`. A three-page public-domain real-scan corpus with
+  typed transcripts adds measured real-world numbers (0.47% CER on English
+  prose, 22.43% on a table, 36.77% on a mixed page at PSM 11) and records its
+  limits, including the absence of a scored Burmese-only case. The corpus is
+  evidence, not a population estimate, and a larger set would still be needed
+  before generalising. The page-segmentation comparison (Burmese PSM 3 versus
+  PSM 11) is reproducible with `--segmentation-mode`.
 - Optional richer engines (for example PaddleOCR) behind the same adapter, only
   if they can preserve the same review and verification guarantees.
 
@@ -796,7 +800,7 @@ pairing. The desktop window is the supported form.
   renderer crash handling, version metadata alignment, a repaired text encoding
   defect in the equation dialog, and a documented fresh-clone workflow.
 
-**Remaining (tracked in `ROADMAP.md`):** redacted real-scan OCR corpus,
+**Remaining (tracked in `ROADMAP.md`):** a larger real-scan OCR corpus,
 screen-reader and keyboard-only testing, sustained-load and cancellation
 measurement, an automated end-to-end desktop smoke suite, code signing, and
 macOS/Linux packaging.

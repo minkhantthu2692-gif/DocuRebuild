@@ -7,6 +7,11 @@ following the 1.0/1.1 desktop delivery recorded in section 13 and
 **Working tree:** the 1.1.0 release changes are committed and pushed to `main`
 **Scope of this report:** audit of implemented behaviour, not a plan for new features
 
+**Later work:** after this snapshot, a real-scan OCR corpus and its measured
+CER/WER results were added (`backend/tests/fixtures/ocr-real/` and
+`docs/ocr-benchmark.md`). Statements below about a missing real-scan corpus
+describe the state at `b0c139d`.
+
 ---
 
 ## 1. Executive summary

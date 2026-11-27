@@ -544,10 +544,15 @@ codes are `0` when every case was scored, `1` when a case could not be scored an
 
 `--segmentation-mode` selects the Tesseract page layout to score (3 automatic,
 4 single column, 6 single block, 11 sparse text). The bundled baseline report is
-in [`docs/ocr-benchmark.md`](docs/ocr-benchmark.md): on the committed synthetic
+in [`docs/ocr-benchmark.md`](docs/ocr-benchmark.md). On the committed synthetic
 pages, sparse text gives 2.19% overall CER (English 0.28%, Burmese 5.56%,
-mixed 0.88%), while automatic layout gives 85.60% CER on the Burmese page. Those
-pages are synthetic; a corpus of redacted real scans is still the next step.
+mixed 0.88%), while automatic layout gives 85.60% CER on the Burmese page. On the
+committed real scans, sparse text gives 22.64% overall CER (English prose 0.47%,
+a 1975 statistical table 22.43%, an 1898 English/Burmese page 36.77%) and
+automatic layout gives 42.00%. Those pages are public-domain books with
+transcripts typed from the page; provenance, licences and the single-transcriber
+caveat are in
+[`backend/tests/fixtures/ocr-real/ACQUISITION.md`](backend/tests/fixtures/ocr-real/ACQUISITION.md).
 
 ### AI providers (bring your own key)
 
@@ -1292,7 +1297,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 1. Local storage and project management | Complete |
 | 2. Main UI and workspace | Complete |
 | 3. Import and image processing | Complete |
-| 4. Local OCR and layout detection | In progress: OCR, layout hints, reviewable table proposals, a local CER/WER benchmark with committed synthetic fixtures and measured results in `docs/ocr-benchmark.md`, and user-selectable page segmentation done; figure detection in the OCR layout and a redacted real-document corpus pending |
+| 4. Local OCR and layout detection | In progress: OCR, layout hints, reviewable table proposals, a local CER/WER benchmark with committed synthetic and real-scan fixtures and measured results in `docs/ocr-benchmark.md`, and user-selectable page segmentation done; figure detection in the OCR layout and a larger real-scan corpus pending |
 | 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table reconstruction from one saved crop (local OCR or AI) done, page-wide table detection pending |
 | 6. AI integration and free usage first | In progress: unified BYOK provider platform with local Ollama, custom OpenAI-compatible and 12 cloud adapters, dynamic model discovery, multiple connections and encrypted keys, key rotation and cooldown, per-task routing with a fallback, remote-consent and HTTPS boundary, daily/task/connection limits, verified-cost budget, metadata-only usage ledger and history browser, reviewable OCR text cleanup, optional vision region proposals, one-crop equation transcription and one-crop table reading done; account-level billing/quota verification and page-wide automatic reconstruction pending |
 | 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, reviewable automatic table proposals from OCR word boxes, merged-cell spans read from PDF vector rules or a scanned page's or saved crop's drawn borders, structured reading of one saved table crop with local OCR or an optional vision model, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; page-wide tables, nested tables and page-wide equation extraction pending |

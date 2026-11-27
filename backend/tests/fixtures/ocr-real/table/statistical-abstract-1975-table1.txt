@@ -1,0 +1,41 @@
+No. 1. POPULATION AND AREA: 1790 TO 1970
+
+[Area figures represent area on indicated date including in some cases considerable areas not then organized or settled, and not covered by the census. Area figures have been adjusted to bring them into agreement with remeasurements made in 1940. For additional area data, see tables 4 and 297. See also Historical Statistics, Colonial Times to 1970, series A 1-5]
+
+RESIDENT POPULATION
+AREA (square miles)
+
+CENSUS DATE Number Per square mile of land area Increase over preceding census Number Percent Gross Land Water
+
+CONTERMINOUS U.S. 1
+1790 (Aug. 2) 3,929,214 4.5 (X) (X) 888,811 864,746 24,065
+1800 (Aug. 4) 5,308,483 6.1 1,379,269 35.1 888,811 864,746 24,065
+1810 (Aug. 6) 7,239,881 4.3 1,931,398 36.4 1,716,003 1,681,828 34,175
+1820 (Aug. 7) 9,638,453 5.6 2,398,572 33.1 1,788,006 1,749,462 38,544
+1830 (June 1) 12,866,020 7.4 3,227,567 33.5 1,788,006 1,749,462 38,544
+1840 (June 1) 17,069,453 9.8 4,203,433 32.7 1,788,006 1,749,462 38,544
+
+1850 (June 1) 23,191,876 7.9 6,122,423 35.9 2,992,747 2,940,042 52,705
+1860 (June 1) 31,443,321 10.6 8,251,445 35.6 3,022,387 2,969,640 52,747
+1870 (June 1) 2 39,818,449 2 13.4 8,375,128 26.6 3,022,387 2,969,640 52,747
+1880 (June 1) 50,155,783 16.9 10,337,334 26.0 3,022,387 2,969,640 52,747
+1890 (June 1) 62,947,714 21.2 12,791,931 25.5 3,022,387 2,969,640 52,747
+1900 (June 1) 75,994,575 25.6 13,046,861 20.7 3,022,387 2,969,834 52,553
+
+1910 (Apr. 15) 91,972,266 31.0 15,977,691 21.0 3,022,387 2,969,565 52,822
+1920 (Jan. 1) 105,710,620 35.6 13,738,354 14.9 3,022,387 2,969,451 52,936
+1930 (Apr. 1) 122,775,046 41.2 17,064,426 16.1 3,022,387 2,977,128 45,259
+1940 (Apr. 1) 131,669,275 44.2 8,894,229 7.2 3,022,387 2,977,128 45,259
+1950 (Apr. 1) 150,697,361 50.7 19,028,086 14.5 3,022,387 2,974,726 47,661
+1960 (Apr. 1) 178,464,236 60.1 27,766,875 18.4 3,022,261 2,968,054 54,207
+
+UNITED STATES
+
+1950 (Apr. 1) 151,325,798 42.6 19,161,229 14.5 3,615,211 3,552,206 63,005
+1960 (Apr. 1) 179,323,175 50.5 27,997,377 18.5 3,615,123 3,540,911 74,212
+1970 (Apr. 1) 3 203,211,926 57.5 23,888,751 13.3 3,615,122 3,536,855 78,267
+
+X Not applicable. 1 Excludes Alaska and Hawaii.
+2 Revised to include adjustments for underenumeration in Southern States; unrevised number is 38,558,371.
+3 The official 1970 resident population count is 203,235,298; the difference of 23,372 is due to errors found after tabulations were completed.
+Source: U.S. Bureau of the Census, U.S. Census of Population: 1920 to 1970, vol. I; and other reports and unpublished data. See also Areas of the United States, 1940, and Area Measurement Reports, series GE-20, No. 1.

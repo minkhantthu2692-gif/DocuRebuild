@@ -12,8 +12,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@docurebuild/design-tokens": "1.0.2",
-    "@docurebuild/shared-types": "1.0.2",
+    "@docurebuild/design-tokens": "1.1.0",
+    "@docurebuild/shared-types": "1.1.0",
     "@radix-ui/react-dialog": "^1.1.4",
     "@radix-ui/react-dropdown-menu": "^2.1.4",
     "@radix-ui/react-label": "^2.1.1",

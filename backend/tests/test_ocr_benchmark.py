@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Sequence
 
@@ -536,3 +537,34 @@ def test_main_rejects_an_unknown_segmentation_mode(tmp_path: Path) -> None:
         main([str(tmp_path / "fixtures"), "--segmentation-mode", "12"])
 
     assert error.value.code == 2
+
+
+def test_the_committed_real_scan_corpus_is_usable() -> None:
+    """The real-scan fixtures must stay loadable without running OCR.
+
+    Scoring needs Tesseract, so this only checks the shape of the corpus that
+    the documented results were measured from: a valid manifest, a reference for
+    every case, and references that are non-empty and already in NFC. A
+    decomposed Burmese reference would silently change what the published error
+    rate means.
+    """
+    folder = Path(__file__).parent / "fixtures" / "ocr-real"
+
+    cases = load_manifest(folder)
+
+    assert [case.name for case in cases] == [
+        "english-prose",
+        "english-table",
+        "burmese-mixed",
+    ]
+    assert [case.category for case in cases] == ["english", "table", "mixed"]
+    assert [case.languages for case in cases] == [
+        ("eng",),
+        ("eng",),
+        ("eng", "mya"),
+    ]
+    for case in cases:
+        assert case.image is not None
+        raw = case.reference.read_text(encoding="utf-8")
+        assert unicodedata.normalize("NFC", raw) == raw
+        assert normalize_text(raw)

@@ -4,7 +4,7 @@ This is the short, current roadmap for the Windows x64 desktop release.
 `docs/roadmap.md` keeps the detailed phase-by-phase implementation history;
 `PROJECT_MEMORY.md` records architecture and handover context.
 
-Last updated: 2026-11-26 (v1.1.0 released).
+Last updated: 2026-11-27 (real-scan OCR validation added after 1.1.0).
 
 ## Release status
 
@@ -47,22 +47,48 @@ to delete a project folder outside the data folder.
 | Internationalization | English and Burmese, live switching, key-parity tests, Unicode-safe layout |
 | Interface polish | Shared themed checkbox/switch/radio controls; Edit Image and the source viewer update previews in place without remounting, flickering or losing dialog state |
 
+## Completed after 1.1.0
+
+**Real-scan OCR validation (27 November 2026).** A three-page public-domain
+corpus with transcripts typed from the page now lives in
+`backend/tests/fixtures/ocr-real/`, and `docs/ocr-benchmark.md` publishes the
+measured CER/WER next to the synthetic baseline.
+
+| Case | Content | Mode 3 CER / WER | Mode 11 CER / WER |
+| --- | --- | --- | --- |
+| `english-prose` | 1905 letterpress novel page | 0.47% / 3.64% | 0.47% / 3.64% |
+| `english-table` | 1975 US statistical table, 21 data rows | 50.78% / 96.40% | 22.43% / 92.54% |
+| `burmese-mixed` | 1898 English/Burmese/transliteration page | 45.33% / 97.78% | 36.77% / 76.30% |
+| **Overall** | 4,293 reference characters | **42.00% / 80.60%** | **22.64% / 73.66%** |
+
+Reproduce from `backend/` with
+`python -m app.ocr_benchmark tests/fixtures/ocr-real` and add
+`--segmentation-mode 11` for the sparse-text run. Provenance, SHA-256 values,
+crop boxes and transcription conventions are in
+`backend/tests/fixtures/ocr-real/ACQUISITION.md`.
+
+Recorded limits: one transcriber and no second proofreader (Burmese tone marks
+are the least certain part of the reference); no scored Burmese-only case,
+because the one suitable page has no trustworthy transcript and is kept in
+`blocked/` as a qualitative observation; and no DPI metadata on any image,
+because the adapter re-encodes without a resolution hint. The table and mixed
+numbers are dominated by reconstruction (thousands separators, column leaders,
+Burmese dot leaders), not by character recognition, so they describe the current
+adapter rather than the engine's ceiling.
+
 ## Remaining MUST HAVE before a wider (non-Windows) production release
 
 These are quality/reach gaps, not missing 1.x features. They are deliberately
 **not** implemented in this release.
 
-1. **Real-scan OCR validation.** Build a redacted corpus of real English,
-   Burmese and mixed documents and publish CER/WER alongside the synthetic
-   baseline.
-2. **Accessibility certification.** Keyboard-only and screen-reader passes on the
+1. **Accessibility certification.** Keyboard-only and screen-reader passes on the
    installed application; contrast is already automated.
-3. **Desktop end-to-end automation.** A repeatable installed-app smoke suite
+2. **Desktop end-to-end automation.** A repeatable installed-app smoke suite
    (install → launch → import → OCR → export → backup/restore → uninstall).
-4. **Sustained-load and cancellation measurement** on large projects and long
+3. **Sustained-load and cancellation measurement** on large projects and long
    OCR/import batches.
-5. **Code signing.** A certificate and signed installer/release process.
-6. **macOS/Linux packaging** if those platforms become supported.
+4. **Code signing.** A certificate and signed installer/release process.
+5. **macOS/Linux packaging** if those platforms become supported.
 
 ## Deferred — SHOULD HAVE
 
@@ -98,6 +124,7 @@ These are quality/reach gaps, not missing 1.x features. They are deliberately
 ## Known limitations
 
 See `PROJECT_MEMORY.md` §12 and `CHANGELOG.md` §1.1.0. The headline limits are:
-Windows x64 only, ~204 MB installer / ~650 MB installed, synthetic-only OCR
-benchmark, incomplete page-wide equation/figure recognition, no code signing,
-no desktop E2E suite, and one accepted low-severity KaTeX advisory.
+Windows x64 only, ~204 MB installer / ~650 MB installed, a three-page real-scan
+OCR corpus (not a population estimate, one transcriber, no scored Burmese-only
+case), incomplete page-wide equation/figure recognition, no code signing, no
+desktop E2E suite, and one accepted low-severity KaTeX advisory.

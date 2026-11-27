@@ -1,0 +1,26 @@
+{
+  "description": "Real, public-domain page scans used to measure local OCR accuracy on material the project did not render itself. Every reference transcript was typed from the scan; see ACQUISITION.md for provenance, licences, preparation steps and the transcription conventions and limitations.",
+  "cases": [
+    {
+      "name": "english-prose",
+      "category": "english",
+      "languages": ["eng"],
+      "image": "english/pride-prejudice-1905-p48.jpg",
+      "reference": "english/pride-prejudice-1905-p48.txt"
+    },
+    {
+      "name": "english-table",
+      "category": "table",
+      "languages": ["eng"],
+      "image": "table/statistical-abstract-1975-table1.png",
+      "reference": "table/statistical-abstract-1975-table1.txt"
+    },
+    {
+      "name": "burmese-mixed",
+      "category": "mixed",
+      "languages": ["eng", "mya"],
+      "image": "mixed/burmese-handbook-1898-p15.jpg",
+      "reference": "mixed/burmese-handbook-1898-p15.txt"
+    }
+  ]
+}
