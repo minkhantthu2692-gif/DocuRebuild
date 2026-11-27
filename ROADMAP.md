@@ -49,6 +49,15 @@ to delete a project folder outside the data folder.
 
 ## Completed after 1.1.0
 
+**Practical-file validation (27 November 2026).** A lightweight normal-workflow
+check imported 8 PDF pages and 5 supplied JPG scans. Source rendering,
+PDF text extraction, Burmese and mixed-script OCR proposals, editing,
+autosave/reopen, and plain-text export were exercised. The supplied PDF text
+was usable, the Burmese schedule retained recognizable table structure with
+manual date/number review, and handwriting/mixed-script areas remained
+low-confidence OCR. No reproducible code defect or source-file change was
+found. The brief record is in `PROGRESS.md`.
+
 **Real-scan OCR validation (27 November 2026).** A three-page public-domain
 corpus with transcripts typed from the page now lives in
 `backend/tests/fixtures/ocr-real/`, and `docs/ocr-benchmark.md` publishes the

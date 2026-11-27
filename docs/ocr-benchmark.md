@@ -199,6 +199,25 @@ the direction the earlier reports predicted. The synthetic figure measures the
 engine and the language data. It does not describe paper. Whenever a claim is
 about scanned books, quote the real-scan table above, not the synthetic one.
 
+## Practical supplied-file check
+
+On 27 November 2026, a separate lightweight workflow check imported 8 pages
+from `MET-51051 for exam.pdf` and 5 supplied JPG scans without changing the
+source files. This was a usability check, not a CER/WER benchmark:
+
+- the PDF page 1 embedded text was recognizable and editable;
+- a Burmese schedule image retained recognizable table structure at 71%
+  reported OCR confidence, but dates, numbers and low-confidence words needed
+  manual review;
+- a mixed English/Burmese photographed page ran OCR at 56% average confidence,
+  but handwriting and overlaid annotations fragmented the result;
+- inserted OCR text could be edited, autosaved, reopened and exported as plain
+  text.
+
+These observations do not change the measured corpus results above and should
+not be treated as a population estimate or a replacement for the reference
+transcripts.
+
 ## Application behaviour
 
 - The OCR dialog exposes the page layout as a user-visible choice: Automatic,

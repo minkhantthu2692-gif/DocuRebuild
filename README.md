@@ -554,6 +554,15 @@ transcripts typed from the page; provenance, licences and the single-transcriber
 caveat are in
 [`backend/tests/fixtures/ocr-real/ACQUISITION.md`](backend/tests/fixtures/ocr-real/ACQUISITION.md).
 
+As a separate 27 November 2026 practical check, the normal workflow imported 8
+pages from `MET-51051 for exam.pdf` and 5 supplied JPG scans. Source rendering,
+PDF text, OCR review, editing, autosave/reopen and plain-text export were
+tested. PDF text was usable; a Burmese schedule retained recognizable table
+structure but needed manual correction of dates, numbers and low-confidence
+words; handwriting and mixed-script annotations remained unreliable. The brief
+findings are in [`PROGRESS.md`](PROGRESS.md). This check was qualitative and did
+not add synthetic or measured benchmark results.
+
 ### AI providers (bring your own key)
 
 AI is optional. It stays off until you add a connection and route a task, and OCR

@@ -4,6 +4,18 @@ All notable changes to DocuRebuild are recorded here. This project follows
 [Semantic Versioning](https://semver.org/) and the desktop application is the
 supported 1.0 distribution.
 
+## [Unreleased]
+
+### Verified
+
+- Added a 27 November 2026 practical-file check covering 8 PDF pages and 5
+  attached JPG scans. Import and source rendering were verified, PDF page 1's
+  embedded text was usable, a Burmese schedule image preserved recognizable
+  table structure with manual-correction needs, and an English/Burmese
+  photographed page remained limited by handwriting and mixed-script OCR.
+  Editing, autosave/reload, and server-side plain-text export were verified.
+  No code fix or original-file change was needed.
+
 ## [1.1.0] - 2026-11-26
 
 A feature release for the Windows x64 desktop application. It adds document

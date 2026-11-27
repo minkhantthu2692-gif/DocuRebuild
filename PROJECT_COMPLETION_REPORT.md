@@ -12,6 +12,14 @@ CER/WER results were added (`backend/tests/fixtures/ocr-real/` and
 `docs/ocr-benchmark.md`). Statements below about a missing real-scan corpus
 describe the state at `b0c139d`.
 
+**Practical supplied-file check:** on 27 November 2026, the normal workflow
+imported 8 PDF pages and 5 attached JPG scans. Source rendering and PDF text
+were usable; editing, autosave/reopen and plain-text export were verified.
+Burmese schedule OCR retained recognizable structure but required manual
+correction of dates/numbers and low-confidence blocks. Mixed handwriting and
+English/Burmese annotations remained unreliable OCR proposals. No code or source
+file change was required. The brief evidence record is `PROGRESS.md`.
+
 ---
 
 ## 1. Executive summary

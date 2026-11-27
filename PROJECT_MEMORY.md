@@ -209,6 +209,14 @@ E2E automation, and account-level AI billing verification.
   leaders, reading order) as much as recognition. The corpus is three pages from
   one transcriber with no scored Burmese-only case: it is evidence about this
   adapter, not a population estimate.
+- Practical-file check (27 November 2026): normal development-workflow import
+  verified 8 PDF pages and 5 attached JPG scans in one project. PDF embedded
+  text, source rendering, Burmese schedule OCR, mixed-script OCR, editing,
+  autosave/reopen and plain-text export were exercised. The schedule retained
+  recognizable Burmese table structure but required date/number and low-
+  confidence block corrections; the photographed mixed-script/handwriting page
+  was also suitable only as an unverified OCR proposal. No source file or
+  application code change was required. Details are in `PROGRESS.md`.
 
 ## 8. AI / BYOK details
 

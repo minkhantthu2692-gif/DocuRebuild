@@ -191,6 +191,13 @@ image processing uses Pillow with no OpenCV dependency.
   evidence, not a population estimate, and a larger set would still be needed
   before generalising. The page-segmentation comparison (Burmese PSM 3 versus
   PSM 11) is reproducible with `--segmentation-mode`.
+- On 27 November 2026, a lightweight supplied-file practical check imported 8
+  PDF pages and 5 JPG scans through the normal workflow. Source rendering, PDF
+  text extraction, OCR review, editing, autosave/reopen and server-side TXT
+  export were exercised. The PDF text was usable, Burmese schedule OCR retained
+  recognizable structure but needed date/number and low-confidence manual
+  review, and handwriting/mixed-script OCR remained unreliable. No code fix or
+  original-file modification was required; `PROGRESS.md` records the check.
 - Optional richer engines (for example PaddleOCR) behind the same adapter, only
   if they can preserve the same review and verification guarantees.
 
