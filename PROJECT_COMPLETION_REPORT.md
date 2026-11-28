@@ -3,11 +3,12 @@
 **Original report date:** 26 November 2026
 **Original snapshot:** v1.1.0 release verification at commit `b0c139d`, following
 the 1.0/1.1 desktop delivery recorded in section 13 and `PROJECT_MEMORY.md`
-**Current state:** 28 November 2026, `main` at `0d2aa0e`, version **1.1.1**
-released from `486688e`; the post-release quality and SHOULD HAVE work is
-committed but not published as a new installer. The current status, completed
-prompt-pack tasks and remaining work are in **section 16** and in
-`CONTINUE_PROMPT.md`.
+**Current state:** 28 November 2026, `main` at the 1.1.2 version/docs commit,
+version **1.1.2** built, smoke-tested and pushed but not published as a GitHub
+release; v1.1.1 remains the published release from `486688e`. The post-release
+quality and prompt-pack work is carried by the locally built 1.1.2 installer.
+The current status, completed prompt-pack tasks and remaining work are in
+**sections 16-17** and in `CONTINUE_PROMPT.md`.
 **Scope of this report:** audit of implemented behaviour, not a plan for new features
 
 **How to read the historical sections:** sections 1-13 describe the v1.1.0
@@ -935,16 +936,16 @@ where supported (the script exits non-zero on failure and writes a JSON report).
 
 ---
 
-## 16. Current status after v1.1.1 (28 November 2026)
+## 16. Status after v1.1.1 (28 November 2026)
 
-This is the current status section. Sections 1-13 remain the historical
-v1.1.0 QA snapshot; sections 14-15 record the post-snapshot MUST HAVE work.
-The prompt pack at
+Sections 1-13 remain the historical v1.1.0 QA snapshot; sections 14-15 record
+the post-snapshot MUST HAVE work. The prompt pack at
 `C:\Users\minkh\Downloads\Telegram Desktop\DocuRebuild_Remaining_Work_Prompts\DocuRebuild_Prompt_Pack`
 defines the remaining tasks. Its `01_MUST_HAVE` and `02_SHOULD_HAVE` series are
-**complete**. The published v1.1.1 installer was built at `486688e`; the task
-work below is committed on `main` at `0d2aa0e` and has **not** been published as
-a new installer.
+**complete**, as are the quick-win audit and all optional evaluations. The
+published v1.1.1 installer was built at `486688e`; the task work below is
+committed on `main` and carried by the locally built, unpublished 1.1.2
+installer described in section 17.
 
 ### 16.1 Completed prompt-pack tasks
 
@@ -968,30 +969,33 @@ and stale-run recovery as open gaps.
 
 ### 16.2 Verification of the current tree
 
-| Check | Result at `0d2aa0e` |
+| Check | Result at the 1.1.2 build |
 | --- | --- |
-| `backend\.venv\Scripts\python.exe -m pytest backend/tests -q` | **450 passed** |
-| `npm run test:web` | **59 files / 364 tests passed** |
+| `backend\.venv\Scripts\python.exe -m pytest backend/tests -q` | **456 passed** (one Starlette deprecation warning) |
+| `npm run test:web` | **60 files / 368 tests passed** |
 | `npm run typecheck` | clean |
 | `npm run lint` | clean |
-| `npm run smoke:desktop` | 12/12 steps passed on the v1.1.1 packaged build; not re-run after the four SHOULD HAVE commits because no packaged payload was rebuilt |
+| `npm run build` | production build clean (inside `npm run desktop:dist`) |
+| `npm run smoke:desktop` | **12/12 steps passed** on the packaged 1.1.2 `win-unpacked` build in 14 s |
 
 Across the four SHOULD HAVE tasks the backend count rose from 439 to 450
 (+1 figure evaluation, +4 equation proposals, +4 nested tables, +2 opaque PDF)
 and the web count from 358 to 364 (+3 equation dialog, +3 nested table dialog).
-Per-task commands, measured numbers, changed files and limitations are recorded
-in `docs/should-have/PROGRESS.md`.
+The read-only cross-page review later raised both suites to the current 456
+backend / 368 web tests. Per-task commands, measured numbers, changed files and
+limitations are recorded in `docs/should-have/PROGRESS.md`,
+`docs/quick-wins/PROGRESS.md` and `docs/optional-future/PROGRESS.md`.
 
-### 16.3 What remains
+### 16.3 Prompt-pack status
 
 | Priority | Item | Status / next action |
 | --- | --- | --- |
-| 1 | `04_QUICK_WINS_AND_REGRESSION_CHECKS/01_Audit_Previously_Requested_Fixes.md` | Not started. Audit each earlier request as VERIFIED/PARTIAL/BROKEN/NOT IMPLEMENTED, then fix at most one confirmed defect. |
-| 2 | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | Not started. Document the safety trade-off and stable identity/versioning before changing the non-persisted proposal design. |
-| 3 | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | Not started. Benchmark-backed decision report first; Tesseract stays the default. |
-| 4 | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | Not started. Official documented APIs only; show unavailable when data is not reliable. |
-| 5 | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | Not started. Measure components before packaging changes; keep `eng`/`mya`/`osd` and licences. |
-| 6 | `03_OPTIONAL_FUTURE/05_macOS_Linux_Feasibility.md` | Not started. Report only; Windows x64 stays the supported target until separately approved. |
+| 1 | `04_QUICK_WINS_AND_REGRESSION_CHECKS/01_Audit_Previously_Requested_Fixes.md` | Done. All seven requests VERIFIED WORKING; no confirmed defect and no code change; `docs/quick-wins/PROGRESS.md`. |
+| 2 | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | Done. Proposals stay derived and non-persisted; the approved read-only cross-page review is implemented in `b7761bd` (bounded, resumable, no batch accept); `docs/optional-future/PROGRESS.md`. |
+| 3 | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | Done. Benchmarked on the real-scan corpus; no Burmese model, mixed accuracy, ~8x sidecar footprint and 13-16x slower pages; decision not to implement; `docs/optional-future/PROGRESS.md`. |
+| 4 | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | Done. Capability matrix, report-only, no provider calls; only OpenAI/Anthropic (admin keys), OpenRouter and DeepSeek have verified official endpoints; `docs/optional-future/PROGRESS.md`. |
+| 5 | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | Done. `electronLanguages: ["en-US"]` applied and verified with a full rebuild plus 12/12 smoke; installer 204.19 -> 195.92 MB; carried into 1.1.2; `docs/optional-future/PROGRESS.md`. |
+| 6 | `03_OPTIONAL_FUTURE/05_macOS_Linux_Feasibility.md` | Done. Feasibility matrix, blockers and effort estimate; report only, no implementation; `docs/optional-future/PROGRESS.md`. |
 
 Also open, but not part of the prompt-pack series: interactive NVDA/Narrator
 pass and code signing (wider-release blockers), OCR cancellation and stale-run
@@ -1008,3 +1012,39 @@ session log. Run **one task per session**, preserve the local-first desktop
 scope, never fabricate results, update the progress docs and CHANGELOG with
 exact evidence, commit only that task, and do not publish a release without an
 explicit owner request and a newly built, verified installer.
+
+## 17. 1.1.2 local build verification (28 November 2026)
+
+Version 1.1.2 was bumped across the root, web, desktop and shared package
+manifests, `package-lock.json`, `backend/app/__init__.py` and
+`backend/pyproject.toml`. A clean `npm run desktop:dist` rebuilt the web client,
+the PyInstaller sidecar and the NSIS payload with the existing bundled Tesseract
+runtime. It produced a **separate** installer,
+`dist/desktop-installer/DocuRebuild-1.1.2-setup.exe`, 205,436,086 bytes (195.92
+MB), SHA-256
+`56BEA0EB38B7017D2EAB143A31DE31CFF917875F1C4030216334B86D15588117`.
+
+The pre-existing locale-trimmed `DocuRebuild-1.1.1-setup.exe` in `dist/` remained
+205,432,372 bytes, SHA-256
+`BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649`; it was not
+overwritten and must not be published as 1.1.1. The **published** 1.1.1 asset is
+a different, earlier file (214,103,864 bytes, SHA-256
+`9CC17F7EDF0138A7FC452844C89B0F2EC653970258F3888A661AB3773FAC13CB`).
+
+Verification after the version bump:
+
+| Check | Result |
+| --- | --- |
+| `backend\.venv\Scripts\python.exe -m pytest backend/tests -q` | 456 passed, 1 warning in 300.92 s |
+| `npm run test:web` | 60 files / 368 tests passed in 112.55 s |
+| `npm run typecheck` | clean |
+| `npm run lint` | clean |
+| `npm run desktop:dist` | 1.1.2 installer built; no code signing certificate configured |
+| `npm run smoke:desktop` | 12/12 steps passed in 14 s on the packaged `win-unpacked` build |
+
+The smoke run covered launch/sidecar authentication, project creation, PDF
+import, source rendering, OCR review/insert, edit/autosave/reopen,
+Markdown/TXT/DOCX/PDF export, backup/restore and clean sidecar shutdown. The
+1.1.2 installer itself was **not** installed on a clean machine and no GitHub
+release was published from it. The published release remains v1.1.1; pushing
+the version bump to `main` does not change that.

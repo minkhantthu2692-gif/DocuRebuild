@@ -4,12 +4,13 @@ This is the durable context file for DocuRebuild. A new AI agent (or a new human
 developer) should be able to read this document and `AGENTS.md`, clone the
 repository, run the checks and continue work without any previous conversation.
 
-Last updated: 2026-11-28 (v1.1.1 released with desktop E2E smoke suite verified;
-optional tasks evaluated: region proposals kept derived with a read-only
-cross-page review (§10 item 16), provider
-quota report-only (§10 item 17), platform posture (§10 item 18); installer
-footprint trimmed and verified (§10 item 19); PaddleOCR evaluated with a
-benchmark-backed decision not to implement (§10 item 20)).
+Last updated: 2026-11-28 (v1.1.2 built, smoke-tested and pushed to `main` but
+not published as a GitHub release; v1.1.1 remains the published release with the
+desktop E2E smoke suite verified. Optional tasks evaluated: region proposals kept
+derived with a read-only cross-page review (§10 item 16), provider quota
+report-only (§10 item 17), platform posture (§10 item 18); installer footprint
+trimmed and verified (§10 item 19); PaddleOCR evaluated with a benchmark-backed
+decision not to implement (§10 item 20)).
 
 ## 1. What the product is
 
@@ -58,7 +59,7 @@ npm run dev
 
 # Build the desktop payload and installer
 npm run desktop:dist
-# -> dist/desktop-installer/DocuRebuild-1.1.1-setup.exe
+# -> dist/desktop-installer/DocuRebuild-1.1.2-setup.exe
 ```
 
 The desktop payload build (`scripts/build-desktop.mjs`) does three things:
@@ -179,7 +180,7 @@ switch to the desktop app.
 
 All four `01_MUST_HAVE` and all four `02_SHOULD_HAVE` prompt-pack tasks are
 complete; per-task evidence is in `docs/should-have/PROGRESS.md`,
-`PROJECT_COMPLETION_REPORT.md` §16 and `CONTINUE_PROMPT.md`. Deferred or partial
+`PROJECT_COMPLETION_REPORT.md` §§16-17 and `CONTINUE_PROMPT.md`. Deferred or partial
 work is listed in `ROADMAP.md`. Notable gaps: a larger real-scan OCR corpus,
 macOS/Linux packaging, code signing, an interactive screen-reader pass (the audit
 itself is done), OCR cancellation/stale-run recovery and account-level AI billing
@@ -372,8 +373,9 @@ AI credentials are configured in the application, not in environment files.
     and the 12/12 `npm run smoke:desktop` suite verified the change: installer
     204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB, locales 48.82 -> 0.56 MB.
     The installer shrinks less than the installed footprint because the dropped
-    files compress well in the NSIS payload. The build is unreleased; the
-    published 1.1.1 asset is unchanged. A slimmer Tesseract build (178.10 MB) is
+    files compress well in the NSIS payload. The build is carried by the locally
+    verified 1.1.2 installer; the published 1.1.1 asset is unchanged. A slimmer
+    Tesseract build (178.10 MB) is
     deferred until a compatible build can be benchmarked and smoke-tested.
     Details: `docs/optional-future/PROGRESS.md`.
 20. **Tesseract stays the sole local OCR engine; PaddleOCR is evaluated and
@@ -410,7 +412,9 @@ build over the DevTools protocol with a disposable data profile. It covers
 launch/sidecar → create project → import PDF → render → OCR/review/insert →
 edit/save/reopen → export → backup/restore → clean shutdown, and exits non-zero
 on failure with a JSON report (`docs/smoke/desktop-smoke.json`, ignored). It
-requires Node 22+ (global `WebSocket`).
+requires Node 22+ (global `WebSocket`). The 1.1.2 packaged `win-unpacked` build
+passed 12/12 steps in 14 s on 28 November 2026; the installer was built but was
+not installed or published in this task.
 
 Installed-build QA (1.0.0, Windows 11 x64, N100/16 GB) is recorded in
 `PROJECT_COMPLETION_REPORT.md`: install/uninstall/reinstall with data retention,
@@ -423,8 +427,8 @@ secret scan.
 ## 12. Known limitations
 
 - Windows x64 only; no macOS/Linux package, no code-signing certificate.
-- Installer ~196 MB, installed footprint ~598 MB in the unreleased
-  locale-trimmed build; the published 1.1.1 asset is ~204 MB / ~650 MB. Tesseract
+- Installer ~196 MB, installed footprint ~598 MB in the 1.1.2 build; the
+  published 1.1.1 asset is ~204 MB / ~650 MB. Tesseract
   (178.10 MB) dominates the remaining size; a slimmer build is deferred.
 - OCR accuracy is measured on synthetic pages and a three-page real-scan corpus;
   the latter has one transcriber, no scored Burmese-only case and is not a
@@ -462,17 +466,23 @@ secret scan.
 
 ## 13. Release state
 
-- Version 1.1.1 everywhere. License AGPL-3.0-or-later.
-- Working tree after the release: `main` contains the four `02_SHOULD_HAVE`
-  commits, the quick-win audit, the optional evaluations, the read-only cross-page
-  region review and the verified locale trimming on top of v1.1.1. Current suite:
-  456 backend / 368 web tests. The
-  locale-trimmed installer (195.92 MB, SHA-256
-  `BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649`) is
-  **unreleased** and must not be published as 1.1.1; a future version should
-  carry it. See `CONTINUE_PROMPT.md` for the next task.
+- Version 1.1.2 everywhere. License AGPL-3.0-or-later.
+- `main` contains the four `02_SHOULD_HAVE` commits, the quick-win audit, the
+  optional evaluations, the read-only cross-page region review, the verified
+  locale trimming and the version bump on top of v1.1.1. Current suite: 456
+  backend / 368 web tests; typecheck, lint and production build clean.
+- The locally built 1.1.2 installer is
+  `dist/desktop-installer/DocuRebuild-1.1.2-setup.exe`, 205,436,086 bytes (195.92
+  MB), SHA-256
+  `56BEA0EB38B7017D2EAB143A31DE31CFF917875F1C4030216334B86D15588117`. It passed
+  12/12 `npm run smoke:desktop` steps on the packaged build in 14 s and is pushed
+  to `main` but **not published** as a GitHub release. The earlier locale-trimmed
+  file named `DocuRebuild-1.1.1-setup.exe` in `dist/` (195.92 MB, SHA-256
+  `BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649`) remains
+  byte-identical and must not be confused with the published 1.1.1 asset below.
+  See `CONTINUE_PROMPT.md` for the next task.
 - Repository: <https://github.com/minkhantthu2692-gif/DocuRebuild>
-- Current release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.1>,
+- Current published release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.1>,
   published 28 November 2026 from tag `v1.1.1` at commit `486688e`, and marked
   latest.
 - 1.1.1 installer asset:
@@ -487,6 +497,10 @@ secret scan.
   accessibility audit, a large-document performance/cancellation drill
   (`docs/performance.md`), and the automated desktop E2E smoke suite
   (`npm run smoke:desktop`). No schema migration.
+- 1.1.2 (unpublished build) adds the read-only cross-page region review, the
+  `en-US`-only Chromium locale trimming and the documented optional-task
+  evaluations (provider quota, macOS/Linux feasibility and the PaddleOCR
+  decision). No schema migration; upgrading keeps existing projects.
 - 1.1.0 history: tag `v1.1.0` at commit `a8baa1b`, published 26 November 2026;
   installer `DocuRebuild-1.1.0-setup.exe`, 214,082,110 bytes, SHA-256
   `EC1DF483F539A0DE40DD862A820FD653E1C406AE12921B58D9B5069131A325F4`. It added

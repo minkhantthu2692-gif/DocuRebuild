@@ -6,6 +6,12 @@ supported 1.0 distribution.
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-11-28
+
+A Windows x64 maintenance build that carries the post-v1.1.1 work in a
+separately versioned installer. The published v1.1.1 release asset is not
+modified or replaced. No schema migration; existing projects are unchanged.
+
 ### Added
 
 - **Cross-page region review.** A new **Review regions across pages** action
@@ -63,13 +69,21 @@ supported 1.0 distribution.
 
 ### Changed
 
+- **Version 1.1.2.** Root, web, desktop and shared package manifests plus
+  `backend/app/__init__.py` and `backend/pyproject.toml` now read 1.1.2. A clean
+  `npm run desktop:dist` produced `DocuRebuild-1.1.2-setup.exe` (205,436,086
+  bytes, 195.92 MB, SHA-256
+  `56BEA0EB38B7017D2EAB143A31DE31CFF917875F1C4030216334B86D15588117`) without
+  touching `DocuRebuild-1.1.1-setup.exe`. The 12/12 `npm run smoke:desktop`
+  suite passed on the packaged build in 14 s. This build is pushed to `main` but
+  has **not** been published as a GitHub release.
 - **Smaller Windows installer.** The packaged build now keeps only the `en-US`
   Chromium locale, removing 54 unused Electron locale files. The English/Burmese
   application UI and the `eng`/`mya`/`osd` OCR languages are unaffected because
   they come from the web bundle and bundled Tesseract. A full
   `npm run desktop:dist` rebuild and the 12/12 `npm run smoke:desktop` suite
   verified the trimmed build: installer 204.19 -> 195.92 MB, installed footprint
-  646.64 -> 598.39 MB, Chromium locales 55 -> 1 file. This build is unreleased;
+  646.64 -> 598.39 MB, Chromium locales 55 -> 1 file. This build ships in 1.1.2;
   the published 1.1.1 asset is unchanged.
 
 ### Documentation
@@ -118,7 +132,9 @@ supported 1.0 distribution.
   paste-ready handover for the optional and quick-win tasks, and updated
   `README.md`, `ROADMAP.md`, `docs/roadmap.md`, `PROJECT_MEMORY.md`,
   `PROJECT_COMPLETION_REPORT.md` §16 and both progress logs. No application
-  behaviour or released installer changed.
+  behaviour changed. For 1.1.2 the same status files were refreshed with the new
+  version, the locally verified installer checksum and the pushed-but-unpublished
+  distinction; `CONTINUE_PROMPT.md` remains the single paste-ready handover.
 
 ## [1.1.1] - 2026-11-28
 

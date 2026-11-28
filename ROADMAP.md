@@ -4,28 +4,43 @@ This is the short, current roadmap for the Windows x64 desktop release.
 `docs/roadmap.md` keeps the detailed phase-by-phase implementation history;
 `PROJECT_MEMORY.md` records architecture and handover context.
 
-Last updated: 2026-11-28 (v1.1.1 released; all `01_MUST_HAVE` and
-`02_SHOULD_HAVE` prompt-pack tasks complete; the quick-win regression audit is
-done with no confirmed defect and no code change; optional tasks 01, 03 and 05
-are evaluated, task 01's approved read-only cross-page review is implemented,
-task 04 is applied and verified, task 02 (PaddleOCR) is evaluated with a
-benchmark-backed decision not to implement, and the installer locale trimming
-cut the unreleased build from 204.19 to 195.92 MB;
-status docs and the paste-ready handover refreshed in `CONTINUE_PROMPT.md`).
+Last updated: 2026-11-28 (v1.1.2 built, smoke-tested and pushed to `main` but
+not published as a GitHub release; v1.1.1 remains the published release. All
+`01_MUST_HAVE` and `02_SHOULD_HAVE` prompt-pack tasks are complete; the quick-win
+regression audit found no defect; optional tasks 01, 03 and 05 are evaluated,
+task 01's approved read-only cross-page review is implemented, task 04 is
+applied and verified, task 02 (PaddleOCR) is evaluated with a decision not to
+implement, and installer locale trimming carried into 1.1.2 cut the build from
+204.19 to 195.92 MB. Status docs and the paste-ready handover are refreshed in
+`CONTINUE_PROMPT.md`).
 
 ## Release status
 
-**DocuRebuild 1.1.1 is the current release for the Windows x64 desktop scope
-(published 28 November 2026).** The installer, bundled OCR, local
+**DocuRebuild 1.1.1 remains the published release for the Windows x64 desktop
+scope (published 28 November 2026).** The installer, bundled OCR, local
 database/storage, BYOK AI, backup/restore and export are implemented and
-verified. Everything below labelled *Complete* ships in
+verified. Everything labelled *Complete* in the 1.x MUST HAVE table ships in
 `DocuRebuild-1.1.1-setup.exe`.
 
-**1.1.1** is a maintenance release over 1.1.0. It adds bounded PDF memory,
+**1.1.2 is built, smoke-tested and pushed to `main`, but no GitHub release has
+been published from it.** Its installer is
+`dist/desktop-installer/DocuRebuild-1.1.2-setup.exe` (205,436,086 bytes, 195.92
+MB, SHA-256
+`56BEA0EB38B7017D2EAB143A31DE31CFF917875F1C4030216334B86D15588117`). It carries
+the post-v1.1.1 work listed below; the published 1.1.1 asset is unchanged.
+
+**1.1.2** is a maintenance build over 1.1.1. It adds the read-only cross-page
+region review, the `en-US`-only Chromium locale trimming, and the documented
+optional-task evaluations (provider quota, macOS/Linux feasibility and the
+PaddleOCR decision). No schema migration; upgrading keeps existing projects.
+The packaged `win-unpacked` build passed 12/12 `npm run smoke:desktop` steps in
+14 s.
+
+**1.1.1** was a maintenance release over 1.1.0. It added bounded PDF memory,
 per-project import serialisation, a real-scan OCR baseline, an accessibility
 audit, a large-document performance/cancellation drill and the automated
-desktop E2E smoke suite (`npm run smoke:desktop`). No schema migration;
-upgrading keeps existing projects. It supersedes `DocuRebuild-1.1.0-setup.exe`.
+desktop E2E smoke suite (`npm run smoke:desktop`). It superseded
+`DocuRebuild-1.1.0-setup.exe`.
 
 **1.0.2** unified checkboxes, switches and radios across the workspace and fixed
 the Edit Image dialog reloading, resetting its controls or flickering during
@@ -217,7 +232,8 @@ and bundled Tesseract. A full `npm run desktop:dist` rebuild and the 12/12
 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB, Chromium locales 55 files
 (48.82 MB) -> 1 file (0.56 MB). The installer shrinks less than the installed
 footprint because the dropped locale files compress well in the NSIS payload.
-This build is unreleased; the published v1.1.1 asset is unchanged. Full evidence:
+This trimmed build now ships in the locally verified 1.1.2 installer; the
+published v1.1.1 asset is unchanged. Full evidence:
 `docs/optional-future/PROGRESS.md`.
 
 **PaddleOCR adapter evaluation (28 November 2026).** With the owner's approval,
@@ -247,7 +263,8 @@ prompt pack are complete. Each task has a detailed evidence section in
 
 Current tree verification: 456 backend tests, 60 web files / 368 tests,
 typecheck, lint and production build clean. These commits are on `main` after
-the v1.1.1 release tag; no installer has been published from them.
+the v1.1.1 release tag; the first packaged build from them is the locally
+verified 1.1.2 installer, which is not published as a GitHub release.
 
 ## Known gaps for a wider (non-Windows) production release
 
@@ -317,7 +334,7 @@ evidence in `docs/should-have/PROGRESS.md`, `docs/quick-wins/PROGRESS.md`,
 | 2 | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | done — evaluation kept proposals derived and non-persisted; the approved read-only cross-page aggregation is implemented (bounded, resumable, no batch accept) with 4 backend + 4 web tests; `docs/optional-future/PROGRESS.md` |
 | 3 | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | done — evaluated on the real-scan corpus; no Burmese model, mixed accuracy, ~8x sidecar footprint and 13–16x slower pages; decision not to implement; `docs/optional-future/PROGRESS.md` |
 | 4 | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | evaluated — capability matrix delivered; report-only, no provider calls; only OpenAI/Anthropic (admin keys), OpenRouter and DeepSeek have verified official endpoints; `docs/optional-future/PROGRESS.md` |
-| 5 | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | done — `electronLanguages: ["en-US"]` applied; verified `desktop:dist` + 12/12 smoke; installer 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB; unreleased; `docs/optional-future/PROGRESS.md` |
+| 5 | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | done — `electronLanguages: ["en-US"]` applied; verified `desktop:dist` + 12/12 smoke; installer 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB; carried into 1.1.2; `docs/optional-future/PROGRESS.md` |
 | 6 | `03_OPTIONAL_FUTURE/05_macOS_Linux_Feasibility.md` | evaluated — platform matrix, blockers and effort estimate; report only, no implementation; `docs/optional-future/PROGRESS.md` |
 
 ## Explicitly out of scope for 1.x
@@ -330,8 +347,8 @@ evidence in `docs/should-have/PROGRESS.md`, `docs/quick-wins/PROGRESS.md`,
 ## Known limitations
 
 See `PROJECT_MEMORY.md` §12 and `CHANGELOG.md` §1.1.0. The headline limits are:
-Windows x64 only, ~196 MB installer / ~598 MB installed (unreleased locale-trimmed
-build; the published 1.1.1 asset is ~204 MB / ~650 MB), a three-page real-scan
+Windows x64 only, ~196 MB installer / ~598 MB installed in the 1.1.2 build
+(the published 1.1.1 asset is ~204 MB / ~650 MB), a three-page real-scan
 OCR corpus (not a population estimate, one transcriber, no scored Burmese-only
 case), page-wide equation proposals depend on OCR equation blocks, nested tables
 are inserted as separate linked tables because the editor has no nested-table

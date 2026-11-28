@@ -14,12 +14,10 @@ of 2026-11-28; do not reconstruct context by re-reading the rest of the docs.
 
 FRESH SESSION CHECKS
 - Working directory: C:\Users\minkh\OneDrive\Desktop\DocuRebuild
-- Run git status -sb and git log --oneline -10. At handover: branch main, HEAD
-  b7761bd ("feat: add read-only cross-page region review"), origin/main in sync.
-  The only expected uncommitted change is this handover consolidation
-  (CONTINUE_PROMPT.md replaces Prompt.md, plus its references in AGENTS.md,
-  README.md, PROJECT_MEMORY.md and docs/roadmap.md). Treat unfamiliar work as
-  the owner's; do not discard it.
+- Run git status -sb and git log --oneline -10. At handover: branch `main`, HEAD
+  is the 1.1.2 version/docs commit on top of `3243e91`, `origin/main` in sync and
+  the working tree clean. Treat unfamiliar work as the owner's; do not discard
+  it.
 - Do not create a new project or re-initialise git.
 - AGENTS.md should already be in your context. If it is absent, read it once;
   otherwise do not re-open the other status documents.
@@ -34,14 +32,22 @@ SCOPE (non-negotiable)
 
 CURRENT VERIFIED STATE
 - Version 1.1.1 is published from commit 486688e. Work after that tag is on main
-  but unreleased; do not publish it.
+  but has not been published as a GitHub release; do not publish it without an
+  explicit owner request.
+- Version 1.1.2 is built, smoke-tested and pushed to main but is **not** published
+  as a GitHub release. The published release remains v1.1.1.
 - Latest checks: 456 backend tests, 60 web files / 368 tests, typecheck, lint and
-  production build clean.
+  production build clean. The packaged 1.1.2 win-unpacked build passed 12/12
+  npm run smoke:desktop steps in 14 s.
 - Published 1.1.1 installer: DocuRebuild-1.1.1-setup.exe, 204.19 MB, SHA-256
   9CC17F7EDF0138A7FC452844C89B0F2EC653970258F3888A661AB3773FAC13CB.
-- Unreleased locale-trimmed installer: 195.92 MB, SHA-256
-  BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649; it passed
-  12/12 npm run smoke:desktop but must not be published as 1.1.1.
+- Locally built 1.1.2 installer: DocuRebuild-1.1.2-setup.exe, 205,436,086 bytes
+  (195.92 MB), SHA-256
+  56BEA0EB38B7017D2EAB143A31DE31CFF917875F1C4030216334B86D15588117. The
+  earlier locale-trimmed file named DocuRebuild-1.1.1-setup.exe in dist/ is
+  195.92 MB, SHA-256
+  BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649, is
+  byte-identical to before the 1.1.2 build and must not be published as 1.1.1.
 
 BASELINE COMMANDS (run before changing behaviour)
   backend\.venv\Scripts\python.exe -m pytest backend/tests -q   # 456 passed
@@ -111,14 +117,20 @@ WORKING RULES
   verified checksum evidence.
 
 SESSION LOG (most recent first; append after each approved task)
-- 2026-11-28 (uncommitted at handover): PaddleOCR adapter evaluation; no Burmese
-  model, v4 mobile 16.35% vs Tesseract 22.64% overall CER but prose/mixed
-  regressions, 137-162 s vs 10.31 s, ~842 MB packages; decision not to
-  implement, no application code change; no release published.
+- 2026-11-28 (uncommitted at handover): version bump to 1.1.2 across all
+  manifests, clean npm run desktop:dist producing the separate
+  DocuRebuild-1.1.2-setup.exe (195.92 MB, 56BEA0EB...88117), 12/12 packaged
+  smoke, 456 backend / 368 web tests, typecheck/lint clean; docs and handover
+  refreshed; pushed to main, no GitHub release published and the 1.1.1 asset
+  untouched.
+- 2026-11-28 3243e91: PaddleOCR adapter evaluation; no Burmese model, v4 mobile
+  16.35% vs Tesseract 22.64% overall CER but prose/mixed regressions, 137-162 s
+  vs 10.31 s, ~842 MB packages; decision not to implement, no application code
+  change; no release published.
 - 2026-11-28 b7761bd: read-only cross-page region review; 456 backend / 60 web
   files / 368 tests; proposals remain derived; no release published.
 - 2026-11-28 419f492: Chromium locales trimmed to en-US; installer 195.92 MB,
-  12/12 smoke; unreleased.
+  12/12 smoke; later carried into the locally built 1.1.2 installer.
 - 2026-11-28 9d115b0: optional quota/footprint/platform evaluations; PaddleOCR
   deferred; no application code change.
 

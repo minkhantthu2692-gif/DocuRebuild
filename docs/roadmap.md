@@ -25,17 +25,22 @@ win.
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, multi-line Word equations, footnotes, per-project page headers/footers, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop distribution | **Complete for Windows** | Electron shell with a bundled PyInstaller sidecar, loopback-only API with a per-launch bearer token, bundled Tesseract with `eng`/`mya`, per-user NSIS installer, and smoke tests for the packaged backend. Mobile, PWA and device pairing are out of scope for 1.0 |
-| 11. Final QA and production release | **Complete for Windows 1.1.1** | Versioned GitHub Release, AGPL-3.0 licensing, third-party notices, changelog, reproducible OCR and figure baselines, installer QA, security/performance drills and the desktop E2E smoke suite are done; wider-release gaps are tracked in the root `ROADMAP.md` |
+| 11. Final QA and production release | **Complete for Windows 1.1.2 build; v1.1.1 remains published** | Versioned v1.1.1 GitHub Release, AGPL-3.0 licensing, third-party notices, changelog, reproducible OCR and figure baselines, installer QA, security/performance drills and the desktop E2E smoke suite are done; a locally verified 1.1.2 installer exists but is not published. Wider-release gaps are tracked in the root `ROADMAP.md` |
 
 ## Post-1.1.1 status
 
-The four `01_MUST_HAVE` and four `02_SHOULD_HAVE` prompt-pack tasks are
-complete on `main` at `0d2aa0e` (450 backend tests, 59 web files / 364 tests,
-typecheck and lint clean). Their evidence, commands and limitations are in
-`PROJECT_COMPLETION_REPORT.md` §§13-16 and `docs/should-have/PROGRESS.md`. The
-remaining optional and quick-win tasks are resumable one per session through
-`CONTINUE_PROMPT.md`; the current installer is still v1.1.1, built before the
-SHOULD HAVE commits.
+The four `01_MUST_HAVE` and four `02_SHOULD_HAVE` prompt-pack tasks are complete,
+along with the quick-win audit and all optional evaluations. `main` is at the
+1.1.2 version/docs commit with 456 backend tests, 60 web files / 368 tests,
+typecheck, lint and production build clean. Evidence, commands and limitations
+are in `PROJECT_COMPLETION_REPORT.md` §§13-17, `docs/should-have/PROGRESS.md`,
+`docs/quick-wins/PROGRESS.md` and `docs/optional-future/PROGRESS.md`. All
+prompt-pack work is done; remaining items are recorded gaps, not tasks unless
+approved. `CONTINUE_PROMPT.md` is the single paste-ready handover. The locally
+built installer is `DocuRebuild-1.1.2-setup.exe` (195.92 MB, SHA-256
+`56BEA0EB38B7017D2EAB143A31DE31CFF917875F1C4030216334B86D15588117`), smoke
+tested 12/12 on the packaged build but not published as a GitHub release;
+v1.1.1 remains the published release.
 
 ---
 

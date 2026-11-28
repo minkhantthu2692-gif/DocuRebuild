@@ -539,10 +539,11 @@ Measured result:
 | Chromium `locales/` | 55 files, 48.82 MB | 1 file (`en-US.pak`), 0.56 MB | -48.26 MB |
 
 The installer shrinks less than the installed footprint because the dropped
-locale `.pak` files compress well inside the NSIS 7z payload. The new installer's
-SHA-256 is
-`BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649`
-(unpublished; the published v1.1.1 asset is unchanged).
+locale `.pak` files compress well inside the NSIS 7z payload. The trimmed
+`DocuRebuild-1.1.1-setup.exe` in `dist/` has SHA-256
+`BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649`; it was not
+published as 1.1.1 and remained byte-identical when the separately versioned
+1.1.2 installer was built.
 
 **Why this is safe:** Electron's native UI strings are English; the
 application's English/Burmese UI and all OCR languages (`eng`, `mya`, `osd`) come
@@ -555,9 +556,9 @@ on the trimmed build. No OCR language, feature or security property was removed.
 dominated by `libtesseract-5.dll` and ICU) would need a compatible build plus a
 re-run of the OCR benchmark and smoke suite; it is deferred.
 
-**Decision:** the locale trimming is applied and verified. The unreleased build
-must not be published as 1.1.1; a future release (for example 1.1.2) should carry
-it.
+**Decision:** the locale trimming is applied and verified. The locale-trimmed
+build is now carried by the locally verified 1.1.2 installer, which is pushed to
+`main` but not published as a GitHub release; it must not be published as 1.1.1.
 
 ---
 
@@ -709,7 +710,7 @@ The approved next step, a read-only cross-page aggregation, is now implemented.
   `npm run smoke:desktop` cycle. Installer 204.19 -> 195.92 MB; installed
   646.64 -> 598.39 MB; Chromium locales 55 -> 1. Smoke passed 12/12 in 14 s with
   0 console errors. Only `apps/desktop/package.json` changed in the application;
-  the build is unreleased.
+  the build is now carried by the locally built, unpublished 1.1.2 installer.
 - 2026-11-28: Task 02 evaluated with the owner's approval. Installed PaddleOCR
   3.7.0 / PaddlePaddle 3.3.1 in a throwaway venv, confirmed there is no Burmese
   model, and scored its English output on the real-scan corpus with the
