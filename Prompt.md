@@ -10,13 +10,11 @@ Read the root "AGENTS.md" first and follow its instructions.
 
 Do not start implementing the application yet. First, create a complete and technically realistic project specification.
 
-> **Implementation status (2026-11-21).** This document is the original product
-> specification and phased plan. The shipped 1.0 scope is a **Windows x64 desktop
-> application** (Electron + bundled Python sidecar). Mobile, PWA, camera import
-> and device pairing were evaluated and are explicitly out of scope for 1.0;
-> paragraphs that describe them are retained as future product thinking, not as
-> current requirements. Current status and decisions live in `PROJECT_MEMORY.md`
-> and `ROADMAP.md`.
+> **Implementation status (2026-11-28).** This document is the original product specification and phased plan; it is not a task tracker. The shipped and verified 1.0 distribution is a **Windows x64 desktop application** (Electron + bundled Python sidecar). Mobile, PWA, camera import, device pairing, cloud storage, collaboration, and Tauri are explicitly out of scope for 1.0; paragraphs that describe them are retained as future product thinking, not as current requirements.
+>
+> All prompt-pack implementation tasks are complete. The seven earlier quick-win/should-have requests were re-audited on 2026-11-28 and verified working with no confirmed defects. Baseline checks passed: 450 backend tests, 364 web tests, typecheck, lint, and the packaged desktop smoke test. Remaining items are explicitly deferred or optional.
+>
+> Current status and decisions live in `PROJECT_MEMORY.md`, `ROADMAP.md`, `CONTINUE_PROMPT.md`, `docs/quick-wins/PROGRESS.md`, and `docs/should-have/PROGRESS.md`. A fresh OpenCode CLI session loads these automatically through `AGENTS.md` and the root `opencode.jsonc`. When this specification conflicts with the shipped code or the handover files, the code and `PROJECT_MEMORY.md` win.
 
 1. Product Vision
 

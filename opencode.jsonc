@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTINUE_PROMPT.md",
+    "PROJECT_MEMORY.md",
+    "ROADMAP.md",
+    "docs/quick-wins/PROGRESS.md",
+    "docs/should-have/PROGRESS.md"
+  ]
+}
