@@ -15,9 +15,9 @@ of 2026-11-28; do not reconstruct context by re-reading the rest of the docs.
 FRESH SESSION CHECKS
 - Working directory: C:\Users\minkh\OneDrive\Desktop\DocuRebuild
 - Run git status -sb and git log --oneline -10. At handover: branch `main`, HEAD
-  is the 1.1.2 version/docs commit on top of `3243e91`, `origin/main` in sync and
-  the working tree clean. Treat unfamiliar work as the owner's; do not discard
-  it.
+  is `aefc5ed` (equation LaTeX normalisation) on top of `8b1357f`, `origin/main`
+  in sync and the working tree clean. Treat unfamiliar work as the owner's; do
+  not discard it.
 - Do not create a new project or re-initialise git.
 - AGENTS.md should already be in your context. If it is absent, read it once;
   otherwise do not re-open the other status documents.
@@ -36,7 +36,7 @@ CURRENT VERIFIED STATE
   explicit owner request.
 - Version 1.1.2 is built, smoke-tested and pushed to main but is **not** published
   as a GitHub release. The published release remains v1.1.1.
-- Latest checks: 456 backend tests, 60 web files / 368 tests, typecheck, lint and
+- Latest checks: 468 backend tests, 60 web files / 369 tests, typecheck, lint and
   production build clean. The packaged 1.1.2 win-unpacked build passed 12/12
   npm run smoke:desktop steps in 14 s.
 - Published 1.1.1 installer: DocuRebuild-1.1.1-setup.exe, 204.19 MB, SHA-256
@@ -50,8 +50,8 @@ CURRENT VERIFIED STATE
   byte-identical to before the 1.1.2 build and must not be published as 1.1.1.
 
 BASELINE COMMANDS (run before changing behaviour)
-  backend\.venv\Scripts\python.exe -m pytest backend/tests -q   # 456 passed
-  npm run test:web                                             # 368 tests / 60 files
+  backend\.venv\Scripts\python.exe -m pytest backend/tests -q   # 468 passed
+  npm run test:web                                             # 369 tests / 60 files
   npm run typecheck
   npm run lint
   npm run build                 # UI changes
@@ -117,6 +117,16 @@ WORKING RULES
   verified checksum evidence.
 
 SESSION LOG (most recent first; append after each approved task)
+- 2026-11-28 aefc5ed: equation extraction starts from normalised LaTeX instead
+  of raw OCR text; new `backend/app/services/equation_latex.py` rebuilds the
+  source from the stored OCR word boxes (superscripts/subscripts) and maps
+  Unicode math to commands (`cos²(2θ)` -> `\cos^2(2\theta)`), never guessing a
+  misread character, and the optional AI equation prompt now preserves
+  fractions/scripts/brackets/pre-equals terms; proposal `latex` field added
+  through schema, shared type and the review dialog; 468 backend / 60 web files
+  / 369 tests, typecheck, lint and build clean; pushed to main, no release
+  published. Known gap unchanged: `_is_equation` needs >=2 math symbols, so
+  `I(2θ) =` alone stays a paragraph and is excluded from the region.
 - 2026-11-28 (uncommitted at handover): version bump to 1.1.2 across all
   manifests, clean npm run desktop:dist producing the separate
   DocuRebuild-1.1.2-setup.exe (195.92 MB, 56BEA0EB...88117), 12/12 packaged
