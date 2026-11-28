@@ -6,7 +6,7 @@ DocuRebuild turns scans, photographs and PDF documents into accurate, structured
 and editable documents. It keeps original source files immutable, keeps project
 data on your device, and treats every AI result as a reviewable proposal.
 
-> **Project status — 1.0 desktop release.**
+> **Project status — v1.1.1 desktop release (28 November 2026).**
 > DocuRebuild installs as a Windows desktop application and needs no Node.js,
 > Python or development tools. The installer bundles the local API, the web
 > client, Tesseract OCR with English and Burmese language data, and every Python
@@ -29,15 +29,20 @@ data on your device, and treats every AI result as a reviewable proposal.
 > needs explicit consent. Paid routes ask for approval before each request, and the
 > core application remains usable without any provider or credential. Every AI reply
 > is a proposal that must be accepted or rejected; nothing is inserted silently.
-> Image generation and page-wide automatic equation/figure reconstruction are
-> **not implemented yet** and are marked as unavailable in the UI. Nothing in this
-> repository fakes those features.
+> Page-wide figure, table, equation and opaque-PDF proposals are implemented as
+> reviewable candidates; nothing is inserted or transcribed automatically. Image
+> generation, generative figure reconstruction and automatic AI equation
+> transcription across a page are **not implemented**. Nothing in this repository
+> fakes those features. For the current status, completed prompt-pack tasks and
+> remaining work, see [`ROADMAP.md`](ROADMAP.md),
+> [`PROJECT_COMPLETION_REPORT.md` §16](PROJECT_COMPLETION_REPORT.md) and
+> [`CONTINUE_PROMPT.md`](CONTINUE_PROMPT.md).
 
 ---
 
 ## Install the desktop app
 
-1. Run `DocuRebuild-1.1.0-setup.exe` from the
+1. Run `DocuRebuild-1.1.1-setup.exe` from the
    [latest release](https://github.com/minkhantthu2692-gif/DocuRebuild/releases/latest).
    The release notes publish the SHA-256 checksum.
 2. The installer creates a per-user installation and a Start menu shortcut. It
@@ -52,7 +57,7 @@ What the installer bundles:
 - the built web client;
 - Tesseract 5.4 with `eng` and `mya` language data.
 
-The download is about 202 MB and installs about 643 MB, because the OCR engine
+The download is about 204 MB and installs about 650 MB, because the OCR engine
 and the Python runtime ship offline. Projects, backups and the vault stay in
 `%LOCALAPPDATA%\DocuRebuild\DocuRebuild`, so reinstalling keeps them.
 
@@ -274,10 +279,12 @@ is needed only for optional cloud AI providers; everything else works offline.
 
 ### Not available yet
 
-Automatic page-wide equation transcription, generative figure detection, provider
-billing/quota verification against an account and image generation are planned but
-not implemented. DocuRebuild 1.0 is a Windows desktop application; mobile, PWA and
-device pairing are out of scope rather than pending. Provider pricing is not invented:
+Automatic AI equation transcription across a page, generative figure detection,
+provider billing/quota verification against an account and image generation are not
+implemented. Page-wide figure, equation, table and opaque-PDF proposals do exist,
+but they are reviewable candidates, never automatic edits. DocuRebuild 1.1 is a
+Windows desktop application; mobile, PWA and device pairing are out of scope rather
+than pending. Provider pricing is not invented:
 a cost is recorded only when the provider reports a price or token counts that the
 app can verify, and a monthly budget is a local gate on that recorded spend, not a
 provider-side billing control. OCR extracts text blocks, reading order and
@@ -285,11 +292,12 @@ conservative layout hints. It can turn a block the layout labels as a table into
 reviewable cell grid derived from its word boxes, group vertically contiguous
 paragraph blocks into one page-level candidate, and read a PDF's drawn table rules so
 merged cells keep exactly the shape the document drew. It never inserts a grid on its
-own, never invents a cell, and does not transcribe equations across a page. A saved
-table crop can be read into a structured grid locally, using its drawn cell borders
-when present, or by a routed vision model as an optional second method, but nested
-tables, merged-cell detection for text-only tables and page-wide table detection are
-not implemented. Region
+own and never invents a cell; page-wide equation candidates are listed for review but
+never transcribed automatically. A saved table crop can be read into a structured grid
+locally, using its drawn cell borders when present, or by a routed vision model as an
+optional second method, and drawn nested grids are linked as separate tables. Merged
+cells in text-only tables and nesting visible only in word boxes still need manual
+reconstruction. Region
 extraction produces exact pixel crops and can read their plain text locally; the
 table reader is what turns a table crop into cells. Equation markup comes only from
 manual typing or the formula dialog's explicit,
@@ -363,12 +371,15 @@ docs/
   architecture.md       Modules, storage layout, data model, API surface
   roadmap.md            Detailed phase-by-phase implementation history
   ocr-benchmark.md      OCR methodology and measured results
+  figure-detection.md   Figure proposal evaluation method and results
+  should-have/PROGRESS.md  Resumable record for the completed SHOULD HAVE tasks
   AiSessionRedesign.txt AI workspace design notes
 .github/
   workflows/            CI, CodeQL and dependency-update automation
   ISSUE_TEMPLATE/       Bug and feature request forms
 start-docurebuild.bat   Windows one-click development launcher
 AGENTS.md               Permanent instructions for AI coding agents
+CONTINUE_PROMPT.md      Paste-ready handover for the next chat or agent
 PROJECT_MEMORY.md       Architecture, decisions, status and handover context
 ROADMAP.md              Current completion status and deferred features
 CHANGELOG.md            Release history
@@ -719,9 +730,10 @@ Rules that keep a proposal honest:
   candidates per page. A larger or unusable grid is refused with a typed error
   instead of being truncated.
 - AI reading of one saved table crop returns text only: merged cells are not
-  reconstructed from a model reply, and nested tables are not supported. A
-  word-box proposal remains a plain grid the user can edit after insertion; the local
-  reader is what recovers merges from a crop's drawn borders.
+  reconstructed from a model reply, and an AI table reply does not detect nesting.
+  Drawn nested grids are linked by the deterministic page-wide endpoint, not by the
+  model. A word-box proposal remains a plain grid the user can edit after insertion;
+  the local reader is what recovers merges from a crop's drawn borders.
 
 ### Document export
 
@@ -1054,7 +1066,7 @@ provider.
 npm run desktop:build
 
 # Installer in dist/desktop-installer
-npm run desktop:dist   # -> DocuRebuild-1.1.0-setup.exe
+npm run desktop:dist   # -> DocuRebuild-1.1.1-setup.exe
 
 # Run the Electron shell against an existing dist/desktop payload
 npm run desktop:start
@@ -1149,17 +1161,19 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 
 ## Known limitations
 
-- **Platform.** 1.0 ships for Windows x64 only. The installer is not code-signed,
+- **Platform.** 1.1 ships for Windows x64 only. The installer is not code-signed,
   so Windows SmartScreen may warn on first run. macOS and Linux packaging are not
   available.
-- **Size.** The installer is about 202 MB and installs about 643 MB because
+- **Size.** The installer is about 204 MB and installs about 650 MB because
   Chromium, the Python runtime and Tesseract ship offline. Trimming them is future
   work.
 - **Release QA.** The installed build was exercised manually and over the DevTools
-  protocol. There is no automated desktop end-to-end suite, and keyboard-only and
-  screen-reader passes are still outstanding; colour contrast is automated.
-- The editor covers core rich text, manual tables, equations and footnotes, not the
-  full target model (page layout is pending). Figures are supported as
+  protocol, and `npm run smoke:desktop` now automates the main journey with
+  disposable profiles. Contrast, keyboard/focus and dialog behaviour are tested;
+  an interactive NVDA/Narrator pass is still outstanding because those tools were
+  unavailable. No full WCAG certification is claimed.
+- The editor covers core rich text, manual tables, equations and footnotes; it does
+  not reconstruct the original scan's page geometry. Figures are supported as
   block image nodes from the region library; their caption and alt text can be
   edited, an optional figure number can be generated, and numbered figures can be
   cited from the text. A citation is a resolved `Figure n` label, not a clickable
@@ -1232,13 +1246,13 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 - OCR quality depends on the installed Tesseract version, traineddata and page
   quality. Burmese text is especially difficult; layout labels are heuristics and
   are never presented as certain structure. Accuracy can be measured with the local
-  benchmark harness, but no figures are published until fixtures from real documents
-  have been scored. A table label only marks a text grid, and the optional cell-grid
-  proposal derives rows and columns from word-box geometry, or from the drawn borders
-  when the table is ruled; merged cells come only from drawn rules (a PDF's vector
-  geometry or a scanned page's or saved crop's visible borders), and nested tables or
-  uneven spacing can still produce a wrong shape, which is why every cell must be
-  reviewed before insertion. Equations
+  benchmark harness, and both synthetic and real scans are published in
+  `docs/ocr-benchmark.md`. A table label only marks a text grid, and the optional
+  cell-grid proposal derives rows and columns from word-box geometry, or from the
+  drawn borders when the table is ruled; merged cells come only from drawn rules (a
+  PDF's vector geometry or a scanned page's or saved crop's visible borders), and a
+  nesting visible only in word boxes or uneven spacing can still produce a wrong
+  shape, which is why every cell must be reviewed before insertion. Equations
   are never transcribed automatically; one saved crop can be transcribed on request.
 - Region extraction itself does not use a vision model. Suggestions are deterministic
   heuristics over the latest OCR text layout, on PDF pages over embedded raster
@@ -1306,17 +1320,18 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 1. Local storage and project management | Complete |
 | 2. Main UI and workspace | Complete |
 | 3. Import and image processing | Complete |
-| 4. Local OCR and layout detection | In progress: OCR, layout hints, reviewable table proposals, a local CER/WER benchmark with committed synthetic and real-scan fixtures and measured results in `docs/ocr-benchmark.md`, and user-selectable page segmentation done; figure detection in the OCR layout and a larger real-scan corpus pending |
-| 5. Element extraction | In progress: manual region crop, local region text extraction, heuristic region suggestions, library, verification and figure/text insertion done; structured table reconstruction from one saved crop (local OCR or AI) done, page-wide table detection pending |
-| 6. AI integration and free usage first | In progress: unified BYOK provider platform with local Ollama, custom OpenAI-compatible and 12 cloud adapters, dynamic model discovery, multiple connections and encrypted keys, key rotation and cooldown, per-task routing with a fallback, remote-consent and HTTPS boundary, daily/task/connection limits, verified-cost budget, metadata-only usage ledger and history browser, reviewable OCR text cleanup, optional vision region proposals, one-crop equation transcription and one-crop table reading done; account-level billing/quota verification and page-wide automatic reconstruction pending |
-| 7. Table, figure and equation reconstruction | In progress: manual editable tables with row/column/header tools, merge/split, reviewable automatic table proposals from OCR word boxes, merged-cell spans read from PDF vector rules or a scanned page's or saved crop's drawn borders, structured reading of one saved table crop with local OCR or an optional vision model, editable figure captions with optional figure numbering and cross-references, and user-typed display and inline equations with local preview, optional equation numbering and cross-references, plus faithful table/equation export to Markdown, TXT, Word and PDF; page-wide tables, nested tables and page-wide equation extraction pending |
+| 4. Local OCR and layout detection | Complete for Windows: OCR, layout hints, reviewable table proposals, a local CER/WER benchmark with synthetic and real-scan fixtures and measured results in `docs/ocr-benchmark.md`, user-selectable page segmentation, and page-wide figure proposals scored in `docs/figure-detection.md`; a larger real-scan corpus remains optional |
+| 5. Element extraction | Complete for Windows: manual region crop, local region text extraction, heuristic/embedded-PDF/vector/raster-page and opaque-PDF figure suggestions, library, verification and insertion, structured table reconstruction from one saved crop (local OCR or AI), and page-wide table, nested-table and equation proposals for review |
+| 6. AI integration and free usage first | Complete for the supported scope: unified BYOK provider platform with local Ollama, custom OpenAI-compatible and 12 cloud adapters, dynamic model discovery, encrypted keys, rotation/cooldown/failover, per-task routing with a fallback, consent/HTTPS boundary, limits/budget, metadata-only usage ledger, and reviewable OCR/vision proposals; account-level billing/quota verification and optional engines are future work |
+| 7. Table, figure and equation reconstruction | Complete for the supported scope: editable tables with merge/split, page-wide table proposals from word boxes and drawn rules, drawn nested grids linked as separate tables, figure numbering/citations, page-wide figure and equation proposals, typed LaTeX with KaTeX preview/numbering/citations, one-crop transcription on request, and faithful export to Markdown, TXT, Word and PDF; automatic AI acceptance is never performed |
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
 | 9. History, backup and recovery | **Complete**: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop distribution | **Complete for Windows**: Electron shell with a bundled Python sidecar, loopback-only API with a per-launch token, bundled Tesseract, and a per-user NSIS installer. Mobile, PWA and device pairing are out of scope |
-| 11. Final QA and production release | **Complete for Windows 1.0**: desktop smoke tests, version 1.0.0, AGPL-3.0 licensing, third-party notices, performance/security drills and a GitHub Release. Wider-release gaps are listed in `ROADMAP.md` |
+| 11. Final QA and production release | **Complete for Windows 1.1.1**: desktop smoke tests, versioned GitHub Release, AGPL-3.0 licensing, third-party notices, performance/security drills, real-scan OCR and accessibility evidence. Wider-release gaps are listed in `ROADMAP.md` |
 
 Current status, remaining work and deferred features are summarised in
-[`ROADMAP.md`](ROADMAP.md). Detailed criteria and design decisions are in
+[`ROADMAP.md`](ROADMAP.md) and [`CONTINUE_PROMPT.md`](CONTINUE_PROMPT.md).
+Detailed criteria and design decisions are in
 [`docs/roadmap.md`](docs/roadmap.md), [`docs/architecture.md`](docs/architecture.md)
 and [`PROJECT_MEMORY.md`](PROJECT_MEMORY.md).
 

@@ -17,14 +17,24 @@ win.
 | 1. Local storage and project management | **Complete** | App/project DBs, folders, manifest, CRUD, trash |
 | 2. Main UI and workspace | **Complete** | Header navigation, dashboard, two-panel workspace, settings, i18n |
 | 3. Import and image processing | **Complete** | Image + PDF import, background jobs with progress/cancellation, rotation and non-destructive image adjustments |
-| 4. Local OCR and layout detection | **In progress** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates), deterministic figure suggestions from embedded PDF images and vector drawings, a local CER/WER benchmark with committed synthetic and real-scan English, Burmese and mixed fixtures, user-selectable page segmentation and measured results in `docs/ocr-benchmark.md` done; a larger real-scan corpus and figure detection in the OCR layout pending |
-| 5. Element extraction | **In progress** | Manual region crop, local region text extraction, OCR-layout, embedded-PDF-image, vector-drawing and raster-page ink region suggestions with a named source in the extraction dialog, library, verification and figure/text insertion, reviewed equation crops inserted as real equations, on-demand AI transcription of one equation crop into reviewable LaTeX, and structured table reconstruction from one saved crop locally (drawn rules or word boxes) and with AI done; page-wide table detection pending |
+| 4. Local OCR and layout detection | **Complete for Windows 1.1.x** | Tesseract adapter, review UI, layout hints, overlay, reviewable word-box table proposals (single block and page-level cross-block candidates), deterministic figure suggestions from embedded PDF images, vector drawings and opaque rendered pages, page-wide figure proposals evaluated in `docs/figure-detection.md`, a local CER/WER benchmark with synthetic and real-scan fixtures in `docs/ocr-benchmark.md`, and user-selectable page segmentation; a larger real-scan corpus remains optional |
+| 5. Element extraction | **Complete for Windows 1.1.x** | Manual region crop, local region text extraction, OCR-layout, embedded-PDF-image, vector-drawing and raster-page ink suggestions with a named source, library, verification and insertion, reviewed equation crops, on-demand one-crop AI transcription, and structured table reconstruction from one saved crop locally or with AI; page-wide table, nested drawn-table, equation and opaque-PDF proposals are now available for review |
 | 6. AI integration and free usage first | **In progress** | Unified BYOK provider platform with local Ollama, custom OpenAI-compatible and 12 cloud adapters, dynamic model discovery, multiple connections and encrypted keys, key rotation/cooldown/failover, per-task routing with fallbacks, remote-consent and HTTPS boundary, daily/task/connection limits, verified-cost budget, metadata-only usage ledger and history, reviewable OCR cleanup, optional vision region proposals, equation-crop transcription and table-crop reading done; account-level billing/quota verification pending |
-| 7. Table, figure and equation reconstruction | **In progress** | Manual editable tables with empty-cell insertion, row/column/header tools and merge/split, reviewable automatic table proposals from OCR word boxes including page-level grouping of row blocks, per-cell alignment and pre-insert cell correction, merged cells from a PDF's drawn rules and from a scanned page's or saved crop's visible cell borders, structured reading of one saved table crop with local OCR or an optional vision model, editable figure captions with optional generated figure numbers and prose cross-references, user-typed display and inline equations with local KaTeX preview, optional equation numbering and prose cross-references, inserting a reviewed equation crop as a real numbered equation, optional vision-model transcription of one saved equation crop into reviewable LaTeX, and faithful Markdown/TXT/Word/PDF export; merged-cell detection for text-only tables and automatic page-wide equation recognition pending |
+| 7. Table, figure and equation reconstruction | **Complete for the supported scope** | Manual editable tables with merge/split, reviewable page-wide table proposals from word boxes and drawn rules, nested drawn grids linked as separate tables with a provenance note, per-cell alignment and correction, merged cells from drawn borders, local/AI reading of one saved crop, figure captions/numbers/citations, typed LaTeX with KaTeX preview and numbering/citations, page-wide equation and figure proposals for review, one-crop transcription on request, and faithful Markdown/TXT/Word/PDF export; merged-cell inference for text-only tables and automatic AI acceptance remain out of scope |
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, multi-line Word equations, footnotes, per-project page headers/footers, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop distribution | **Complete for Windows** | Electron shell with a bundled PyInstaller sidecar, loopback-only API with a per-launch bearer token, bundled Tesseract with `eng`/`mya`, per-user NSIS installer, and smoke tests for the packaged backend. Mobile, PWA and device pairing are out of scope for 1.0 |
-| 11. Final QA and production release | **Complete for Windows 1.0** | Version 1.0.0, AGPL-3.0 licensing, third-party notices, changelog, reproducible OCR baseline, installer QA and security/performance drills are done; wider-release gaps are tracked in the root `ROADMAP.md` |
+| 11. Final QA and production release | **Complete for Windows 1.1.1** | Versioned GitHub Release, AGPL-3.0 licensing, third-party notices, changelog, reproducible OCR and figure baselines, installer QA, security/performance drills and the desktop E2E smoke suite are done; wider-release gaps are tracked in the root `ROADMAP.md` |
+
+## Post-1.1.1 status
+
+The four `01_MUST_HAVE` and four `02_SHOULD_HAVE` prompt-pack tasks are
+complete on `main` at `0d2aa0e` (450 backend tests, 59 web files / 364 tests,
+typecheck and lint clean). Their evidence, commands and limitations are in
+`PROJECT_COMPLETION_REPORT.md` §§13-16 and `docs/should-have/PROGRESS.md`. The
+remaining optional and quick-win tasks are resumable one per session through
+`CONTINUE_PROMPT.md`; the current installer is still v1.1.1, built before the
+SHOULD HAVE commits.
 
 ---
 
@@ -172,16 +182,17 @@ image processing uses Pillow with no OpenCV dependency.
 
 **Remaining before completion**
 
-- Figure (image region) detection inside the OCR layout. The classifier never
-  guesses a figure; Phase 5 approximates the band above a figure-like caption, but
-  this phase does not mark figures itself.
-- Nested tables and page-wide automatic table reading. Cross-block grouping covers
-  vertically contiguous row blocks, a PDF page's drawn rules and a scanned page's or
-  saved crop's visible cell borders provide exact merged-cell spans, and one saved
-  table crop can also be read with a vision model on request, but a candidate with no
-  drawn or usable rules remains a plain grid, a nested table is not separated from its
-  parent, and a hand-corrected block is a barrier instead of being bridged.
-  Page-wide equation detection and transcription are still pending.
+- Figure (image region) detection. Completed after v1.1.1: figure proposals are
+  assembled from OCR layout, embedded PDF images, vector drawings, raster-page ink
+  and opaque rendered pages, scored with IoU in `docs/figure-detection.md`, and
+  always reviewed before insertion. A caption band is still an estimate.
+- Nested tables and page-wide automatic table reading. Completed after v1.1.1 for
+  drawn grids: page-wide candidates group row blocks, read PDF/raster/crop rules for
+  merged spans, and link a drawn child grid to its parent cell as a separate table.
+  A candidate with no drawn or usable rules remains a plain grid, OCR-only nesting
+  stays manual, and a hand-corrected block is still a barrier instead of being
+  bridged. Page-wide equation candidates are now listed from OCR equation blocks;
+  automatic transcription and acceptance are deliberately not performed.
 - OCR accuracy benchmarks (CER/WER) for English, Burmese and mixed pages. A
   local harness, committed synthetic fixtures and a measured baseline now exist
   in `docs/ocr-benchmark.md`. A three-page public-domain real-scan corpus with
@@ -492,25 +503,26 @@ never claims a provider is free and never estimates a price it cannot support.
   `\[Image: alt\]`/`[Image: alt]` rather than an unusable local path, while Word and
   PDF embed the actual asset inline.
 
-**Pending**
+**Completed after v1.1.1**
 
-- Automatic table extraction beyond deterministic word-box grouping, drawn rules and
-  one saved crop: page-wide automatic detection and nested tables remain pending,
-  always as a reviewable proposal that is never inserted without approval. Cross-block
-  grouping, merged-cell spans from a PDF's vector rules, merged spans from a saved
-  crop's borders, and local or AI reading of a saved region are delivered.
-- Optional structured figure reconstruction with approval. Figure numbering, prose
+- Page-wide table detection across row blocks and drawn rules, and nested drawn
+  grids linked to a parent cell as separate reviewable tables. OCR word-box nesting
+  and merged-cell inference for text-only tables remain manual.
+- Page-wide figure proposals from embedded images, vector art, raster ink and opaque
+  PDF pages, evaluated in `docs/figure-detection.md`; figure numbering, prose
   cross-references and inline images are delivered.
-- Automatic equation recognition from OCR or vision across a page as a reviewable
-  proposal. Word export now converts typed equations to native OMML, a reviewed
-  equation region can be inserted as a real equation, and one saved crop can be
-  transcribed on request; page-wide detection and automatic acceptance remain
-  pending.
-- Uncertain table cells are flagged in the proposal and must be acknowledged before
-  insertion, and an empty source cell is never filled in. An AI-read grid has no
-  confidence score at all, so it needs the same acknowledgement for every cell.
-  Page-wide equation recognition is still pending, so no symbol enters the document
-  without the user's own transcription.
+- Page-wide equation candidates from OCR equation blocks, listed in reading order.
+  Word export converts typed equations to native OMML, a reviewed equation crop can
+  be inserted as a real equation, and one saved crop can be transcribed on request;
+  automatic transcription or acceptance is never performed.
+
+**Still open**
+
+- Uncertain table cells are flagged and must be acknowledged before insertion, and
+  an empty source cell is never filled in. An AI-read grid has no confidence score,
+  so it needs the same acknowledgement for every cell. A page-wide equation candidate
+  supplies OCR text as a starting point, but no symbol enters the document without
+  the user's own review.
 
 ## Phase 8 — Document editor and export (complete)
 

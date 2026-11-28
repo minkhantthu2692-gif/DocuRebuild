@@ -22,19 +22,24 @@ Working rules for every task (from the prompt pack):
 
 | # | Task | Status | Commit |
 | --- | --- | --- | --- |
-| 01 | Page-wide figure detection | done | this task commit |
-| 02 | Page-wide equation proposals | done | this task commit |
-| 03 | Nested table separation | done | this task commit |
-| 04 | Opaque PDF drawing extraction | done | this task commit |
+| 01 | Page-wide figure detection | done | `04f0b5f` |
+| 02 | Page-wide equation proposals | done | `0708826` |
+| 03 | Nested table separation | done | `25ffbc7` |
+| 04 | Opaque PDF drawing extraction | done | `0d2aa0e` |
+
+The `02_SHOULD_HAVE` series is complete. For the next task in a new chat, use
+the paste-ready handover in `CONTINUE_PROMPT.md` and record optional/quick-win
+work in a new series-specific progress file.
 
 ## How to resume
 
-1. Read this file and `AGENTS.md`.
+1. Read this file, `AGENTS.md` and `CONTINUE_PROMPT.md`.
 2. Run the baseline checks:
    `backend\.venv\Scripts\python.exe -m pytest backend/tests -q`
    `npm run test:web` and `npm run typecheck` / `npm run lint`.
-3. Pick the first task whose status is not `done`, read its prompt in the pack,
-   and continue from its "Plan" notes.
+3. All four tasks here are `done`; for remaining work pick one item from
+   `CONTINUE_PROMPT.md`, read its prompt in the pack, and continue from its
+   "Plan" notes.
 4. When done, record evidence here, update `ROADMAP.md`/`CHANGELOG.md`, and
    commit only that task.
 

@@ -1,18 +1,21 @@
 # DocuRebuild - Project Completion Report
 
-**Report date:** 26 November 2026
-**Report state:** v1.1.0 release verification snapshot at commit `b0c139d`,
-following the 1.0/1.1 desktop delivery recorded in section 13 and
-`PROJECT_MEMORY.md`
-**Working tree:** the 1.1.0 release changes are committed and pushed to `main`
+**Original report date:** 26 November 2026
+**Original snapshot:** v1.1.0 release verification at commit `b0c139d`, following
+the 1.0/1.1 desktop delivery recorded in section 13 and `PROJECT_MEMORY.md`
+**Current state:** 28 November 2026, `main` at `0d2aa0e`, version **1.1.1**
+released from `486688e`; the post-release quality and SHOULD HAVE work is
+committed but not published as a new installer. The current status, completed
+prompt-pack tasks and remaining work are in **section 16** and in
+`CONTINUE_PROMPT.md`.
 **Scope of this report:** audit of implemented behaviour, not a plan for new features
 
-**Later work:** after this snapshot, a real-scan OCR corpus and its measured
-CER/WER results were added (`backend/tests/fixtures/ocr-real/` and
-`docs/ocr-benchmark.md`). Statements below about a missing real-scan corpus
-describe the state at `b0c139d`. A large-document performance, cancellation and
-recovery drill was also run on 27 November 2026; section 14 records its results
-and closes the sustained-load item left open in section 13.10.
+**How to read the historical sections:** sections 1-13 describe the v1.1.0
+snapshot. Statements there about missing real-scan OCR evidence, accessibility
+evidence, sustained-load measurement, desktop E2E automation or page-wide
+reconstruction describe that earlier state; sections 14-16 record what changed
+afterwards. If a status statement conflicts with section 16,
+`CONTINUE_PROMPT.md`, `ROADMAP.md` or the shipped code, those current sources win.
 
 **Practical supplied-file check:** on 27 November 2026, the normal workflow
 imported 8 PDF pages and 5 attached JPG scans. Source rendering and PDF text
@@ -56,6 +59,11 @@ remaining production gaps are an interactive screen-reader certification pass
 (blocked by unavailable tooling) and code signing. None of them require
 re-architecting the product.
 
+**Status after v1.1.1:** all four `01_MUST_HAVE` and all four `02_SHOULD_HAVE`
+prompt-pack tasks are complete. The page-wide figure/equation/nested-table/opaque
+PDF work described in section 13.10 as deferred is delivered and recorded in
+section 16. Remaining optional work is tracked in `CONTINUE_PROMPT.md`.
+
 **Strongest areas:** project/storage model, import pipeline (including PDFs and
 background jobs), non-destructive image editing, editor/export (now with full
 typography: font families, superscript/subscript, Justify, font embedding),
@@ -64,10 +72,11 @@ encrypted keys, and the packaged desktop shell with a private local API.
 **v1.1.0 adds:** layout-aware OCR paragraph/list/heading reconstruction at
 insertion time, prose-column splitting, and per-line PDF text measurement.
 
-**Weakest areas:** interactive assistive-technology certification (phase 11,
-blocked here), the remaining page-wide reconstruction work (equations/figures),
+**Weakest areas (at the v1.1.0 snapshot):** interactive assistive-technology
+certification (phase 11, blocked here), page-wide equation/figure reconstruction,
 and the small real-scan OCR corpus (three pages, one transcriber). Real-scan
-accuracy is now measured in `docs/ocr-benchmark.md`.
+accuracy is now measured in `docs/ocr-benchmark.md`; page-wide figure and
+equation proposals were added after the snapshot (section 16).
 
 ---
 
@@ -102,6 +111,13 @@ E2E smoke suite including backup/restore (section 15) were completed. The
 interactive screen-reader/keyboard-only journey remains blocked by unavailable
 assistive tooling. Mobile rendering is out of scope for the Windows x64 release.
 
+**Latest verification (28 November 2026, at `0d2aa0e`):** after the four
+`02_SHOULD_HAVE` tasks, `backend\.venv\Scripts\python.exe -m pytest backend/tests -q`
+reports **450 passed**, `npm run test:web` reports **59 files / 364 tests passed**,
+and `npm run typecheck` / `npm run lint` are clean. These results supersede the
+v1.1.0 numbers in the table above for the current tree; they do not change the
+installer that was published for v1.1.1.
+
 ---
 
 ## 3. Completion by phase (v1.1.0)
@@ -131,6 +147,10 @@ Two caveats on that number:
 
 1. Nine phases are fully complete (0-3, 5-6, 8-9), so the remaining work is concentrated in three areas plus final QA.
 2. "In progress" does not mean half-built. Phases 4, 7, 11 contain working, reviewable implementations; their percentages reflect missing breadth (real-scan accuracy, page-wide equations/figures, accessibility pass, code signing), not missing foundations.
+
+These percentages are the v1.1.0 assessment. The page-wide figure, equation,
+nested-table and opaque-PDF gaps listed for phases 4, 5 and 7 were closed after
+that snapshot; see section 16.
 
 ---
 
@@ -233,14 +253,17 @@ Two caveats on that number:
 - Burmese quality depends on the installed traineddata, scan quality and fonts;
   this is documented but unmeasured.
 
-### Phase 5 - Element extraction (approx. 85%)
+### Phase 5 - Element extraction (approx. 85% at v1.1.0)
 - **Opaque PDF drawings** (page/form content without readable paths) still
-  require manual selection.
+  require manual selection. *Completed after v1.1.1:* a low-confidence proposal
+  is now made from the rendered page when no exact PDF geometry exists (§16).
 - **Region proposals are intentionally not persisted**; they are regenerated
   from the latest OCR run and prefills the manual dialog. That is a deliberate
-  safety choice, not a bug, but it limits batch review across pages.
-- Docs still list page-wide table detection as pending even though the
-  page-wide endpoint exists (section 10).
+  safety choice, not a bug, but it limits batch review across pages. Persistence
+  remains an optional future task.
+- Docs listed page-wide table detection as pending even though the page-wide
+  endpoint existed (section 10). That documentation was corrected; the current
+  status is in §16.
 
 ### Phase 6 - AI (approx. 85%)
 - **No account-level billing or quota verification.** The app records reported
@@ -253,14 +276,20 @@ Two caveats on that number:
 - **Image generation is not implemented** and is not needed for reconstruction.
 - Cost class remains a user declaration; a provider can bill outside the app.
 
-### Phase 7 - Tables, figures, equations (approx. 75%)
-- **Nested tables** are not separated from their parent.
+### Phase 7 - Tables, figures, equations (approx. 75% at v1.1.0)
+- **Nested tables** are not separated from their parent. *Completed after
+  v1.1.1:* drawn child grids are linked to their parent cell as separate
+  reviewable tables (§16).
 - **Page-wide equation detection/transcription** is not implemented; only a
-  single saved crop can be transcribed, on request.
+  single saved crop can be transcribed, on request. *Completed after v1.1.1:*
+  page-wide OCR equation candidates are listed for review; transcription stays
+  an explicit single-crop action (§16).
 - **Borderless merged-cell inference** is limited; exact spans come from drawn
   rules or a saved crop, otherwise it is a plain word-box grid.
 - **Structured figure reconstruction with approval** (beyond captions,
-  numbering, citations and inline images) is not implemented.
+  numbering, citations and inline images) is not implemented. Page-wide figure
+  *proposals* were added after v1.1.1, but no figure content is reconstructed
+  automatically (§16).
 
 ### Phase 10 - Distribution (approx. 10%)
 - No Tauri desktop shell with a Python sidecar.
@@ -732,8 +761,10 @@ updated here and recorded in sections 14-15, `PROGRESS.md`, `ROADMAP.md` and
   Tesseract build and a 105 MB Python sidecar. Trimming Chromium locales and
   shipping a slimmer Tesseract build are safe future optimisations, not 1.x
   blockers.
-- Page-wide figure detection inside the OCR layout, page-wide equation
-  proposals, and nested-table separation (SHOULD HAVE, not 1.x).
+- ~~Page-wide figure detection inside the OCR layout, page-wide equation
+  proposals, and nested-table separation (SHOULD HAVE, not 1.x).~~ **Completed
+  after v1.1.1; see section 16.** Opaque PDF drawing extraction was completed in
+  the same series.
 
 ### 13.11 Revised completion (v1.1.0)
 
@@ -743,10 +774,11 @@ updated here and recorded in sections 14-15, `PROGRESS.md`, `ROADMAP.md` and
 | Core local-first MVP scope (phases 0-9) | approx. 90% | **approx. 95%** |
 | Production-release readiness (Windows x64) | approx. 84% | **approx. 88%** |
 
-The remaining gap is evidence on real scans, assistive-technology testing,
-sustained-load measurement, and code signing, not missing foundations. Calling
-1.1 shipped is defensible for a Windows desktop release; the open list above is
-the honest release-note content.
+The remaining gap at v1.1.0 was evidence on real scans, assistive-technology
+testing, sustained-load measurement, and code signing, not missing foundations.
+Calling 1.1 shipped was defensible for a Windows desktop release; the open list
+above was the honest release-note content at that time. Section 16 records the
+current status after v1.1.1.
 
 ---
 
@@ -900,3 +932,79 @@ npm run smoke:desktop
 The acceptance criteria are met: a documented one-command smoke test
 (`npm run smoke:desktop`), repeatable clean-profile pass, and CI integration
 where supported (the script exits non-zero on failure and writes a JSON report).
+
+---
+
+## 16. Current status after v1.1.1 (28 November 2026)
+
+This is the current status section. Sections 1-13 remain the historical
+v1.1.0 QA snapshot; sections 14-15 record the post-snapshot MUST HAVE work.
+The prompt pack at
+`C:\Users\minkh\Downloads\Telegram Desktop\DocuRebuild_Remaining_Work_Prompts\DocuRebuild_Prompt_Pack`
+defines the remaining tasks. Its `01_MUST_HAVE` and `02_SHOULD_HAVE` series are
+**complete**. The published v1.1.1 installer was built at `486688e`; the task
+work below is committed on `main` at `0d2aa0e` and has **not** been published as
+a new installer.
+
+### 16.1 Completed prompt-pack tasks
+
+| Series | Task | Verified evidence | Commit |
+| --- | --- | --- | --- |
+| 01 MUST HAVE | 01 Real-scan OCR accuracy baseline | Three public-domain scans with typed transcripts; CER/WER in `docs/ocr-benchmark.md`; §13.10 | `8cb208c` |
+| 01 MUST HAVE | 02 Accessibility keyboard/screen-reader audit | Skip link, main landmark, labelled editor toolbar, contrast automation and component keyboard/focus tests; §13.9 and `PROGRESS.md` | `09b5f99` |
+| 01 MUST HAVE | 03 Large-document performance/cancellation | 400-page import, cancellation/concurrency/hard-kill drill, two fixes; `docs/performance.md` and §14 | `09b5f99` |
+| 01 MUST HAVE | 04 Automated desktop E2E smoke tests | `npm run smoke:desktop`, 12/12 steps, disposable profiles; `docs/smoke/desktop-smoke.json` and §15 | `ad7809d` |
+| 02 SHOULD HAVE | 01 Page-wide figure detection | `backend/tests/figure_eval.py`, `docs/figure-detection.md`; precision 1.00, recall 1.00 on a controlled corpus; caption duplicate fix | `04f0b5f` |
+| 02 SHOULD HAVE | 02 Page-wide equation proposals | `GET .../equation-proposals`, `PageEquationsDialog`, 4 backend + 3 web tests; `docs/should-have/PROGRESS.md` | `0708826` |
+| 02 SHOULD HAVE | 03 Nested table separation | Linked drawn parent/child grids, stable candidate keys, dialog badges, 4 backend + 3 web tests, DOCX/PDF export tests | `25ffbc7` |
+| 02 SHOULD HAVE | 04 Opaque PDF drawing extraction | Rendered-page raster fallback when PDF geometry is absent, 2 backend tests; `docs/figure-detection.md` | `0d2aa0e` |
+
+The real-scan corpus was committed in `8cb208c`; the accessibility audit and
+large-document drill were part of the combined quality pass `09b5f99` together
+with the import fixes. The accessibility audit is documented but is not a WCAG
+certification: NVDA and Narrator were unavailable, so an interactive
+screen-reader pass remains a known gap. Task 03 also identified OCR cancellation
+and stale-run recovery as open gaps.
+
+### 16.2 Verification of the current tree
+
+| Check | Result at `0d2aa0e` |
+| --- | --- |
+| `backend\.venv\Scripts\python.exe -m pytest backend/tests -q` | **450 passed** |
+| `npm run test:web` | **59 files / 364 tests passed** |
+| `npm run typecheck` | clean |
+| `npm run lint` | clean |
+| `npm run smoke:desktop` | 12/12 steps passed on the v1.1.1 packaged build; not re-run after the four SHOULD HAVE commits because no packaged payload was rebuilt |
+
+Across the four SHOULD HAVE tasks the backend count rose from 439 to 450
+(+1 figure evaluation, +4 equation proposals, +4 nested tables, +2 opaque PDF)
+and the web count from 358 to 364 (+3 equation dialog, +3 nested table dialog).
+Per-task commands, measured numbers, changed files and limitations are recorded
+in `docs/should-have/PROGRESS.md`.
+
+### 16.3 What remains
+
+| Priority | Item | Status / next action |
+| --- | --- | --- |
+| 1 | `04_QUICK_WINS_AND_REGRESSION_CHECKS/01_Audit_Previously_Requested_Fixes.md` | Not started. Audit each earlier request as VERIFIED/PARTIAL/BROKEN/NOT IMPLEMENTED, then fix at most one confirmed defect. |
+| 2 | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | Not started. Document the safety trade-off and stable identity/versioning before changing the non-persisted proposal design. |
+| 3 | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | Not started. Benchmark-backed decision report first; Tesseract stays the default. |
+| 4 | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | Not started. Official documented APIs only; show unavailable when data is not reliable. |
+| 5 | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | Not started. Measure components before packaging changes; keep `eng`/`mya`/`osd` and licences. |
+| 6 | `03_OPTIONAL_FUTURE/05_macOS_Linux_Feasibility.md` | Not started. Report only; Windows x64 stays the supported target until separately approved. |
+
+Also open, but not part of the prompt-pack series: interactive NVDA/Narrator
+pass and code signing (wider-release blockers), OCR cancellation and stale-run
+recovery, a larger real-scan OCR corpus, merged-cell detection for text-only
+tables, a bundled offline LaTeX typesetter for PDF export, remaining OMML edge
+cases, and automatic update checking. Mobile, PWA, camera pairing, cloud
+accounts and telemetry are out of scope rather than pending.
+
+### 16.4 Continue prompt and handover
+
+`CONTINUE_PROMPT.md` is the canonical handover. It contains a paste-ready prompt
+for a new chat, the completed/remaining tables, the verification commands and a
+session log. Run **one task per session**, preserve the local-first desktop
+scope, never fabricate results, update the progress docs and CHANGELOG with
+exact evidence, commit only that task, and do not publish a release without an
+explicit owner request and a newly built, verified installer.

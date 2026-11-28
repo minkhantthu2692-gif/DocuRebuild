@@ -53,6 +53,16 @@ supported 1.0 distribution.
   artwork, so it now merges with the artwork box when the two share most of the
   smaller box on both axes (`regions._caption_band_matches`).
 
+### Documentation
+
+- Refreshed the status documentation after v1.1.1: all four `01_MUST_HAVE` and
+  all four `02_SHOULD_HAVE` prompt-pack tasks are recorded as complete with
+  evidence, commits and current test totals. Added `CONTINUE_PROMPT.md` with a
+  paste-ready handover for the optional and quick-win tasks, and updated
+  `README.md`, `ROADMAP.md`, `docs/roadmap.md`, `PROJECT_MEMORY.md`,
+  `PROJECT_COMPLETION_REPORT.md` §16 and both progress logs. No application
+  behaviour or released installer changed.
+
 ## [1.1.1] - 2026-11-28
 
 A maintenance release for the Windows x64 desktop application. It ships the

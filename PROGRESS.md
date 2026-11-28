@@ -1,4 +1,10 @@
-# Progress log - 2026-11-27
+# Progress log - 2026-11-27 to 2026-11-28
+
+This is a dated execution log for the completed MUST HAVE quality work. Current
+status, the completed MUST HAVE/SHOULD HAVE task tables and the paste-ready next
+session prompt are in `CONTINUE_PROMPT.md`; per-task SHOULD HAVE evidence is in
+`docs/should-have/PROGRESS.md`, and the consolidated QA record is
+`PROJECT_COMPLETION_REPORT.md`.
 
 ## Large-document performance and cancellation - 2026-11-27
 
@@ -351,3 +357,14 @@ pages: 8 PDF pages and 5 image pages.
   development mode; direct navigation to the project route opened the workspace
   correctly. This was not changed because it was not reproducible enough to
   isolate from the development navigation/test setup.
+
+## Completed SHOULD HAVE series - 2026-11-28
+
+The four `02_SHOULD_HAVE` prompt-pack tasks are complete and committed on `main`:
+page-wide figure detection (`04f0b5f`), page-wide equation proposals
+(`0708826`), nested table separation (`25ffbc7`) and opaque PDF drawing
+extraction (`0d2aa0e`). Verified after the series: 450 backend tests, 59 web
+files / 364 tests, typecheck and lint clean. Detailed commands, results,
+limitations and files changed are in `docs/should-have/PROGRESS.md`; status and
+the next task are in `CONTINUE_PROMPT.md`. These commits are after the v1.1.1
+release tag and have not been published as a new installer.

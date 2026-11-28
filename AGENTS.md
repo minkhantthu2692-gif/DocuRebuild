@@ -21,7 +21,8 @@ scope for 1.0.
 | `CHANGELOG.md` | Release history and user-visible changes |
 | `docs/architecture.md` | Modules, storage layout, data model and API surface |
 | `docs/ocr-benchmark.md` | OCR accuracy methodology and measured results |
-| `PROJECT_COMPLETION_REPORT.md` | Delivery and QA record for the 1.0 installer |
+| `PROJECT_COMPLETION_REPORT.md` | Delivery and QA record; §16 is the current post-v1.1.1 status |
+| `CONTINUE_PROMPT.md` | Paste-ready handover: completed tasks, remaining work and session rules |
 | `Prompt.md` | Original product specification and phase plan |
 | `CONTRIBUTING.md` | Human contributor setup and checks |
 | `SECURITY.md` | Vulnerability reporting and credential scope |
@@ -38,6 +39,7 @@ backend/             FastAPI application, services, Alembic migrations, Pytest
 packages/            Design tokens and shared TypeScript contracts
 scripts/             Desktop payload build and OCR fixture tooling
 docs/                Architecture, benchmark and detailed phase history
+CONTINUE_PROMPT.md   Paste-ready handover for a new chat or agent
 dist/                Build output (git-ignored)
 ```
 

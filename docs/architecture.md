@@ -1,7 +1,9 @@
 # Architecture
 
-This document describes the DocuRebuild architecture as implemented. It is
-intentionally honest about what is still a placeholder for later phases.
+This document describes the DocuRebuild architecture as implemented. Current
+release status, completed prompt-pack tasks and remaining work are tracked in
+`ROADMAP.md`, `PROJECT_COMPLETION_REPORT.md` §16 and `CONTINUE_PROMPT.md`; this
+file describes behaviour, not release planning.
 
 ## System overview
 
@@ -25,7 +27,7 @@ to the same local API; the API is not intended to be exposed publicly.
 
 ### Desktop runtime
 
-The 1.0 Windows build wraps the same two processes:
+The Windows desktop build (1.1.x) wraps the same two processes:
 
 ```text
 DocuRebuild.exe (Electron)

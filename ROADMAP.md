@@ -4,9 +4,9 @@ This is the short, current roadmap for the Windows x64 desktop release.
 `docs/roadmap.md` keeps the detailed phase-by-phase implementation history;
 `PROJECT_MEMORY.md` records architecture and handover context.
 
-Last updated: 2026-11-28 (v1.1.1 released: automated desktop E2E smoke suite,
-accessibility audit, large-document performance drill and real-scan OCR
-validation).
+Last updated: 2026-11-28 (v1.1.1 released; all `01_MUST_HAVE` and
+`02_SHOULD_HAVE` prompt-pack tasks complete; status docs and the paste-ready
+handover refreshed in `CONTINUE_PROMPT.md`).
 
 ## Release status
 
@@ -167,10 +167,27 @@ source pages → OCR/review/insert → edit/save/reopen → export
 verification. It writes a JSON report (`docs/smoke/desktop-smoke.json`, ignored),
 and the shutdown step tolerates the expected DevTools connection-close race.
 
-## Remaining MUST HAVE before a wider (non-Windows) production release
+## Completed prompt-pack tasks (MUST HAVE and SHOULD HAVE)
+
+All eight tasks in `01_MUST_HAVE` and `02_SHOULD_HAVE` of the remaining-work
+prompt pack are complete. Each task has a detailed evidence section in
+`PROJECT_COMPLETION_REPORT.md` §§13-16 and `docs/should-have/PROGRESS.md`.
+
+| Series | Tasks | Evidence | Commits |
+| --- | --- | --- | --- |
+| 01 MUST HAVE | Real-scan OCR baseline, accessibility audit, large-document performance/cancellation, desktop E2E smoke suite | `docs/ocr-benchmark.md`, `docs/performance.md`, `npm run smoke:desktop`, report §§13-15 | `8cb208c`, `09b5f99`, `ad7809d` |
+| 02 SHOULD HAVE | Page-wide figure detection, page-wide equation proposals, nested table separation, opaque PDF drawing extraction | `docs/figure-detection.md`, `docs/should-have/PROGRESS.md`, report §16 | `04f0b5f`, `0708826`, `25ffbc7`, `0d2aa0e` |
+
+Current tree verification: 450 backend tests, 59 web files / 364 tests,
+typecheck and lint clean. These commits are on `main` after the v1.1.1 release
+tag; no installer has been published from them.
+
+## Known gaps for a wider (non-Windows) production release
 
 These are quality/reach gaps, not missing 1.x features. They are deliberately
-**not** implemented in this release.
+**not** implemented in this release. The originally listed MUST HAVE items are
+all addressed; the residual gaps below and the optional prompt-pack work are
+what remain.
 
 1. **Accessibility certification (audit done; screen-reader pass blocked).**
    The 27 November 2026 audit delivered the test matrix, contrast automation,
@@ -195,8 +212,9 @@ These are quality/reach gaps, not missing 1.x features. They are deliberately
 
 ## Deferred — SHOULD HAVE
 
-- Automatic page-wide table detection beyond the current row-block, drawn-rule,
-  nested-drawn-grid and crop paths.
+- Automatic table detection beyond the delivered row-block, drawn-rule,
+  nested-drawn-grid, crop and AI-crop paths (all now implemented for review);
+  text-only merged-cell inference is still manual.
 - A bundled offline LaTeX typesetter for PDF export (equations currently export
   as LaTeX source).
 - Remaining OMML edge cases (colour, accent semantics).
@@ -215,6 +233,22 @@ These are quality/reach gaps, not missing 1.x features. They are deliberately
 - Team/shared-project workflows (would require a separate local/self-hosted
   design; no cloud account is planned).
 - Plugins or scripting for custom reconstruction rules.
+
+## Remaining prompt-pack work (resumable)
+
+The prompt pack's optional series and quick-win audit are not started. Run one
+task per session and follow the paste-ready instructions in
+[`CONTINUE_PROMPT.md`](CONTINUE_PROMPT.md); record evidence in
+`docs/should-have/PROGRESS.md` or a new series-specific progress file.
+
+| Order | Task | Next action |
+| --- | --- | --- |
+| 1 | `04_QUICK_WINS_AND_REGRESSION_CHECKS/01_Audit_Previously_Requested_Fixes.md` | Audit all seven earlier requests, then fix at most one confirmed defect. |
+| 2 | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | Document the design and stale-safety trade-off before changing persistence. |
+| 3 | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | Benchmark against the real-scan corpus before any adapter implementation. |
+| 4 | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | Official documented APIs only; report unavailable when data is not reliable. |
+| 5 | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | Measure components first; keep OCR languages, licences and upgrade reliability. |
+| 6 | `03_OPTIONAL_FUTURE/05_macOS_Linux_Feasibility.md` | Report and platform matrix only; no implementation without approval. |
 
 ## Explicitly out of scope for 1.x
 
@@ -237,4 +271,6 @@ recovery, and one accepted low-severity KaTeX advisory. Performance and memory
 were measured to 400 pages on one N100/16 GB machine (`docs/performance.md`); a
 1,000-page import, low-memory hardware and low-power/thermal variations remain
 unmeasured. An automated desktop E2E smoke suite is now available
-(`npm run smoke:desktop`, section "Completed after 1.1.0").
+(`npm run smoke:desktop`, section "Completed after 1.1.0"). Current prompt-pack
+status and the one-task-per-session handover are in
+[`CONTINUE_PROMPT.md`](CONTINUE_PROMPT.md).

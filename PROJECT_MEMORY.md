@@ -53,7 +53,7 @@ npm run dev
 
 # Build the desktop payload and installer
 npm run desktop:dist
-# -> dist/desktop-installer/DocuRebuild-1.0.0-setup.exe
+# -> dist/desktop-installer/DocuRebuild-1.1.1-setup.exe
 ```
 
 The desktop payload build (`scripts/build-desktop.mjs`) does three things:
@@ -172,11 +172,14 @@ switch to the desktop app.
 | i18n | Complete | English + Burmese, live switching, key parity tests, Unicode-safe |
 | Form controls and dialogs | Complete | Shared native `Checkbox`/`Switch`/`Radio` primitives, one owner per open dialog, in-place image previews |
 
-Deferred or partial work is listed in `ROADMAP.md`. Notable gaps: a larger
-real-scan OCR corpus, macOS/Linux packaging, code signing, interactive
-screen-reader certification
-(the audit itself is done), and account-level AI billing verification. A desktop
-E2E smoke suite is now available (`npm run smoke:desktop`; see section 11).
+All four `01_MUST_HAVE` and all four `02_SHOULD_HAVE` prompt-pack tasks are
+complete; per-task evidence is in `docs/should-have/PROGRESS.md`,
+`PROJECT_COMPLETION_REPORT.md` §16 and `CONTINUE_PROMPT.md`. Deferred or partial
+work is listed in `ROADMAP.md`. Notable gaps: a larger real-scan OCR corpus,
+macOS/Linux packaging, code signing, an interactive screen-reader pass (the audit
+itself is done), OCR cancellation/stale-run recovery and account-level AI billing
+verification. A desktop E2E smoke suite is available (`npm run smoke:desktop`;
+see section 11).
 
 ## 7. OCR details
 
@@ -324,8 +327,8 @@ AI credentials are configured in the application, not in environment files.
 ## 11. Verification commands and current results
 
 ```powershell
-backend/.venv/Scripts/python -m pytest backend/tests -q   # 439 passed
-npm run test:web                                          # 358 tests / 57 files
+backend/.venv/Scripts/python -m pytest backend/tests -q   # 450 passed
+npm run test:web                                          # 364 tests / 59 files
 npm run typecheck                                         # clean
 npm run lint                                              # clean
 npm run build                                             # production build
@@ -350,9 +353,11 @@ secret scan.
 ## 12. Known limitations
 
 - Windows x64 only; no macOS/Linux package, no code-signing certificate.
-- Installer ~202 MB, installed footprint ~643 MB (Chromium locales, Tesseract,
-  sidecar). Trimming is future work.
-- OCR accuracy is measured on synthetic pages only.
+- Installer ~204 MB, installed footprint ~650 MB (Chromium locales, Tesseract,
+  sidecar). Trimming is an optional future task.
+- OCR accuracy is measured on synthetic pages and a three-page real-scan corpus;
+  the latter has one transcriber, no scored Burmese-only case and is not a
+  population estimate.
 - Some OMML edge cases remain incomplete. Opaque PDF artwork is proposed from
   the rendered page at low confidence only when no exact PDF geometry exists, so
   a mixed page may still need manual selection. A nested table drawn inside a
@@ -387,6 +392,10 @@ secret scan.
 ## 13. Release state
 
 - Version 1.1.1 everywhere. License AGPL-3.0-or-later.
+- Working tree after the release: `main` at `0d2aa0e` contains the four
+  `02_SHOULD_HAVE` commits (`04f0b5f`, `0708826`, `25ffbc7`, `0d2aa0e`) on top
+  of v1.1.1. They are verified (450 backend / 364 web tests) but have **not**
+  been published as a new installer; see `CONTINUE_PROMPT.md` for the next task.
 - Repository: <https://github.com/minkhantthu2692-gif/DocuRebuild>
 - Current release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.1>,
   published 28 November 2026 from tag `v1.1.1` at commit `486688e`, and marked
@@ -437,7 +446,9 @@ secret scan.
 
 ## 14. Handover checklist for the next agent
 
-1. Read `AGENTS.md`, this file, `ROADMAP.md` and `CHANGELOG.md`.
+1. Read `AGENTS.md`, `CONTINUE_PROMPT.md`, this file, `ROADMAP.md` and
+   `CHANGELOG.md`; use the paste-ready prompt in `CONTINUE_PROMPT.md` for a new
+   chat and run only one remaining task per session.
 2. Run `git status -sb` and `git log --oneline -10`; do not discard unfamiliar
    work.
 3. Run the checks in section 11 before changing behaviour.
