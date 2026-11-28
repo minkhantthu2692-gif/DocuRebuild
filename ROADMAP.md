@@ -6,8 +6,10 @@ This is the short, current roadmap for the Windows x64 desktop release.
 
 Last updated: 2026-11-28 (v1.1.1 released; all `01_MUST_HAVE` and
 `02_SHOULD_HAVE` prompt-pack tasks complete; the quick-win regression audit is
-done with no confirmed defect and no code change; status docs and the
-paste-ready handover refreshed in `CONTINUE_PROMPT.md`).
+done with no confirmed defect and no code change; the optional persisted-region
+proposals task is evaluated with a decision to keep proposals derived and
+non-persisted; status docs and the paste-ready handover refreshed in
+`CONTINUE_PROMPT.md`).
 
 ## Release status
 
@@ -178,6 +180,20 @@ code changed, per the prompt. Evidence: 450 backend tests, 59 web files /
 1.1.1 smoke report, and a disposable DOCX/PDF justification probe. Full audit
 matrix and limitations: `docs/quick-wins/PROGRESS.md`.
 
+**Persisted region proposals evaluation (28 November 2026).** The optional task
+to persist OCR-derived region proposals for cross-page batch review was
+evaluated rather than implemented. Current proposals are derived on demand from
+the latest successful OCR run plus the current source asset and rotation, and are
+never stored, which makes stale geometry structurally impossible. The record
+documents that trade-off, a stable identity/versioning design (`ocr_run_id` +
+`source_asset_id` + `rotation` + page revision) that any future persistence must
+enforce, and the decision: keep proposals derived and non-persisted because a
+proposal table would duplicate state already captured by accepted `elements` and
+reintroduce a second source of truth for a navigation-only benefit. A read-only
+cross-page aggregation is the recommended next step only if the owner approves
+it. Two regression tests now lock the stale/regeneration invariants. Full design
+and decision: `docs/optional-future/PROGRESS.md`.
+
 ## Completed prompt-pack tasks (MUST HAVE and SHOULD HAVE)
 
 All eight tasks in `01_MUST_HAVE` and `02_SHOULD_HAVE` of the remaining-work
@@ -189,9 +205,10 @@ prompt pack are complete. Each task has a detailed evidence section in
 | 01 MUST HAVE | Real-scan OCR baseline, accessibility audit, large-document performance/cancellation, desktop E2E smoke suite | `docs/ocr-benchmark.md`, `docs/performance.md`, `npm run smoke:desktop`, report §§13-15 | `8cb208c`, `09b5f99`, `ad7809d` |
 | 02 SHOULD HAVE | Page-wide figure detection, page-wide equation proposals, nested table separation, opaque PDF drawing extraction | `docs/figure-detection.md`, `docs/should-have/PROGRESS.md`, report §16 | `04f0b5f`, `0708826`, `25ffbc7`, `0d2aa0e` |
 
-Current tree verification: 450 backend tests, 59 web files / 364 tests,
-typecheck and lint clean. These commits are on `main` after the v1.1.1 release
-tag; no installer has been published from them.
+Current tree verification: 452 backend tests, 59 web files / 364 tests,
+typecheck and lint clean (the extra two backend tests are the optional
+region-proposal regression tests). These commits are on `main` after the v1.1.1
+release tag; no installer has been published from them.
 
 ## Known gaps for a wider (non-Windows) production release
 
@@ -247,16 +264,16 @@ what remain.
 
 ## Remaining prompt-pack work (resumable)
 
-The quick-win audit is complete; the optional series are not started. Run one
-task per session and follow the paste-ready instructions in
+The quick-win audit is complete and optional task 01 is evaluated. Run one task
+per session and follow the paste-ready instructions in
 [`CONTINUE_PROMPT.md`](CONTINUE_PROMPT.md); record evidence in
-`docs/should-have/PROGRESS.md`, `docs/quick-wins/PROGRESS.md` or a new
-series-specific progress file.
+`docs/should-have/PROGRESS.md`, `docs/quick-wins/PROGRESS.md`,
+`docs/optional-future/PROGRESS.md` or a new series-specific progress file.
 
 | Order | Task | Next action |
 | --- | --- | --- |
 | 1 | `04_QUICK_WINS_AND_REGRESSION_CHECKS/01_Audit_Previously_Requested_Fixes.md` | done — all seven VERIFIED WORKING; no confirmed defect, no code change; `docs/quick-wins/PROGRESS.md` |
-| 2 | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | Document the design and stale-safety trade-off before changing persistence. |
+| 2 | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | evaluated — design and stale-safety trade-off documented; decision: keep proposals derived and non-persisted; a read-only cross-page aggregation is the recommended next step only if approved; two regression tests lock the invariants; `docs/optional-future/PROGRESS.md` |
 | 3 | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | Benchmark against the real-scan corpus before any adapter implementation. |
 | 4 | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | Official documented APIs only; report unavailable when data is not reliable. |
 | 5 | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | Measure components first; keep OCR languages, licences and upgrade reliability. |

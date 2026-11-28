@@ -4,7 +4,9 @@ This is the durable context file for DocuRebuild. A new AI agent (or a new human
 developer) should be able to read this document and `AGENTS.md`, clone the
 repository, run the checks and continue work without any previous conversation.
 
-Last updated: 2026-11-28 (v1.1.1 released with desktop E2E smoke suite verified).
+Last updated: 2026-11-28 (v1.1.1 released with desktop E2E smoke suite verified;
+optional persisted-region-proposals task evaluated with a decision to keep
+proposals derived and non-persisted — see §10 item 16).
 
 ## 1. What the product is
 
@@ -323,11 +325,26 @@ AI credentials are configured in the application, not in environment files.
     document and calls `TOOLS.store_shrink(100)`; imports, re-renders, artwork
     and table analysis, and PDF export all use it. New PDF code must do the
     same instead of calling `document.close()` directly.
+16. **Region proposals stay derived and non-persisted.** Region suggestions are
+    recomputed on demand from the latest successful OCR run plus the current
+    source asset, rotation and saved elements (`regions.propose_regions`). A
+    proposal is returned only when the run's `source_asset_id`/`rotation` match
+    the page, otherwise the endpoint reports `ocr_stale`; a source edit or
+    rotation rebuilds the display asset and invalidates the run. This makes stale
+    geometry structurally impossible and avoids a second source of truth that
+    could diverge. Accepted regions are already persisted as `elements` (with
+    their own `source_asset_id` stale flag); dismissed regions are cheap to
+    re-derive. The optional batch-review task was evaluated on 2026-11-28 and
+    deliberately did **not** add a proposal table. If cross-page review is later
+    approved, start with a read-only derived aggregation that reuses
+    `propose_regions` and carries the same `ocr_run_id` + `source_asset_id` +
+    `rotation` identity; persist only user dismissals if demand is proven. Full
+    design and the invariants any persistence must keep: `docs/optional-future/PROGRESS.md`.
 
 ## 11. Verification commands and current results
 
 ```powershell
-backend/.venv/Scripts/python -m pytest backend/tests -q   # 450 passed
+backend/.venv/Scripts/python -m pytest backend/tests -q   # 452 passed
 npm run test:web                                          # 364 tests / 59 files
 npm run typecheck                                         # clean
 npm run lint                                              # clean

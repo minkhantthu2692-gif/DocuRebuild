@@ -55,6 +55,14 @@ supported 1.0 distribution.
 
 ### Documentation
 
+- Added `docs/optional-future/PROGRESS.md` with the evaluation of persisting
+  OCR-derived region proposals for cross-page batch review. It documents the
+  current derived-on-demand model and its stale-safety trade-off, a stable
+  identity/versioning design (`ocr_run_id` + `source_asset_id` + `rotation`) for
+  any future persistence, and the decision to keep proposals derived and
+  non-persisted. Two regression tests in `backend/tests/test_regions.py` lock the
+  stale-after-source-edit and new-OCR-run regeneration invariants. No application
+  behaviour, schema or API changed.
 - Added `docs/quick-wins/PROGRESS.md` with the regression audit of seven earlier
   requests (source rendering, dialog stability, form controls, factory reset,
   bulk deletion, OCR reconstruction and typography). All seven are recorded as

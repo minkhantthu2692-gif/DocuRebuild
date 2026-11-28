@@ -316,6 +316,84 @@ def test_region_proposals_report_a_stale_ocr_run(
     assert body["proposals"] == []
 
 
+def test_region_proposals_become_stale_after_a_source_edit(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(
+        ocr, "_perform_ocr", lambda *args, **kwargs: _fake_result(LAYOUT_BLOCKS)
+    )
+    page = upload_pages(client, project["id"], ["proposal-edited.png"])[0]
+    _run_ocr(client, project["id"], page["id"])
+
+    # A geometry edit rebuilds the display asset, so the stored OCR layout no
+    # longer describes the current source. Proposals must be withheld even
+    # though a successful run exists: a persisted list would otherwise point at
+    # the old render.
+    edited = client.patch(
+        f"/api/projects/{project['id']}/pages/{page['id']}/edits",
+        json={
+            "edits": {
+                "geometry": [
+                    {
+                        "type": "crop",
+                        "rect": {"x": 0.1, "y": 0.1, "width": 0.8, "height": 0.8},
+                    }
+                ]
+            }
+        },
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["display_asset_id"] != page["display_asset_id"]
+
+    body = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/region-proposals"
+    ).json()
+    assert body["status"] == "ocr_stale"
+    assert body["proposals"] == []
+
+
+def test_region_proposals_follow_a_new_ocr_run(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    # The fake engine reads the current block set, so two runs can return
+    # different layouts from the same page.
+    blocks = {"current": LAYOUT_BLOCKS}
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(
+        ocr, "_perform_ocr", lambda *args, **kwargs: _fake_result(blocks["current"])
+    )
+    page = upload_pages(client, project["id"], ["proposal-rerun.png"])[0]
+
+    first = _run_ocr(client, project["id"], page["id"])
+    first_body = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/region-proposals"
+    ).json()
+    assert first_body["ocr_run_id"] == first["id"]
+    assert {proposal["kind"] for proposal in first_body["proposals"]} == {
+        "figure",
+        "table",
+        "equation",
+    }
+
+    # A second run with a different layout must replace the derived proposals.
+    # Nothing from the first run is cached or served as current, which is the
+    # invariant a persisted design has to keep when the OCR run id changes.
+    blocks["current"] = [_block(1, "paragraph", "Only prose now.", 100, 100, 500, 80)]
+    second = _run_ocr(client, project["id"], page["id"])
+    assert second["id"] != first["id"]
+
+    second_body = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/region-proposals"
+    ).json()
+    assert second_body["ocr_run_id"] == second["id"]
+    assert second_body["proposals"] == []
+
+
 def test_region_proposals_skip_regions_already_extracted(
     client: TestClient, project: dict, monkeypatch
 ) -> None:
