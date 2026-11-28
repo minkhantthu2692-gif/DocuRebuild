@@ -87,9 +87,10 @@ supported 1.0 distribution.
   targets, per-platform Tesseract, hardcoded `tesseract.exe`/`icon.ico`,
   process-group shutdown, PyInstaller cross-compile limits, data-path
   reconciliation, signing/notarization) with a rough effort estimate and no
-  implementation. The PaddleOCR evaluation is recorded as deferred because it
-  needs a heavy local install and a measured benchmark. No application behaviour,
-  schema, API, UI or dependency changed.
+  implementation. The PaddleOCR evaluation was deferred at that point because it
+  needed a heavy local install and a measured benchmark; it has since been
+  completed (see below). No application behaviour, schema, API, UI or dependency
+  changed.
 - Added `docs/optional-future/PROGRESS.md` with the evaluation of persisting
   OCR-derived region proposals for cross-page batch review. It documents the
   current derived-on-demand model and its stale-safety trade-off, a stable
@@ -98,6 +99,14 @@ supported 1.0 distribution.
   non-persisted. Two regression tests in `backend/tests/test_regions.py` lock the
   stale-after-source-edit and new-OCR-run regeneration invariants. No application
   behaviour, schema or API changed.
+- Completed the PaddleOCR adapter evaluation and recorded it in
+  `docs/optional-future/PROGRESS.md`. PaddleOCR 3.7.0 was measured on the
+  real-scan corpus with the repository's own scorer: it has no Burmese model,
+  its best configuration improved the statistical table (8.33% vs 22.43% CER)
+  but regressed prose and the mixed page, took 13–16x longer than Tesseract and
+  would add roughly 842 MB of runtime packages. The decision is not to implement
+  the adapter; Tesseract remains the sole default engine. No application code,
+  dependency or packaged build changed.
 - Added `docs/quick-wins/PROGRESS.md` with the regression audit of seven earlier
   requests (source rendering, dialog stability, form controls, factory reset,
   bulk deletion, OCR reconstruction and typography). All seven are recorded as

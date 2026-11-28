@@ -8,7 +8,8 @@ Last updated: 2026-11-28 (v1.1.1 released with desktop E2E smoke suite verified;
 optional tasks evaluated: region proposals kept derived with a read-only
 cross-page review (§10 item 16), provider
 quota report-only (§10 item 17), platform posture (§10 item 18); installer
-footprint trimmed and verified (§10 item 19); PaddleOCR deferred).
+footprint trimmed and verified (§10 item 19); PaddleOCR evaluated with a
+benchmark-backed decision not to implement (§10 item 20)).
 
 ## 1. What the product is
 
@@ -375,6 +376,23 @@ AI credentials are configured in the application, not in environment files.
     published 1.1.1 asset is unchanged. A slimmer Tesseract build (178.10 MB) is
     deferred until a compatible build can be benchmarked and smoke-tested.
     Details: `docs/optional-future/PROGRESS.md`.
+20. **Tesseract stays the sole local OCR engine; PaddleOCR is evaluated and
+    rejected.** With the owner's approval, PaddleOCR 3.7.0 / PaddlePaddle 3.3.1
+    were installed in a throwaway environment and scored on the same real-scan
+    corpus with the repository's CER/WER scorer. PaddleOCR has no Burmese model
+    (verified in its language groupings and by `lang='my'|'mya'|'mm'|'burmese'`
+    constructor errors), so the mixed page's Burmese column was unreadable. The
+    best overall configuration, PP-OCRv4 mobile, cut table CER 22.43 -> 8.33%
+    but regressed prose 0.47 -> 5.18% and mixed 36.77 -> 43.41%; PP-OCRv5 mobile
+    only matched Tesseract on prose. Runtime was 137-162 s versus 10.31 s for
+    Tesseract, peak RSS 593-618 MiB, and the runtime packages are roughly 842 MB
+    against the current 108.61 MB sidecar. oneDNN crashed on this Windows CPU and
+    required `enable_mkldnn=False`. The table win is case-specific, not a
+    uniform improvement, and cannot justify the packaging and maintenance cost.
+    Revisit only if a verified Burmese model exists and a repeatable run improves
+    all three cases. No adapter, model store, dependency or PyInstaller spec was
+    added. Full method, numbers and limitations:
+    `docs/optional-future/PROGRESS.md`.
 
 ## 11. Verification commands and current results
 

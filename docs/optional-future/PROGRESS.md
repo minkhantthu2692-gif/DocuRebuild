@@ -18,7 +18,7 @@ not claim any unverified result.
 | # | Task | Status | Outcome |
 | --- | --- | --- | --- |
 | 01 | Persisted region proposals and batch review | evaluated + read-only review | Design + stale-safety trade-off documented; **no persistence change**; the approved read-only cross-page aggregation is implemented and bounded |
-| 02 | PaddleOCR adapter evaluation | deferred | Needs a heavy local install + a measured real-scan benchmark; plan documented, no result claimed |
+| 02 | PaddleOCR adapter evaluation | evaluated — not implemented | Measured on the real-scan corpus: no Burmese model, mixed accuracy, ~8x sidecar footprint and 13–16x slower pages; Tesseract stays the default |
 | 03 | Provider quota introspection | evaluated | Capability matrix delivered; report-only, no provider calls implemented |
 | 04 | Windows installer footprint optimisation | done | Applied `electronLanguages: ["en-US"]`; verified rebuild + 12/12 smoke; installer 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB |
 | 05 | macOS/Linux feasibility study | evaluated | Platform matrix, risks and effort estimate; report only, no implementation |
@@ -261,25 +261,196 @@ Baseline and full-suite results are recorded in the session log below.
 
 ---
 
-## Task 02 — PaddleOCR adapter evaluation (deferred)
+## Task 02 — PaddleOCR adapter evaluation
 
-Status: **deferred, not started.** PaddleOCR needs a large local install
-(PaddlePaddle runtime plus models) and a benchmark environment. The prompt
-requires a measured comparison against the real-scan corpus before any adapter
-work, and availability alone is not justification. Running it here would consume
-significant download/CPU/time without a controlled baseline, and this optional
-task must not delay the release.
+**Prompt:** `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md`
 
-Plan when scheduled:
-1. Install PaddleOCR in a throwaway virtual environment.
-2. Run `backend/tests/fixtures/ocr-real/` through the existing benchmark harness
-   with English and Burmese models, at the same modes used for Tesseract.
-3. Record CER/WER, model size, CPU/RAM, licence, and offline-packaging cost.
-4. Keep Tesseract as the default unless a repeatable, measured gain justifies the
-   installer size and maintenance.
+### Prompt requirement
 
-No benchmark result is claimed. The real-scan baseline in `docs/ocr-benchmark.md`
-(Tesseract PSM 11: 22.64% overall CER) is the comparison target.
+> Evaluate PaddleOCR behind the existing OCR engine contract.
+>
+> - Compare Windows offline packaging, model size, licensing, language coverage
+>   (especially Burmese), CPU performance, and memory.
+> - Demonstrate measurable improvement against the real-scan benchmark before
+>   implementing; availability alone is not justification.
+> - Keep Tesseract as the reliable default and preserve review semantics.
+> - Make model download/storage/versioning and capability reporting explicit.
+> - Do not require network access at runtime.
+>
+> Acceptance: benchmark-backed decision report. Implement only if quality gains
+> justify installer size and maintenance costs.
+
+### Environment and method
+
+Everything was installed and run **outside the repository**, in
+`%TEMP%\opencode\paddle-eval`; no project file, dependency, model or user
+document was touched. The throwaway environment used Python 3.12.10 with
+`paddlepaddle 3.3.1`, `paddleocr 3.7.0` and `paddlex 3.7.2`. Models were cached in
+`%USERPROFILE%\.paddlex\official_models`.
+
+The comparison uses the committed three-page corpus in
+`backend/tests/fixtures/ocr-real/` and the **same scorer** as the application
+benchmark (`app.ocr_benchmark.score_text` / `_aggregate`: NFC, collapsed
+whitespace, CER/WER weighted by reference length). PaddleOCR output was written
+per case to a text file, then scored by the repository's backend virtual
+environment, so no scoring code was duplicated or altered.
+
+The Tesseract baseline was re-run in this session rather than trusted from the
+document: `Tesseract 5.4.0.20240606`, page segmentation mode 11, 22.64% overall
+CER and 73.66% overall WER — identical to `docs/ocr-benchmark.md`. The English
+page is 637 reference characters, the table 2,617 and the mixed page 1,039
+(4,293 total).
+
+Two lightweight PaddleOCR configurations were measured. The default
+PP-OCRv6/v5 detector/recognition pairing could not be used: on this Windows x64
+machine PaddlePaddle 3.3.1's oneDNN path crashes with
+`NotImplementedError: ConvertPirAttribute2RuntimeAttribute not support
+[pir::ArrayAttribute<pir::DoubleAttribute>]` in the detector. The documented
+workaround, `enable_mkldnn=False`, runs correctly but is much slower. Both
+configurations therefore used `enable_mkldnn=False`, no document orientation or
+unwarping pipeline, and explicitly named detector/recognition models:
+
+| Run | Detector | Recogniser |
+| --- | --- | --- |
+| `v4` | `PP-OCRv4_mobile_det` (4.71 MB) | `en_PP-OCRv4_mobile_rec` (7.48 MB) |
+| `v5mobile` | `PP-OCRv5_mobile_det` (4.72 MB) | `en_PP-OCRv5_mobile_rec` (7.64 MB) |
+
+### Language coverage and licensing
+
+PaddleOCR 3.7.0 has **no Burmese model**. This was verified two ways: the
+shipped language groupings in `paddleocr/_utils/langs.py` contain Latin, Arabic,
+East Slavic, Cyrillic and Devanagari groups plus individual Chinese, English,
+Japanese, Korean, Thai, Telugu, Tamil and Kannada options, with no `my`, `mya`,
+`mm` or `burmese`; and constructing `PaddleOCR(lang=...)` with each of those four
+codes raised `ValueError: No models are available for lang=... and
+ocr_version=None`. The benchmark's mixed page therefore had to be run with the
+English recogniser. As expected, it reads the printed English transliteration
+but not the Burmese column, emitting strings such as `or cg.os` and
+`8pS or o$:8pS` where the page has Burmese text.
+
+Licences are permissive and compatible with the project's AGPL distribution,
+but would add third-party notices: `paddlepaddle 3.3.1` and `paddleocr 3.7.0`
+declare Apache License 2.0, and `paddlex 3.7.2` declares Apache-2.0.
+
+### Measured accuracy
+
+| Case | Tesseract PSM 11 CER / WER | Paddle v4 mobile CER / WER | Paddle v5 mobile CER / WER |
+| --- | --- | --- | --- |
+| `english-prose` | **0.47% / 3.64%** | 5.18% / 12.73% | **0.47% / 3.64%** |
+| `english-table` | 22.43% / 92.54% | **8.33% / 39.07%** | 18.46% / 70.18% |
+| `burmese-mixed` | **36.77% / 76.30%** | 43.41% / 62.96% | 39.17% / 76.30% |
+| **Overall (4,293 chars / 634 words)** | 22.64% / 73.66% | **16.35% / 39.59%** | 20.80% / 59.94% |
+
+The table is the one clear recognition win: v4 mobile cuts table CER from
+22.43% to 8.33% and WER from 92.54% to 39.07%. That does not carry over to the
+rest of the corpus: v4 regresses the prose page roughly eleven-fold in CER and
+the mixed page by ~6.6 points, while v5 only matches Tesseract on prose and is
+worse on the table. The lower overall CER is driven by the table's 2,617
+characters; it is not a uniform improvement, and the Burmese column is
+effectively unreadable rather than merely imperfect.
+
+### CPU, memory and packaging
+
+| Metric | Tesseract PSM 11 | Paddle v4 mobile | Paddle v5 mobile |
+| --- | --- | --- | --- |
+| Total time for the three pages | **10.31 s** | 161.71 s + 2.93 s init | 137.26 s + 12.50 s init |
+| Per-page time (prose / table / mixed) | not separated by the harness | 28.09 / 88.37 / 45.26 s | 17.57 / 81.09 / 38.60 s |
+| Peak process RSS | not sampled | 621,887,488 B (593.0 MiB) | 648,183,808 B (618.2 MiB) |
+| Bundled runtime size | 108.61 MB packaged sidecar; Tesseract 178.10 MB | 841.71 MB of installed packages (paddle 380.2 MB, cv2 121 MB, pandas 68.5 MB) plus 12.19 MB of models | same package set plus 12.36 MB of models |
+
+For offline packaging, PaddleOCR downloads models from external model hosters on
+first use (observed during this evaluation), so the models would have to be
+bundled and version-pinned explicitly; the current sidecar has no mechanism for
+that. PyInstaller packaging of the PaddlePaddle runtime was not attempted and is
+unverified. Adding this runtime to the current 108.61 MB sidecar would multiply
+it by roughly 7.8x before installer compression, against a 195.92 MB unreleased
+installer today. OneDNN's crash also means the default configuration is not
+usable on this CPU without a workaround, adding a maintenance burden.
+
+### Decision
+
+**Do not implement a PaddleOCR adapter; keep Tesseract as the sole local OCR
+engine.** The measured table gain is real, but the acceptance bar is not met:
+
+1. Burmese is a first-class language in DocuRebuild and PaddleOCR 3.7.0 has no
+   Burmese model. A hybrid (Paddle for English, Tesseract for Burmese) would add
+   a second engine, model store and capability-reporting path without solving
+   the mixed-page result, which is worse than Tesseract.
+2. The improvement is case-specific. v4 helps the table but regresses prose and
+   mixed; v5 matches prose but is worse on the table. There is no single
+   configuration that is better across the corpus.
+3. Runtime cost is 13–16x higher, peak memory is about 593–618 MiB, and the
+   packaged runtime would grow by hundreds of megabytes. The default oneDNN
+   path crashes here, so a non-default flag is required to run at all.
+4. This is an optional task that must not delay the release. Availability alone
+   is explicitly not justification, and no new dependency, adapter, model
+   manifest or PyInstaller spec is warranted by this evidence.
+
+Revisit only if a verified Burmese model becomes available and a repeatable run
+shows a gain on **all three** cases, including Burmese, that justifies the
+packaging and maintenance cost. The existing `ocr` adapter contract
+(`extract_image_text`, `extract_image_content`, `detect_engine`) and review
+semantics remain unchanged.
+
+### Exact commands
+
+```powershell
+# Throwaway environment (outside the repository)
+python -m venv "$env:TEMP\opencode\paddle-eval\.venv"
+& "$env:TEMP\opencode\paddle-eval\.venv\Scripts\python.exe" -m pip install paddlepaddle paddleocr
+# -> paddlepaddle 3.3.1, paddleocr 3.7.0, paddlex 3.7.2
+
+# Language availability (four ValueError results, one success for 'en')
+& "$env:TEMP\opencode\paddle-eval\.venv\Scripts\python.exe" -c "from paddleocr import PaddleOCR; ..."
+
+# Paddle benchmarks; disposable harness wrote text files + summary.json
+& "$env:TEMP\opencode\paddle-eval\.venv\Scripts\python.exe" paddle_run.py out\v4 - PP-OCRv4_mobile_det en_PP-OCRv4_mobile_rec
+& "$env:TEMP\opencode\paddle-eval\.venv\Scripts\python.exe" paddle_run.py out\v5mobile - PP-OCRv5_mobile_det en_PP-OCRv5_mobile_rec
+
+# Scored with the repository's own benchmark scorer from backend/
+$env:PYTHONPATH = (Resolve-Path -LiteralPath ".").Path
+.venv\Scripts\python.exe "$env:TEMP\opencode\paddle-eval\score_hyp.py" "$env:TEMP\opencode\paddle-eval\out\v4"
+.venv\Scripts\python.exe "$env:TEMP\opencode\paddle-eval\score_hyp.py" "$env:TEMP\opencode\paddle-eval\out\v5mobile"
+
+# Tesseract baseline, re-run in this session from backend/
+$env:DOCUREBUILD_TESSERACT_CMD = "$PWD\..\dist\desktop\tesseract\tesseract.exe"
+$env:DOCUREBUILD_TESSDATA_DIR = "$PWD\..\dist\desktop\tesseract\tessdata"
+.venv\Scripts\python.exe -m app.ocr_benchmark tests/fixtures/ocr-real --segmentation-mode 11 --json
+```
+
+The disposable harness and its outputs are in `%TEMP%\opencode\paddle-eval` and
+are deliberately **not** committed.
+
+### Limitations
+
+- The corpus is three pages with one transcriber and no scored Burmese-only
+  case; it is evidence about these engines on this material, not a population
+  estimate. The same caveat applies to the Tesseract baseline in
+  `docs/ocr-benchmark.md`.
+- PaddleOCR was run in an isolated virtual environment, not inside the packaged
+  sidecar; PyInstaller bundling and installed-app smoke behaviour were not
+  tested because the decision is not to implement the adapter.
+- oneDNN was disabled for every Paddle measurement to work around a crash. A
+  future PaddlePaddle/PaddleOCR release may fix it, but no such release was
+  tested here.
+- The mixed page was scored with an English recogniser because no Burmese model
+  exists. Its WER happens to be similar to Tesseract's because both produce many
+  wrong words, but the Burmese content itself is unusable; CER is the more
+  informative number for that case.
+- Model and package sizes are measured from the downloaded cache and installed
+  packages on this Windows x64 machine. Installer-compressed size is estimated
+  from the current 195.92 MB unreleased build, not measured from a Paddle
+  installer.
+
+### Files changed
+
+- `docs/optional-future/PROGRESS.md` (this evaluation record)
+- `ROADMAP.md`, `CHANGELOG.md`, `CONTINUE_PROMPT.md`, `PROJECT_MEMORY.md`
+  (status and durable-decision records)
+
+No application source, test, migration, API, UI, locale, dependency or packaged
+build changed. Tesseract remains the default and every OCR result stays a
+reviewable proposal.
 
 ---
 
@@ -539,3 +710,12 @@ The approved next step, a read-only cross-page aggregation, is now implemented.
   646.64 -> 598.39 MB; Chromium locales 55 -> 1. Smoke passed 12/12 in 14 s with
   0 console errors. Only `apps/desktop/package.json` changed in the application;
   the build is unreleased.
+- 2026-11-28: Task 02 evaluated with the owner's approval. Installed PaddleOCR
+  3.7.0 / PaddlePaddle 3.3.1 in a throwaway venv, confirmed there is no Burmese
+  model, and scored its English output on the real-scan corpus with the
+  repository's own scorer. Paddle v4 mobile: 16.35% overall CER (table 8.33% vs
+  Tesseract 22.43%, but prose 5.18% vs 0.47% and mixed 43.41% vs 36.77%); v5
+  mobile: 20.80% overall CER. Runtime 137-162 s versus 10.31 s for Tesseract,
+  peak RSS ~593-618 MiB, and ~842 MB of packages plus models. Decision: do not
+  implement; Tesseract stays the default. No application code or dependency
+  changed.

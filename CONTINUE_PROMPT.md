@@ -62,18 +62,20 @@ COMPLETED PROMPT-PACK WORK (do not redo)
 - 03_OPTIONAL_FUTURE: 01 done - proposals stay derived/non-persisted; the owner
   approved a read-only cross-page review, implemented in b7761bd as
   GET /projects/{id}/region-proposals (bounded 100 pages/request, 200 max,
-  resumable, no batch accept). 03 quota introspection and 05 macOS/Linux study
+  resumable,   no batch accept). 03 quota introspection and 05 macOS/Linux study
   are report-only evaluations. 04 locale trimming is applied in 419f492 and
-  verified. 02 PaddleOCR is deferred.
+  verified. 02 PaddleOCR was evaluated with the owner's approval on the
+  real-scan corpus: no Burmese model, case-specific accuracy, ~8x sidecar
+  footprint and 13-16x slower pages; decision not to implement.
 
 REMAINING WORK
-- Only candidate: PaddleOCR adapter evaluation, deferred because it needs a heavy
-  local install and a measured real-scan benchmark. Do not start it without an
-  explicit owner decision. If approved, read its prompt file in
-  C:\Users\minkh\Downloads\Telegram Desktop\DocuRebuild_Remaining_Work_Prompts\DocuRebuild_Prompt_Pack\03_OPTIONAL_FUTURE\02_PaddleOCR_Adapter_Evaluation.md
-  and follow its acceptance criteria.
-- No other prompt-pack work is pending. Mobile/PWA/camera/cloud are out of scope,
-  not backlog.
+- No prompt-pack work is pending. The PaddleOCR adapter evaluation is complete
+  with a benchmark-backed decision not to implement; Tesseract remains the sole
+  default engine. Mobile/PWA/camera/cloud are out of scope, not backlog.
+- Other recorded items are known gaps, not tasks unless the owner approves one:
+  OCR cancellation/stale-run recovery, a larger real-scan corpus, text-only
+  merged-cell detection, a bundled offline LaTeX typesetter, OMML edge cases,
+  automatic update checking and account-level provider quota verification.
 
 KNOWN GAPS (recorded, not tasks unless approved)
 - Windows x64 only, no code signing; interactive NVDA/Narrator pass blocked.
@@ -109,6 +111,10 @@ WORKING RULES
   verified checksum evidence.
 
 SESSION LOG (most recent first; append after each approved task)
+- 2026-11-28 (uncommitted at handover): PaddleOCR adapter evaluation; no Burmese
+  model, v4 mobile 16.35% vs Tesseract 22.64% overall CER but prose/mixed
+  regressions, 137-162 s vs 10.31 s, ~842 MB packages; decision not to
+  implement, no application code change; no release published.
 - 2026-11-28 b7761bd: read-only cross-page region review; 456 backend / 60 web
   files / 368 tests; proposals remain derived; no release published.
 - 2026-11-28 419f492: Chromium locales trimmed to en-US; installer 195.92 MB,
