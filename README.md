@@ -379,14 +379,13 @@ docs/
   ISSUE_TEMPLATE/       Bug and feature request forms
 start-docurebuild.bat   Windows one-click development launcher
 AGENTS.md               Permanent instructions for AI coding agents
-CONTINUE_PROMPT.md      Paste-ready handover for the next chat or agent
+CONTINUE_PROMPT.md      Single paste-ready handover for the next chat or agent
 PROJECT_MEMORY.md       Architecture, decisions, status and handover context
 ROADMAP.md              Current completion status and deferred features
 CHANGELOG.md            Release history
 LICENSE                 AGPL-3.0
 THIRD_PARTY_NOTICES.md  Dependency licences and notices
 PROJECT_COMPLETION_REPORT.md  Delivery and QA record
-Prompt.md               Original product specification and phase plan
 CONTRIBUTING.md         Setup, checks and contribution rules
 SECURITY.md             Vulnerability reporting and local-credential scope
 ```

@@ -503,9 +503,9 @@ secret scan.
 
 ## 14. Handover checklist for the next agent
 
-1. Read `AGENTS.md`, `CONTINUE_PROMPT.md`, this file, `ROADMAP.md` and
-   `CHANGELOG.md`; use the paste-ready prompt in `CONTINUE_PROMPT.md` for a new
-   chat and run only one remaining task per session.
+1. Use `CONTINUE_PROMPT.md` as the single paste-ready handover for a new chat;
+   `AGENTS.md` is loaded automatically. Do not re-read the other status documents
+   just to recover context. Run only one remaining task per session.
 2. Run `git status -sb` and `git log --oneline -10`; do not discard unfamiliar
    work.
 3. Run the checks in section 11 before changing behaviour.

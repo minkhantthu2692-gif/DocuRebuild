@@ -1,7 +1,8 @@
 # Detailed phase history
 
 This document keeps the long-form, phase-by-phase implementation record that
-follows the plan in `Prompt.md`. A phase is only marked complete when its own
+follows the original plan (archived in git as `e7966d4:Prompt.md`). A phase is
+only marked complete when its own
 acceptance checks pass; later-phase functionality is not presented in the UI
 until it actually works.
 
