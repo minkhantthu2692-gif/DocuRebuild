@@ -4,7 +4,13 @@ All notable changes to DocuRebuild are recorded here. This project follows
 [Semantic Versioning](https://semver.org/) and the desktop application is the
 supported 1.0 distribution.
 
-## [Unreleased]
+## [1.1.1] - 2026-11-28
+
+A maintenance release for the Windows x64 desktop application. It ships the
+post-1.1.0 quality work: bounded PDF memory and per-project import
+serialisation, a real-scan OCR accuracy baseline, a documented accessibility
+audit, a large-document performance/cancellation drill, and an automated desktop
+E2E smoke suite. No schema migration; existing projects are unchanged.
 
 ### Fixed
 
@@ -31,6 +37,22 @@ supported 1.0 distribution.
   dismissal/focus restoration and native checkbox/switch/radio semantics.
   NVDA and Narrator could not be exercised because neither tooling was active
   or available in this environment; this is not claimed as WCAG certification.
+- **Real-scan OCR baseline.** Added three public-domain page scans (1905 English
+  prose, 1975 English statistical table, 1898 English/Burmese glossary) with
+  typed transcripts, provenance and SHA-256 in
+  `backend/tests/fixtures/ocr-real`. Bundled Tesseract scores clean English prose
+  at 0.47% CER; the printed table (50.78% to 22.43% CER) and mixed Burmese page
+  (45.33% to 36.77% CER) improve with sparse-text mode but remain reconstruction
+  problems. A Burmese-only page is stored but not scored because no trustworthy
+  transcript exists.
+- **Large-document performance and cancellation drill.** Measured on the
+  packaged sidecar and editor: a 400-page raster PDF imports in 106.68 s at
+  0.259-0.267 s/page with a 197.3 MB peak, memory stays flat at 156.5-158.8 MB
+  across ten repeated imports, a 1,015,143-character document saves and reads in
+  0.17 s / 0.04 s, and three cancellations of a 400-page import complete in
+  0.14-0.27 s with no leftover temp files. Found and fixed unbounded PyMuPDF
+  buffer retention and a same-project import page-number collision (imports are
+  now serialised per project).
 - Added a 27 November 2026 practical-file check covering 8 PDF pages and 5
   attached JPG scans. Import and source rendering were verified, PDF page 1's
   embedded text was usable, a Burmese schedule image preserved recognizable
