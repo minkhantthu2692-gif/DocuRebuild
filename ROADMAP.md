@@ -4,23 +4,23 @@ This is the short, current roadmap for the Windows x64 desktop release.
 `docs/roadmap.md` keeps the detailed phase-by-phase implementation history;
 `PROJECT_MEMORY.md` records architecture and handover context.
 
-Last updated: 2026-11-28 (automated desktop E2E smoke suite added; accessibility
-audit, large-document performance drill and real-scan OCR validation recorded
-after 1.1.0).
+Last updated: 2026-11-28 (v1.1.1 released: automated desktop E2E smoke suite,
+accessibility audit, large-document performance drill and real-scan OCR
+validation).
 
 ## Release status
 
-**DocuRebuild 1.1.0 is the current release for the Windows x64 desktop scope
-(published 26 November 2026).** The installer, bundled OCR, local
+**DocuRebuild 1.1.1 is the current release for the Windows x64 desktop scope
+(published 28 November 2026).** The installer, bundled OCR, local
 database/storage, BYOK AI, backup/restore and export are implemented and
 verified. Everything below labelled *Complete* ships in
-`DocuRebuild-1.1.0-setup.exe`.
+`DocuRebuild-1.1.1-setup.exe`.
 
-**1.1.0** adds document typography controls (font family selection with custom
-font import, superscript/subscript and Justify) and layout-aware paragraph
-reconstruction: reviewed OCR blocks are inserted as flowing paragraphs, real
-lists and headings while side-by-side columns stay apart. It supersedes
-`DocuRebuild-1.0.2-setup.exe`; upgrading keeps existing projects.
+**1.1.1** is a maintenance release over 1.1.0. It adds bounded PDF memory,
+per-project import serialisation, a real-scan OCR baseline, an accessibility
+audit, a large-document performance/cancellation drill and the automated
+desktop E2E smoke suite (`npm run smoke:desktop`). No schema migration;
+upgrading keeps existing projects. It supersedes `DocuRebuild-1.1.0-setup.exe`.
 
 **1.0.2** unified checkboxes, switches and radios across the workspace and fixed
 the Edit Image dialog reloading, resetting its controls or flickering during

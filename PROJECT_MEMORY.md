@@ -4,7 +4,7 @@ This is the durable context file for DocuRebuild. A new AI agent (or a new human
 developer) should be able to read this document and `AGENTS.md`, clone the
 repository, run the checks and continue work without any previous conversation.
 
-Last updated: 2026-11-28 (v1.1.0 with desktop E2E smoke suite verified).
+Last updated: 2026-11-28 (v1.1.1 released with desktop E2E smoke suite verified).
 
 ## 1. What the product is
 
@@ -383,29 +383,28 @@ secret scan.
 
 ## 13. Release state
 
-- Version 1.1.0 everywhere. License AGPL-3.0-or-later.
+- Version 1.1.1 everywhere. License AGPL-3.0-or-later.
 - Repository: <https://github.com/minkhantthu2692-gif/DocuRebuild>
-- Current release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.0>,
-  published 26 November 2026 from tag `v1.1.0` at commit `a8baa1b`, and marked
+- Current release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.1>,
+  published 28 November 2026 from tag `v1.1.1` at commit `486688e`, and marked
   latest.
-- 1.1.0 installer asset:
-  <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/download/v1.1.0/DocuRebuild-1.1.0-setup.exe>,
-  214,082,110 bytes (204.2 MB), SHA-256
-  `EC1DF483F539A0DE40DD862A820FD653E1C406AE12921B58D9B5069131A325F4`, built on
-  26 November 2026 from the typography and OCR reconstruction tree.
-- 1.1.0 adds document typography (font family selection and import,
-  superscript/subscript, Justify, Word/PDF font embedding) and layout-aware OCR
-  insertion: reviewed blocks become flowing paragraphs, real lists and headings,
-  prose columns merged by Tesseract are split, and side-by-side columns stay
-  apart. Embedded PDF text is measured per line so page titles classify as
-  headings.
-- 1.1.0 verification: 437 backend and 356 web tests pass; the packaged sidecar
-  passed a 30-check drill (project, page import, English OCR at 96.5 mean
-  confidence with line geometry, save/reopen of a justified document, four
-  exports, backup restore as a new project); the installer installed, launched
-  with an empty temporary data folder, uninstalled keeping data, and reinstalled
-  at 1.1.0. The published asset was re-downloaded anonymously: same size and
-  SHA-256.
+- 1.1.1 installer asset:
+  <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/download/v1.1.1/DocuRebuild-1.1.1-setup.exe>,
+  214,103,864 bytes (204.19 MB), SHA-256
+  `9CC17F7EDF0138A7FC452844C89B0F2EC653970258F3888A661AB3773FAC13CB`, built on
+  28 November 2026 from the post-1.1.0 quality tree. The published asset was
+  re-downloaded anonymously: same size and SHA-256; the packaged build passed the
+  12/12 desktop E2E smoke suite in 13 s.
+- 1.1.1 adds the post-1.1.0 quality work: bounded PDF memory and per-project
+  import serialisation, a real-scan OCR baseline (`docs/ocr-benchmark.md`), an
+  accessibility audit, a large-document performance/cancellation drill
+  (`docs/performance.md`), and the automated desktop E2E smoke suite
+  (`npm run smoke:desktop`). No schema migration.
+- 1.1.0 history: tag `v1.1.0` at commit `a8baa1b`, published 26 November 2026;
+  installer `DocuRebuild-1.1.0-setup.exe`, 214,082,110 bytes, SHA-256
+  `EC1DF483F539A0DE40DD862A820FD653E1C406AE12921B58D9B5069131A325F4`. It added
+  document typography and layout-aware OCR insertion; 437 backend and 356 web
+  tests passed.
 - 1.0.2 history: tag `v1.0.2` at commit `dae6ffd`, published 24 November 2026;
   installer `DocuRebuild-1.0.2-setup.exe`, 211,540,824 bytes, SHA-256
   `E501B0427371ED64B185A56E67089945896B417C9B19057130802455A1A03F47`, downloaded
