@@ -3,12 +3,12 @@
 **Original report date:** 26 November 2026
 **Original snapshot:** v1.1.0 release verification at commit `b0c139d`, following
 the 1.0/1.1 desktop delivery recorded in section 13 and `PROJECT_MEMORY.md`
-**Current state:** 28 November 2026, `main` at the 1.1.2 version/docs commit,
-version **1.1.2** built, smoke-tested and pushed but not published as a GitHub
+**Current state:** 28 November 2026, `main` at the 1.1.3 version/docs commit,
+version **1.1.3** built, smoke-tested and pushed but not published as a GitHub
 release; v1.1.1 remains the published release from `486688e`. The post-release
-quality and prompt-pack work is carried by the locally built 1.1.2 installer.
+quality and prompt-pack work is carried by the locally built 1.1.3 installer.
 The current status, completed prompt-pack tasks and remaining work are in
-**sections 16-17** and in `CONTINUE_PROMPT.md`.
+**sections 16-18** and in `CONTINUE_PROMPT.md`.
 **Scope of this report:** audit of implemented behaviour, not a plan for new features
 
 **How to read the historical sections:** sections 1-13 describe the v1.1.0
@@ -944,8 +944,8 @@ the post-snapshot MUST HAVE work. The prompt pack at
 defines the remaining tasks. Its `01_MUST_HAVE` and `02_SHOULD_HAVE` series are
 **complete**, as are the quick-win audit and all optional evaluations. The
 published v1.1.1 installer was built at `486688e`; the task work below is
-committed on `main` and carried by the locally built, unpublished 1.1.2
-installer described in section 17.
+committed on `main` and carried by the locally built, unpublished 1.1.3
+installer described in section 18.
 
 ### 16.1 Completed prompt-pack tasks
 
@@ -1046,5 +1046,44 @@ The smoke run covered launch/sidecar authentication, project creation, PDF
 import, source rendering, OCR review/insert, edit/autosave/reopen,
 Markdown/TXT/DOCX/PDF export, backup/restore and clean sidecar shutdown. The
 1.1.2 installer itself was **not** installed on a clean machine and no GitHub
+release was published from it. The published release remains v1.1.1; pushing
+the version bump to `main` does not change that.
+
+## 18. 1.1.3 local build verification (28 November 2026)
+
+Version 1.1.3 was bumped across the root, web, desktop and shared package
+manifests, `package-lock.json`, `backend/app/__init__.py` and
+`backend/pyproject.toml`. It carries the equation-extraction LaTeX normalisation
+described in `CHANGELOG.md`. A clean `npm run desktop:dist` rebuilt the web
+client, the PyInstaller sidecar and the NSIS payload with the existing bundled
+Tesseract runtime. It produced a **separate** installer,
+`dist/desktop-installer/DocuRebuild-1.1.3-setup.exe`, 205,444,142 bytes (195.93
+MB), SHA-256
+`BCB80868CF88EE9A8581BB12CA84FB2B798CFC137E77D082640B62FD7D687E20`.
+
+The earlier `DocuRebuild-1.1.1-setup.exe` (locale-trimmed, 195.92 MB,
+`BABE4B59...F649`) and `DocuRebuild-1.1.2-setup.exe` (195.92 MB,
+`56BEA0EB...88117`) in `dist/` were not overwritten and must not be published as
+1.1.1. The **published** 1.1.1 asset is a different, earlier file (214,103,864
+bytes, SHA-256
+`9CC17F7EDF0138A7FC452844C89B0F2EC653970258F3888A661AB3773FAC13CB`).
+
+Verification after the version bump:
+
+| Check | Result |
+| --- | --- |
+| `backend\.venv\Scripts\python.exe -m pytest backend/tests -q` | 468 passed, 1 warning in 306.49 s |
+| `npm run test:web` | 60 files / 369 tests passed |
+| `npm run typecheck` | clean |
+| `npm run lint` | clean |
+| `npm run desktop:dist` | 1.1.3 installer built; no code signing certificate configured |
+| `npm run smoke:desktop` | 12/12 steps passed in 17 s on the packaged `win-unpacked` build |
+
+The smoke run covered launch/sidecar authentication, project creation, PDF
+import, source rendering, OCR review/insert, edit/autosave/reopen,
+Markdown/TXT/DOCX/PDF export, backup/restore and clean sidecar shutdown. The
+packaged smoke must run with no other DocuRebuild instance open, because the
+installed app shares `%APPDATA%\DocuRebuild` and holds the single-instance lock.
+The 1.1.3 installer itself was **not** installed on a clean machine and no GitHub
 release was published from it. The published release remains v1.1.1; pushing
 the version bump to `main` does not change that.

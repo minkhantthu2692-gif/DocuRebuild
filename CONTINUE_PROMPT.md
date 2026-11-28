@@ -15,9 +15,9 @@ of 2026-11-28; do not reconstruct context by re-reading the rest of the docs.
 FRESH SESSION CHECKS
 - Working directory: C:\Users\minkh\OneDrive\Desktop\DocuRebuild
 - Run git status -sb and git log --oneline -10. At handover: branch `main`, HEAD
-  is `aefc5ed` (equation LaTeX normalisation) on top of `8b1357f`, `origin/main`
-  in sync and the working tree clean. Treat unfamiliar work as the owner's; do
-  not discard it.
+  is the 1.1.3 version/docs commit on top of `4c7914c`, `origin/main` in sync and
+  the working tree clean. Treat unfamiliar work as the owner's; do not discard
+  it.
 - Do not create a new project or re-initialise git.
 - AGENTS.md should already be in your context. If it is absent, read it once;
   otherwise do not re-open the other status documents.
@@ -34,20 +34,21 @@ CURRENT VERIFIED STATE
 - Version 1.1.1 is published from commit 486688e. Work after that tag is on main
   but has not been published as a GitHub release; do not publish it without an
   explicit owner request.
-- Version 1.1.2 is built, smoke-tested and pushed to main but is **not** published
+- Version 1.1.3 is built, smoke-tested and pushed to main but is **not** published
   as a GitHub release. The published release remains v1.1.1.
 - Latest checks: 468 backend tests, 60 web files / 369 tests, typecheck, lint and
-  production build clean. The packaged 1.1.2 win-unpacked build passed 12/12
-  npm run smoke:desktop steps in 14 s.
+  production build clean. The packaged 1.1.3 win-unpacked build passed 12/12
+  npm run smoke:desktop steps in 17 s.
 - Published 1.1.1 installer: DocuRebuild-1.1.1-setup.exe, 204.19 MB, SHA-256
   9CC17F7EDF0138A7FC452844C89B0F2EC653970258F3888A661AB3773FAC13CB.
-- Locally built 1.1.2 installer: DocuRebuild-1.1.2-setup.exe, 205,436,086 bytes
-  (195.92 MB), SHA-256
-  56BEA0EB38B7017D2EAB143A31DE31CFF917875F1C4030216334B86D15588117. The
-  earlier locale-trimmed file named DocuRebuild-1.1.1-setup.exe in dist/ is
-  195.92 MB, SHA-256
+- Locally built 1.1.3 installer: DocuRebuild-1.1.3-setup.exe, 205,444,142 bytes
+  (195.93 MB), SHA-256
+  BCB80868CF88EE9A8581BB12CA84FB2B798CFC137E77D082640B62FD7D687E20. The earlier
+  locale-trimmed file named DocuRebuild-1.1.1-setup.exe in dist/ is 195.92 MB,
+  SHA-256
   BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649, is
-  byte-identical to before the 1.1.2 build and must not be published as 1.1.1.
+  byte-identical to before the 1.1.2/1.1.3 builds and must not be published as
+  1.1.1. The 1.1.2 installer (56BEA0EB...88117) also remains in dist/ unchanged.
 
 BASELINE COMMANDS (run before changing behaviour)
   backend\.venv\Scripts\python.exe -m pytest backend/tests -q   # 468 passed
@@ -117,6 +118,14 @@ WORKING RULES
   verified checksum evidence.
 
 SESSION LOG (most recent first; append after each approved task)
+- 2026-11-28 (1.1.3 version/docs commit): version bump to 1.1.3 across all
+  manifests, clean npm run desktop:dist producing the separate
+  DocuRebuild-1.1.3-setup.exe (205,444,142 bytes / 195.93 MB,
+  BCB80868...87E20), 12/12 packaged smoke in 17 s, 468 backend / 369 web tests,
+  typecheck/lint clean; docs and handover refreshed; pushed to main, no GitHub
+  release published and the 1.1.1 asset untouched. Note: the packaged smoke needs
+  no other DocuRebuild instance running (the installed app shares
+  %APPDATA%\DocuRebuild and holds the single-instance lock).
 - 2026-11-28 aefc5ed: equation extraction starts from normalised LaTeX instead
   of raw OCR text; new `backend/app/services/equation_latex.py` rebuilds the
   source from the stored OCR word boxes (superscripts/subscripts) and maps

@@ -6,6 +6,12 @@ supported 1.0 distribution.
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-11-28
+
+A Windows x64 maintenance build that carries the equation-extraction improvement
+in a separately versioned installer. The published v1.1.1 release asset is not
+modified or replaced. No schema migration; existing projects are unchanged.
+
 ### Changed
 
 - **Equation extraction starts from normalised LaTeX.** The **Detect equations**
@@ -24,6 +30,14 @@ supported 1.0 distribution.
   `_{...}`, `\left( ... \right)`, Greek and operator commands) and for every
   term before the first equals sign to be kept in order. It still forbids adding
   anything not clearly visible.
+- **Version 1.1.3.** Root, web, desktop and shared package manifests plus
+  `backend/app/__init__.py` and `backend/pyproject.toml` now read 1.1.3. A clean
+  `npm run desktop:dist` produced `DocuRebuild-1.1.3-setup.exe` (205,444,142
+  bytes, 195.93 MB, SHA-256
+  `BCB80868CF88EE9A8581BB12CA84FB2B798CFC137E77D082640B62FD7D687E20`) without
+  touching the earlier installers. The 12/12 `npm run smoke:desktop` suite passed
+  on the packaged build in 17 s. This build is pushed to `main` but has **not**
+  been published as a GitHub release.
 
 ## [1.1.2] - 2026-11-28
 

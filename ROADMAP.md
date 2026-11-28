@@ -4,15 +4,15 @@ This is the short, current roadmap for the Windows x64 desktop release.
 `docs/roadmap.md` keeps the detailed phase-by-phase implementation history;
 `PROJECT_MEMORY.md` records architecture and handover context.
 
-Last updated: 2026-11-28 (v1.1.2 built, smoke-tested and pushed to `main` but
+Last updated: 2026-11-28 (v1.1.3 built, smoke-tested and pushed to `main` but
 not published as a GitHub release; v1.1.1 remains the published release. All
 `01_MUST_HAVE` and `02_SHOULD_HAVE` prompt-pack tasks are complete; the quick-win
 regression audit found no defect; optional tasks 01, 03 and 05 are evaluated,
 task 01's approved read-only cross-page review is implemented, task 04 is
 applied and verified, task 02 (PaddleOCR) is evaluated with a decision not to
-implement, and installer locale trimming carried into 1.1.2 cut the build from
-204.19 to 195.92 MB. Status docs and the paste-ready handover are refreshed in
-`CONTINUE_PROMPT.md`).
+implement, installer locale trimming cut the build from 204.19 to 195.92 MB, and
+1.1.3 adds the equation-extraction LaTeX normalisation. Status docs and the
+paste-ready handover are refreshed in `CONTINUE_PROMPT.md`).
 
 ## Release status
 
@@ -22,19 +22,23 @@ database/storage, BYOK AI, backup/restore and export are implemented and
 verified. Everything labelled *Complete* in the 1.x MUST HAVE table ships in
 `DocuRebuild-1.1.1-setup.exe`.
 
-**1.1.2 is built, smoke-tested and pushed to `main`, but no GitHub release has
+**1.1.3 is built, smoke-tested and pushed to `main`, but no GitHub release has
 been published from it.** Its installer is
-`dist/desktop-installer/DocuRebuild-1.1.2-setup.exe` (205,436,086 bytes, 195.92
+`dist/desktop-installer/DocuRebuild-1.1.3-setup.exe` (205,444,142 bytes, 195.93
 MB, SHA-256
-`56BEA0EB38B7017D2EAB143A31DE31CFF917875F1C4030216334B86D15588117`). It carries
-the post-v1.1.1 work listed below; the published 1.1.1 asset is unchanged.
+`BCB80868CF88EE9A8581BB12CA84FB2B798CFC137E77D082640B62FD7D687E20`). It carries
+the equation-extraction improvement and all post-v1.1.1 work; the published 1.1.1
+asset is unchanged.
 
-**1.1.2** is a maintenance build over 1.1.1. It adds the read-only cross-page
+**1.1.3** is a maintenance build over 1.1.2. It starts equation review from
+normalised LaTeX rebuilt from the stored OCR word boxes instead of raw OCR text,
+and strengthens the optional AI equation prompt, with no schema migration. The
+packaged `win-unpacked` build passed 12/12 `npm run smoke:desktop` steps in 17 s.
+
+**1.1.2** was a maintenance build over 1.1.1. It added the read-only cross-page
 region review, the `en-US`-only Chromium locale trimming, and the documented
 optional-task evaluations (provider quota, macOS/Linux feasibility and the
 PaddleOCR decision). No schema migration; upgrading keeps existing projects.
-The packaged `win-unpacked` build passed 12/12 `npm run smoke:desktop` steps in
-14 s.
 
 **1.1.1** was a maintenance release over 1.1.0. It added bounded PDF memory,
 per-project import serialisation, a real-scan OCR baseline, an accessibility
@@ -245,8 +249,8 @@ and bundled Tesseract. A full `npm run desktop:dist` rebuild and the 12/12
 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB, Chromium locales 55 files
 (48.82 MB) -> 1 file (0.56 MB). The installer shrinks less than the installed
 footprint because the dropped locale files compress well in the NSIS payload.
-This trimmed build now ships in the locally verified 1.1.2 installer; the
-published v1.1.1 asset is unchanged. Full evidence:
+This trimmed build now ships in the locally verified 1.1.2 and 1.1.3 installers;
+the published v1.1.1 asset is unchanged. Full evidence:
 `docs/optional-future/PROGRESS.md`.
 
 **PaddleOCR adapter evaluation (28 November 2026).** With the owner's approval,
@@ -274,10 +278,11 @@ prompt pack are complete. Each task has a detailed evidence section in
 | 01 MUST HAVE | Real-scan OCR baseline, accessibility audit, large-document performance/cancellation, desktop E2E smoke suite | `docs/ocr-benchmark.md`, `docs/performance.md`, `npm run smoke:desktop`, report §§13-15 | `8cb208c`, `09b5f99`, `ad7809d` |
 | 02 SHOULD HAVE | Page-wide figure detection, page-wide equation proposals, nested table separation, opaque PDF drawing extraction | `docs/figure-detection.md`, `docs/should-have/PROGRESS.md`, report §16 | `04f0b5f`, `0708826`, `25ffbc7`, `0d2aa0e` |
 
-Current tree verification: 456 backend tests, 60 web files / 368 tests,
+Current tree verification: 468 backend tests, 60 web files / 369 tests,
 typecheck, lint and production build clean. These commits are on `main` after
-the v1.1.1 release tag; the first packaged build from them is the locally
-verified 1.1.2 installer, which is not published as a GitHub release.
+the v1.1.1 release tag; the locally verified 1.1.2 installer carries the
+post-v1.1.1 work and the 1.1.3 installer adds the equation-extraction
+normalisation; neither is published as a GitHub release.
 
 ## Known gaps for a wider (non-Windows) production release
 
@@ -360,7 +365,7 @@ evidence in `docs/should-have/PROGRESS.md`, `docs/quick-wins/PROGRESS.md`,
 ## Known limitations
 
 See `PROJECT_MEMORY.md` §12 and `CHANGELOG.md` §1.1.0. The headline limits are:
-Windows x64 only, ~196 MB installer / ~598 MB installed in the 1.1.2 build
+Windows x64 only, ~196 MB installer / ~598 MB installed in the 1.1.3 build
 (the published 1.1.1 asset is ~204 MB / ~650 MB), a three-page real-scan
 OCR corpus (not a population estimate, one transcriber, no scored Burmese-only
 case), page-wide equation proposals depend on OCR equation blocks, nested tables

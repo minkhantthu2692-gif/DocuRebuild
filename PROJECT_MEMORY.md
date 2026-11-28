@@ -4,9 +4,10 @@ This is the durable context file for DocuRebuild. A new AI agent (or a new human
 developer) should be able to read this document and `AGENTS.md`, clone the
 repository, run the checks and continue work without any previous conversation.
 
-Last updated: 2026-11-28 (v1.1.2 built, smoke-tested and pushed to `main` but
+Last updated: 2026-11-28 (v1.1.3 built, smoke-tested and pushed to `main` but
 not published as a GitHub release; v1.1.1 remains the published release with the
-desktop E2E smoke suite verified. Optional tasks evaluated: region proposals kept
+desktop E2E smoke suite verified. 1.1.3 adds the equation-extraction LaTeX
+normalisation. Optional tasks evaluated: region proposals kept
 derived with a read-only cross-page review (§10 item 16), provider quota
 report-only (§10 item 17), platform posture (§10 item 18); installer footprint
 trimmed and verified (§10 item 19); PaddleOCR evaluated with a benchmark-backed
@@ -59,7 +60,7 @@ npm run dev
 
 # Build the desktop payload and installer
 npm run desktop:dist
-# -> dist/desktop-installer/DocuRebuild-1.1.2-setup.exe
+# -> dist/desktop-installer/DocuRebuild-1.1.3-setup.exe
 ```
 
 The desktop payload build (`scripts/build-desktop.mjs`) does three things:
@@ -374,8 +375,8 @@ AI credentials are configured in the application, not in environment files.
     204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB, locales 48.82 -> 0.56 MB.
     The installer shrinks less than the installed footprint because the dropped
     files compress well in the NSIS payload. The build is carried by the locally
-    verified 1.1.2 installer; the published 1.1.1 asset is unchanged. A slimmer
-    Tesseract build (178.10 MB) is
+    verified 1.1.2 and 1.1.3 installers; the published 1.1.1 asset is unchanged. A
+    slimmer Tesseract build (178.10 MB) is
     deferred until a compatible build can be benchmarked and smoke-tested.
     Details: `docs/optional-future/PROGRESS.md`.
 20. **Tesseract stays the sole local OCR engine; PaddleOCR is evaluated and
@@ -399,8 +400,8 @@ AI credentials are configured in the application, not in environment files.
 ## 11. Verification commands and current results
 
 ```powershell
-backend/.venv/Scripts/python -m pytest backend/tests -q   # 456 passed
-npm run test:web                                          # 368 tests / 60 files
+backend/.venv/Scripts/python -m pytest backend/tests -q   # 468 passed
+npm run test:web                                          # 369 tests / 60 files
 npm run typecheck                                         # clean
 npm run lint                                              # clean
 npm run build                                             # production build
@@ -412,8 +413,8 @@ build over the DevTools protocol with a disposable data profile. It covers
 launch/sidecar → create project → import PDF → render → OCR/review/insert →
 edit/save/reopen → export → backup/restore → clean shutdown, and exits non-zero
 on failure with a JSON report (`docs/smoke/desktop-smoke.json`, ignored). It
-requires Node 22+ (global `WebSocket`). The 1.1.2 packaged `win-unpacked` build
-passed 12/12 steps in 14 s on 28 November 2026; the installer was built but was
+requires Node 22+ (global `WebSocket`). The 1.1.3 packaged `win-unpacked` build
+passed 12/12 steps in 17 s on 28 November 2026; the installer was built but was
 not installed or published in this task.
 
 Installed-build QA (1.0.0, Windows 11 x64, N100/16 GB) is recorded in
@@ -427,7 +428,7 @@ secret scan.
 ## 12. Known limitations
 
 - Windows x64 only; no macOS/Linux package, no code-signing certificate.
-- Installer ~196 MB, installed footprint ~598 MB in the 1.1.2 build; the
+- Installer ~196 MB, installed footprint ~598 MB in the 1.1.3 build; the
   published 1.1.1 asset is ~204 MB / ~650 MB. Tesseract
   (178.10 MB) dominates the remaining size; a slimmer build is deferred.
 - OCR accuracy is measured on synthetic pages and a three-page real-scan corpus;
@@ -466,20 +467,22 @@ secret scan.
 
 ## 13. Release state
 
-- Version 1.1.2 everywhere. License AGPL-3.0-or-later.
+- Version 1.1.3 everywhere. License AGPL-3.0-or-later.
 - `main` contains the four `02_SHOULD_HAVE` commits, the quick-win audit, the
   optional evaluations, the read-only cross-page region review, the verified
-  locale trimming and the version bump on top of v1.1.1. Current suite: 456
-  backend / 368 web tests; typecheck, lint and production build clean.
-- The locally built 1.1.2 installer is
-  `dist/desktop-installer/DocuRebuild-1.1.2-setup.exe`, 205,436,086 bytes (195.92
+  locale trimming, the equation-extraction LaTeX normalisation and the version
+  bump on top of v1.1.1. Current suite: 468 backend / 369 web tests; typecheck,
+  lint and production build clean.
+- The locally built 1.1.3 installer is
+  `dist/desktop-installer/DocuRebuild-1.1.3-setup.exe`, 205,444,142 bytes (195.93
   MB), SHA-256
-  `56BEA0EB38B7017D2EAB143A31DE31CFF917875F1C4030216334B86D15588117`. It passed
-  12/12 `npm run smoke:desktop` steps on the packaged build in 14 s and is pushed
+  `BCB80868CF88EE9A8581BB12CA84FB2B798CFC137E77D082640B62FD7D687E20`. It passed
+  12/12 `npm run smoke:desktop` steps on the packaged build in 17 s and is pushed
   to `main` but **not published** as a GitHub release. The earlier locale-trimmed
   file named `DocuRebuild-1.1.1-setup.exe` in `dist/` (195.92 MB, SHA-256
   `BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649`) remains
   byte-identical and must not be confused with the published 1.1.1 asset below.
+  The 1.1.2 installer (`56BEA0EB...88117`) also remains in `dist/` unchanged.
   See `CONTINUE_PROMPT.md` for the next task.
 - Repository: <https://github.com/minkhantthu2692-gif/DocuRebuild>
 - Current published release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.1>,
@@ -497,6 +500,9 @@ secret scan.
   accessibility audit, a large-document performance/cancellation drill
   (`docs/performance.md`), and the automated desktop E2E smoke suite
   (`npm run smoke:desktop`). No schema migration.
+- 1.1.3 (unpublished build) starts equation review from normalised LaTeX rebuilt
+  from the stored OCR word boxes and strengthens the optional AI equation prompt.
+  No schema migration; upgrading keeps existing projects.
 - 1.1.2 (unpublished build) adds the read-only cross-page region review, the
   `en-US`-only Chromium locale trimming and the documented optional-task
   evaluations (provider quota, macOS/Linux feasibility and the PaddleOCR

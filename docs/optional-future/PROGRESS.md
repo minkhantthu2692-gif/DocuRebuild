@@ -543,7 +543,7 @@ locale `.pak` files compress well inside the NSIS 7z payload. The trimmed
 `DocuRebuild-1.1.1-setup.exe` in `dist/` has SHA-256
 `BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649`; it was not
 published as 1.1.1 and remained byte-identical when the separately versioned
-1.1.2 installer was built.
+1.1.2 and 1.1.3 installers were built.
 
 **Why this is safe:** Electron's native UI strings are English; the
 application's English/Burmese UI and all OCR languages (`eng`, `mya`, `osd`) come
@@ -557,8 +557,9 @@ dominated by `libtesseract-5.dll` and ICU) would need a compatible build plus a
 re-run of the OCR benchmark and smoke suite; it is deferred.
 
 **Decision:** the locale trimming is applied and verified. The locale-trimmed
-build is now carried by the locally verified 1.1.2 installer, which is pushed to
-`main` but not published as a GitHub release; it must not be published as 1.1.1.
+build is now carried by the locally verified 1.1.2 and 1.1.3 installers, which
+are pushed to `main` but not published as a GitHub release; it must not be
+published as 1.1.1.
 
 ---
 
