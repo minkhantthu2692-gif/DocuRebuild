@@ -5,8 +5,9 @@ This is the short, current roadmap for the Windows x64 desktop release.
 `PROJECT_MEMORY.md` records architecture and handover context.
 
 Last updated: 2026-11-28 (v1.1.1 released; all `01_MUST_HAVE` and
-`02_SHOULD_HAVE` prompt-pack tasks complete; status docs and the paste-ready
-handover refreshed in `CONTINUE_PROMPT.md`).
+`02_SHOULD_HAVE` prompt-pack tasks complete; the quick-win regression audit is
+done with no confirmed defect and no code change; status docs and the
+paste-ready handover refreshed in `CONTINUE_PROMPT.md`).
 
 ## Release status
 
@@ -167,6 +168,16 @@ source pages → OCR/review/insert → edit/save/reopen → export
 verification. It writes a JSON report (`docs/smoke/desktop-smoke.json`, ignored),
 and the shutdown step tolerates the expected DevTools connection-close race.
 
+**Quick-win regression audit (28 November 2026).** The seven earlier requests
+(source rendering after restart, dialog stability, checkbox/switch semantics,
+factory reset, bulk delete, OCR paragraph reconstruction and typography) were
+audited against the current tree and the packaged `win-unpacked` build. All
+seven are VERIFIED WORKING, so no defect was fixed and no application/test/locale
+code changed, per the prompt. Evidence: 450 backend tests, 59 web files /
+364 web tests, focused re-runs of 120 backend and 69 web tests, the packaged
+1.1.1 smoke report, and a disposable DOCX/PDF justification probe. Full audit
+matrix and limitations: `docs/quick-wins/PROGRESS.md`.
+
 ## Completed prompt-pack tasks (MUST HAVE and SHOULD HAVE)
 
 All eight tasks in `01_MUST_HAVE` and `02_SHOULD_HAVE` of the remaining-work
@@ -236,14 +247,15 @@ what remain.
 
 ## Remaining prompt-pack work (resumable)
 
-The prompt pack's optional series and quick-win audit are not started. Run one
+The quick-win audit is complete; the optional series are not started. Run one
 task per session and follow the paste-ready instructions in
 [`CONTINUE_PROMPT.md`](CONTINUE_PROMPT.md); record evidence in
-`docs/should-have/PROGRESS.md` or a new series-specific progress file.
+`docs/should-have/PROGRESS.md`, `docs/quick-wins/PROGRESS.md` or a new
+series-specific progress file.
 
 | Order | Task | Next action |
 | --- | --- | --- |
-| 1 | `04_QUICK_WINS_AND_REGRESSION_CHECKS/01_Audit_Previously_Requested_Fixes.md` | Audit all seven earlier requests, then fix at most one confirmed defect. |
+| 1 | `04_QUICK_WINS_AND_REGRESSION_CHECKS/01_Audit_Previously_Requested_Fixes.md` | done — all seven VERIFIED WORKING; no confirmed defect, no code change; `docs/quick-wins/PROGRESS.md` |
 | 2 | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | Document the design and stale-safety trade-off before changing persistence. |
 | 3 | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | Benchmark against the real-scan corpus before any adapter implementation. |
 | 4 | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | Official documented APIs only; report unavailable when data is not reliable. |

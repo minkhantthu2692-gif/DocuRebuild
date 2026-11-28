@@ -6,10 +6,11 @@ that must not be broken; `PROJECT_COMPLETION_REPORT.md` is the historical QA
 record; `docs/should-have/PROGRESS.md` holds the per-task evidence for the
 `02_SHOULD_HAVE` series.
 
-**State at this update:** 2026-11-28, branch `main` at `0d2aa0e`, version
-`1.1.1` released (28 November 2026). The post-release task work is committed on
-`main` but is **not** a published release. Verify with `git status -sb` and
-`git log --oneline -10` before starting; do not discard unfamiliar work.
+**State at this update:** 2026-11-28, branch `main` at `0ef502d` plus the quick-win
+audit documentation commit, version `1.1.1` released (28 November 2026). The
+post-release task work is committed on `main` but is **not** a published release.
+Verify with `git status -sb` and `git log --oneline -10` before starting; do not
+discard unfamiliar work.
 
 ## Paste-ready prompt
 
@@ -71,6 +72,17 @@ Full per-task findings, commands, numbers, limitations and changed files are in
 installer was built from `486688e`, before these four commits; the task work is
 not yet in a release asset.
 
+## Completed — 04_QUICK_WINS
+
+| # | Task | Outcome | Record |
+| --- | --- | --- | --- |
+| 01 | Audit earlier requested fixes | all seven VERIFIED WORKING; no confirmed defect and no application/test/locale change | `docs/quick-wins/PROGRESS.md` |
+
+The audit re-ran 450 backend tests, 59 web files / 364 web tests (all passing),
+focused suites of 120 backend and 69 web tests, inspected the packaged 1.1.1
+`win-unpacked` build and smoke report, and probed DOCX/PDF justification with a
+disposable script. No release was published.
+
 ## Remaining work (one task per session)
 
 These items must not delay the Windows x64 release. Do not implement a task that
@@ -78,7 +90,7 @@ has a `done` row above without an explicit owner decision.
 
 | Order | Item | Prompt / record | Status |
 | --- | --- | --- | --- |
-| 1 | Audit earlier requested fixes; fix at most one confirmed defect | `04_QUICK_WINS_AND_REGRESSION_CHECKS/01_Audit_Previously_Requested_Fixes.md` | not started |
+| 1 | Audit earlier requested fixes; fix at most one confirmed defect | `04_QUICK_WINS_AND_REGRESSION_CHECKS/01_Audit_Previously_Requested_Fixes.md` | done — all verified; no code change |
 | 2 | Persisted region proposals and batch review | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | design/evaluation first |
 | 3 | PaddleOCR adapter evaluation | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | benchmark report first |
 | 4 | Provider quota/billing introspection | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | capability matrix first |
@@ -124,4 +136,5 @@ npm run smoke:desktop         # after a new packaged build
 | --- | --- | --- | --- |
 | 2026-11-28 | `01_MUST_HAVE` 01-04 | all complete; v1.1.1 published | `8cb208c`, `09b5f99`, `ad7809d`, `486688e` |
 | 2026-11-28 | `02_SHOULD_HAVE` 01-04 | all complete; 450 backend / 364 web tests | `04f0b5f`, `0708826`, `25ffbc7`, `0d2aa0e` |
-| 2026-11-28 | Status documentation refresh | this handover created; docs aligned; no release published | uncommitted at this update |
+| 2026-11-28 | Status documentation refresh | this handover created; docs aligned; no release published | `0ef502d` |
+| 2026-11-28 | `04_QUICK_WINS` 01 audit | seven earlier requests all VERIFIED WORKING; no confirmed defect; no application/test/locale changes; audit record added | this commit |

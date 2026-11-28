@@ -55,6 +55,11 @@ supported 1.0 distribution.
 
 ### Documentation
 
+- Added `docs/quick-wins/PROGRESS.md` with the regression audit of seven earlier
+  requests (source rendering, dialog stability, form controls, factory reset,
+  bulk deletion, OCR reconstruction and typography). All seven are recorded as
+  VERIFIED WORKING with code/test evidence, packaged-build evidence and
+  limitations; no confirmed defect was found, so no application behaviour changed.
 - Refreshed the status documentation after v1.1.1: all four `01_MUST_HAVE` and
   all four `02_SHOULD_HAVE` prompt-pack tasks are recorded as complete with
   evidence, commits and current test totals. Added `CONTINUE_PROMPT.md` with a
