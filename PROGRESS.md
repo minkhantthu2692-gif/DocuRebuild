@@ -366,5 +366,5 @@ page-wide figure detection (`04f0b5f`), page-wide equation proposals
 extraction (`0d2aa0e`). Verified after the series: 450 backend tests, 59 web
 files / 364 tests, typecheck and lint clean. Detailed commands, results,
 limitations and files changed are in `docs/should-have/PROGRESS.md`; status and
-the next task are in `CONTINUE_PROMPT.md`. These commits are after the v1.1.1
-release tag and have not been published as a new installer.
+the next task are in `CONTINUE_PROMPT.md`. These commits shipped in the
+published 1.1.4 installer (28 November 2026).

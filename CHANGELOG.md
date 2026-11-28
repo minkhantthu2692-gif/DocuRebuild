@@ -10,7 +10,10 @@ supported 1.0 distribution.
 
 A Windows x64 maintenance build carrying the OCR cancellation and stale-run
 recovery work on top of 1.1.3. No schema migration; existing projects are
-unchanged. Not published as a GitHub release.
+unchanged. Published as the
+[v1.1.4 GitHub release](https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.4)
+from tag `v1.1.4` at commit `6d17b57`; the uploaded installer was re-downloaded
+anonymously and its size and SHA-256 matched the built file.
 
 ### Added
 
@@ -210,8 +213,9 @@ modified or replaced. No schema migration; existing projects are unchanged.
   `README.md`, `ROADMAP.md`, `docs/roadmap.md`, `PROJECT_MEMORY.md`,
   `PROJECT_COMPLETION_REPORT.md` §16 and both progress logs. No application
   behaviour changed. For 1.1.2 the same status files were refreshed with the new
-  version, the locally verified installer checksum and the pushed-but-unpublished
-  distinction; `CONTINUE_PROMPT.md` remains the single paste-ready handover.
+  version and the locally verified installer checksum; the work later shipped in
+  the published 1.1.4 build. `CONTINUE_PROMPT.md` remains the single paste-ready
+  handover.
 
 ## [1.1.1] - 2026-11-28
 

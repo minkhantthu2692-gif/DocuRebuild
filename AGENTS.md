@@ -21,7 +21,7 @@ scope for 1.0.
 | `CHANGELOG.md` | Release history and user-visible changes |
 | `docs/architecture.md` | Modules, storage layout, data model and API surface |
 | `docs/ocr-benchmark.md` | OCR accuracy methodology and measured results |
-| `PROJECT_COMPLETION_REPORT.md` | Delivery and QA record; §§16-19 are the current post-v1.1.1 status and the 1.1.2/1.1.3/1.1.4 build verification |
+| `PROJECT_COMPLETION_REPORT.md` | Delivery and QA record; §§16-19 are the current post-v1.1.1 status and the 1.1.2/1.1.3 build records plus 1.1.4 publication and installer QA |
 | `CONTINUE_PROMPT.md` | Single paste-ready handover: completed tasks, remaining work and session rules (replaces `Prompt.md`) |
 | `CONTRIBUTING.md` | Human contributor setup and checks |
 | `SECURITY.md` | Vulnerability reporting and credential scope |

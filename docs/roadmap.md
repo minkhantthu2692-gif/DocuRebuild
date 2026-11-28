@@ -25,7 +25,7 @@ win.
 | 8. Document editor and export | **Complete** | Core editor plus manual tables, figures, display and inline equations, multi-line Word equations, footnotes, per-project page headers/footers, and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, native Word equations/footnotes, embedded figures, links and notes |
 | 9. History, backup and recovery | **Complete** | Document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable local project activity log for imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive (new-project) restore from an upload or a stored vault copy, page-scoped selective restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop distribution | **Complete for Windows** | Electron shell with a bundled PyInstaller sidecar, loopback-only API with a per-launch bearer token, bundled Tesseract with `eng`/`mya`, per-user NSIS installer, and smoke tests for the packaged backend. Mobile, PWA and device pairing are out of scope for 1.0 |
-| 11. Final QA and production release | **Complete for Windows 1.1.4 build; v1.1.1 remains published** | Versioned v1.1.1 GitHub Release, AGPL-3.0 licensing, third-party notices, changelog, reproducible OCR and figure baselines, installer QA, security/performance drills and the desktop E2E smoke suite are done; a locally verified 1.1.4 installer exists but is not published. Wider-release gaps are tracked in the root `ROADMAP.md` |
+| 11. Final QA and production release | **Complete for Windows 1.1.4** | Versioned v1.1.4 GitHub Release, AGPL-3.0 licensing, third-party notices, changelog, reproducible OCR and figure baselines, installer QA, security/performance drills and the desktop E2E smoke suite are done; the published 1.1.4 installer was exercised end to end and re-downloaded with a matching checksum. Wider-release gaps are tracked in the root `ROADMAP.md` |
 
 ## Post-1.1.1 status
 
@@ -38,10 +38,10 @@ are in `PROJECT_COMPLETION_REPORT.md` §§13-19, `docs/should-have/PROGRESS.md`,
 `docs/quick-wins/PROGRESS.md` and `docs/optional-future/PROGRESS.md`. All
 prompt-pack work is done; remaining items are recorded gaps, not tasks unless
 approved. `CONTINUE_PROMPT.md` is the single paste-ready handover. The locally
-built installer is `DocuRebuild-1.1.4-setup.exe` (195.93 MB, SHA-256
-`38F29388F64DF555BF9C46DBDBC094CE2868FE4DE84BE619B212FD9837758DD6`), smoke
-tested 12/12 on the packaged build in 15 s but not published as a GitHub
-release; v1.1.1 remains the published release.
+published installer is `DocuRebuild-1.1.4-setup.exe` (195.93 MB, SHA-256
+`38F29388F64DF555BF9C46DBDBC094CE2868FE4DE84BE619B212FD9837758DD6`), which
+passed 12/12 smoke steps installed and was re-downloaded from the v1.1.4 GitHub
+release with a matching hash; v1.1.1 remains available.
 
 ---
 

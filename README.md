@@ -42,11 +42,10 @@ data on your device, and treats every AI result as a reviewable proposal.
 
 ## Install the desktop app
 
-1. Run `DocuRebuild-1.1.1-setup.exe` from the
-   [v1.1.1 release](https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.1)
-   until a 1.1.4 release is published. The release notes publish the SHA-256
-   checksum. The locally built 1.1.4 installer is
-   `dist/desktop-installer/DocuRebuild-1.1.4-setup.exe`.
+1. Run `DocuRebuild-1.1.4-setup.exe` from the
+   [v1.1.4 release](https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.4).
+   The release notes publish the SHA-256 checksum. The v1.1.1 release remains
+   available for users who need it.
 2. The installer creates a per-user installation and a Start menu shortcut. It
    does not require administrator rights and does not install a system service.
 3. Start DocuRebuild. The first launch creates the local data folder at
@@ -1328,7 +1327,7 @@ Everything below stays on the local machine and is excluded by `.gitignore`:
 | 8. Document editor and export | **Complete**: rich-text editor plus manual tables, figures, display and inline equations, footnotes and local Markdown, TXT, Word and A4/Letter PDF export with configurable margins, embedded figures and links |
 | 9. History, backup and recovery | **Complete**: local document versions with manual checkpoints, restore and read-only comparison, a filterable and exportable project activity log covering imports, processing, OCR, exports and backups, verified project backup download (plain or password-encrypted), additive restore from upload or a stored vault copy, selective page restore, page-image and region-crop repair and reversible document-version restore into the current project, a local backup vault with opt-in automatic copies on project open and configurable retention, and an optional one-pass scheduled-backup command for external schedulers |
 | 10. Desktop distribution | **Complete for Windows**: Electron shell with a bundled Python sidecar, loopback-only API with a per-launch token, bundled Tesseract, and a per-user NSIS installer. Mobile, PWA and device pairing are out of scope |
-| 11. Final QA and production release | **Complete for Windows 1.1.4 build; v1.1.1 remains the published release**: desktop smoke tests, versioned v1.1.1 GitHub Release, AGPL-3.0 licensing, third-party notices, performance/security drills, real-scan OCR and accessibility evidence. The locally built 1.1.4 installer is pushed to `main` but not published as a release. Wider-release gaps are listed in `ROADMAP.md` |
+| 11. Final QA and production release | **Complete for Windows 1.1.4**: desktop smoke tests, the versioned v1.1.4 GitHub Release, AGPL-3.0 licensing, third-party notices, performance/security drills, real-scan OCR and accessibility evidence. The published 1.1.4 installer was exercised end to end and downloaded back with a matching checksum. Wider-release gaps are listed in `ROADMAP.md` |
 
 Current status, remaining work and deferred features are summarised in
 [`ROADMAP.md`](ROADMAP.md) and [`CONTINUE_PROMPT.md`](CONTINUE_PROMPT.md).

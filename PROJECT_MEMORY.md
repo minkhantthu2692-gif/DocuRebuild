@@ -4,10 +4,10 @@ This is the durable context file for DocuRebuild. A new AI agent (or a new human
 developer) should be able to read this document and `AGENTS.md`, clone the
 repository, run the checks and continue work without any previous conversation.
 
-Last updated: 2026-11-28 (v1.1.4 built, smoke-tested and pushed to `main` with
-OCR cancellation and stale-run recovery, but not published as a GitHub release.
-v1.1.1 remains the published release with the desktop E2E smoke suite verified. 1.1.4 adds OCR cancellation, stale-run recovery and the
-equation-extraction LaTeX normalisation. Optional tasks evaluated: region
+Last updated: 2026-11-28 (v1.1.4 published as a GitHub release from tag `v1.1.4`
+at commit `6d17b57`, with OCR cancellation, stale-run recovery and the
+equation-extraction LaTeX normalisation. v1.1.1 remains available with the
+desktop E2E smoke suite verified. Optional tasks evaluated: region
 proposals kept
 derived with a read-only cross-page review (§10 item 16), provider quota
 report-only (§10 item 17), platform posture (§10 item 18); installer footprint
@@ -481,19 +481,22 @@ secret scan.
 ## 13. Release state
 
 - Version 1.1.4 everywhere. The OCR cancellation change, version bump, build and
-  docs are pushed to `main` but not published as a GitHub release. License
-  AGPL-3.0-or-later.
+  docs are published as the
+  [v1.1.4 GitHub release](https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.4)
+  from tag `v1.1.4` at commit `6d17b57`. License AGPL-3.0-or-later.
 - `main` contains the four `02_SHOULD_HAVE` commits, the quick-win audit, the
   optional evaluations, the read-only cross-page region review, the verified
   locale trimming, the equation-extraction LaTeX normalisation and OCR
   cancellation/stale-run recovery on top of v1.1.1. Current suite: 475 backend /
   369 web tests; typecheck, lint and production build clean.
-- The locally built 1.1.4 installer is
-  `dist/desktop-installer/DocuRebuild-1.1.4-setup.exe`, 205,449,910 bytes (195.93
-  MB), SHA-256
-  `38F29388F64DF555BF9C46DBDBC094CE2868FE4DE84BE619B212FD9837758DD6`. It passed
-  12/12 `npm run smoke:desktop` steps on the packaged build in 15 s. It is pushed
-  to `main` but **not published** as a GitHub release. The 1.1.3 installer
+- The published 1.1.4 installer is
+  <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/download/v1.1.4/DocuRebuild-1.1.4-setup.exe>,
+  205,449,910 bytes (195.93 MB), SHA-256
+  `38F29388F64DF555BF9C46DBDBC094CE2868FE4DE84BE619B212FD9837758DD6`. The
+  installed build passed 12/12 `npm run smoke:desktop` steps in 13 s, and the
+  installer completed install → smoke → uninstall (project data retained) →
+  reinstall on Windows 11 x64. The uploaded asset was re-downloaded anonymously
+  with a matching size and hash. The 1.1.3 installer
   (`BCB80868...87E20`) remains in `dist/` unchanged. The earlier locale-trimmed
   file named `DocuRebuild-1.1.1-setup.exe` in `dist/` (195.92 MB, SHA-256
   `BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649`) remains
@@ -501,9 +504,11 @@ secret scan.
   The 1.1.2 installer (`56BEA0EB...88117`) also remains in `dist/` unchanged.
   See `CONTINUE_PROMPT.md` for the next task.
 - Repository: <https://github.com/minkhantthu2692-gif/DocuRebuild>
-- Current published release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.1>,
-  published 28 November 2026 from tag `v1.1.1` at commit `486688e`, and marked
+- Current published release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.4>,
+  published 28 November 2026 from tag `v1.1.4` at commit `6d17b57`, and marked
   latest.
+- Previous release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.1>,
+  published 28 November 2026 from tag `v1.1.1` at commit `486688e`.
 - 1.1.1 installer asset:
   <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/download/v1.1.1/DocuRebuild-1.1.1-setup.exe>,
   214,103,864 bytes (204.19 MB), SHA-256
@@ -516,14 +521,14 @@ secret scan.
   accessibility audit, a large-document performance/cancellation drill
   (`docs/performance.md`), and the automated desktop E2E smoke suite
   (`npm run smoke:desktop`). No schema migration.
-- 1.1.4 (unpublished build) adds OCR cancellation from the OCR dialog and
+- 1.1.4 (published) adds OCR cancellation from the OCR dialog and
   API, stale-run recovery after a crash or quit, an `ocr_interrupted` failure
   code and an `ocr_cancelled` proposal status. No schema migration; upgrading
   keeps existing projects.
-- 1.1.3 (unpublished build) starts equation review from normalised LaTeX rebuilt
+- 1.1.3 (shipped in 1.1.4) starts equation review from normalised LaTeX rebuilt
   from the stored OCR word boxes and strengthens the optional AI equation prompt.
   No schema migration; upgrading keeps existing projects.
-- 1.1.2 (unpublished build) adds the read-only cross-page region review, the
+- 1.1.2 (shipped in 1.1.4) adds the read-only cross-page region review, the
   `en-US`-only Chromium locale trimming and the documented optional-task
   evaluations (provider quota, macOS/Linux feasibility and the PaddleOCR
   decision). No schema migration; upgrading keeps existing projects.

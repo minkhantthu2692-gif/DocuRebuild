@@ -214,8 +214,8 @@ passed** in 43.22 s (same one deprecation warning).
   `%TEMP%\opencode`, not a committed regression test, because the prompt
   requires no code changes when all items pass. A future task may add a
   permanent export-alignment assertion if desired.
-- Nothing in this audit changes the release status: v1.1.1 remains the published
-  installer; these documentation edits are on `main` only.
+- The audit itself published nothing; the audited behaviour now ships in the
+  published 1.1.4 installer.
 
 ## Files changed
 

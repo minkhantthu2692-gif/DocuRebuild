@@ -4,9 +4,9 @@ This is the short, current roadmap for the Windows x64 desktop release.
 `docs/roadmap.md` keeps the detailed phase-by-phase implementation history;
 `PROJECT_MEMORY.md` records architecture and handover context.
 
-Last updated: 2026-11-28 (v1.1.4 built, smoke-tested and pushed to `main` with
-the OCR cancellation/stale-run fix, but not published as a GitHub release;
-v1.1.1 remains the published release. All
+Last updated: 2026-11-28 (v1.1.4 published as a GitHub release from tag
+`v1.1.4` at commit `6d17b57`, carrying the OCR cancellation/stale-run fix;
+v1.1.1 remains available. All
 `01_MUST_HAVE` and `02_SHOULD_HAVE` prompt-pack tasks are complete; the quick-win
 regression audit found no defect; optional tasks 01, 03 and 05 are evaluated,
 task 01's approved read-only cross-page review is implemented, task 04 is
@@ -18,23 +18,26 @@ are refreshed in `CONTINUE_PROMPT.md`).
 
 ## Release status
 
-**DocuRebuild 1.1.1 remains the published release for the Windows x64 desktop
-scope (published 28 November 2026).** The installer, bundled OCR, local
+**DocuRebuild 1.1.4 is the published release for the Windows x64 desktop scope
+(published 28 November 2026).** The installer, bundled OCR, local
 database/storage, BYOK AI, backup/restore and export are implemented and
 verified. Everything labelled *Complete* in the 1.x MUST HAVE table ships in
-`DocuRebuild-1.1.1-setup.exe`.
+`DocuRebuild-1.1.4-setup.exe`.
 
-**1.1.4 is built, smoke-tested and pushed to `main`, but is not published as a
-GitHub release.** Its installer is
+**1.1.4 is published as the
+[v1.1.4 GitHub release](https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.4)
+from tag `v1.1.4` at commit `6d17b57`.** Its installer is
 `dist/desktop-installer/DocuRebuild-1.1.4-setup.exe` (205,449,910 bytes, 195.93
 MB, SHA-256
-`38F29388F64DF555BF9C46DBDBC094CE2868FE4DE84BE619B212FD9837758DD6`). It adds OCR
-cancellation and stale-run recovery on top of 1.1.3, and `npm run smoke:desktop`
-passed 12/12 steps in 15 s on the packaged build. The 1.1.3 installer remains in
-`dist/` unchanged and the published 1.1.1 asset is untouched.
+`38F29388F64DF555BF9C46DBDBC094CE2868FE4DE84BE619B212FD9837758DD6`); the uploaded
+asset was re-downloaded anonymously and matched that size and hash. It adds OCR
+cancellation and stale-run recovery on top of 1.1.3. The installed build passed
+12/12 desktop smoke steps in 13 s, and install → smoke → uninstall (project data
+retained) → reinstall was verified on Windows 11 x64. The 1.1.3 installer remains
+in `dist/` unchanged and the 1.1.1 asset is untouched.
 
-**1.1.3 is built, smoke-tested and pushed to `main`, but no GitHub release has
-been published from it.** Its installer is
+**1.1.3 was built and smoke-tested but not published on its own; its changes
+ship in 1.1.4.** Its installer is
 `dist/desktop-installer/DocuRebuild-1.1.3-setup.exe` (205,444,142 bytes, 195.93
 MB, SHA-256
 `BCB80868CF88EE9A8581BB12CA84FB2B798CFC137E77D082640B62FD7D687E20`). It carries

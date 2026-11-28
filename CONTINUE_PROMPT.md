@@ -17,7 +17,8 @@ FRESH SESSION CHECKS
 - Run git status -sb and git log --oneline -10. At handover: branch `main`, HEAD
   is the 1.1.4 commit (OCR cancellation/stale-run recovery, version bump and
   docs) on top of `bbf1449`, `origin/main` in sync and the working tree clean.
-  The locally built DocuRebuild-1.1.4-setup.exe is not published as a release.
+  v1.1.4 is published as a GitHub release from tag `v1.1.4` at `6d17b57`; the
+  release asset was re-downloaded and its checksum matched.
   Treat unfamiliar work as the owner's; do not discard it.
 - Do not create a new project or re-initialise git.
 - AGENTS.md should already be in your context. If it is absent, read it once;
@@ -32,20 +33,21 @@ SCOPE (non-negotiable)
   OCR/AI result stays a reviewable proposal; imported originals are immutable.
 
 CURRENT VERIFIED STATE
-- Version 1.1.1 is published from commit 486688e. Work after that tag is on main
-  but has not been published as a GitHub release; do not publish it without an
-  explicit owner request.
-- Version 1.1.4 is built, smoke-tested and pushed to `main` but is **not**
-  published as a GitHub release. The published release remains v1.1.1.
+- Version 1.1.4 is published as the v1.1.4 GitHub release from tag `v1.1.4` at
+  commit `6d17b57`. v1.1.1 remains available. Do not publish any newer work
+  without an explicit owner request.
 - Latest checks: 475 backend tests, 60 web files / 369 tests, typecheck, lint and
-  production build clean. `npm run desktop:dist` produced the 1.1.4 installer and
-  `npm run smoke:desktop` passed 12/12 packaged steps in 15 s (Tesseract 5.4.0,
-  4 OCR blocks, 343 characters inserted, backup/restore, sidecar stopped). The
-  smoke does not exercise the Cancel button; cancellation is covered by backend
-  tests.
-- Locally built 1.1.4 installer: DocuRebuild-1.1.4-setup.exe,
+  production build clean. `npm run smoke:desktop` passed 12/12 packaged steps on
+  the win-unpacked build in 15 s; the installed 1.1.4 build passed 12/12 in 13 s
+  (Tesseract 5.4.0, 4 OCR blocks, 95.1 confidence, backup/restore, sidecar
+  stopped). Install → smoke → uninstall (project data retained) → reinstall was
+  verified; one first installed-smoke attempt timed out on import and passed on
+  rerun. The smoke does not exercise the Cancel button; cancellation is covered
+  by backend tests.
+- Published 1.1.4 installer: DocuRebuild-1.1.4-setup.exe,
   205,449,910 bytes (195.93 MB), SHA-256
-  38F29388F64DF555BF9C46DBDBC094CE2868FE4DE84BE619B212FD9837758DD6.
+  38F29388F64DF555BF9C46DBDBC094CE2868FE4DE84BE619B212FD9837758DD6; re-downloaded
+  anonymously from the release with a matching size and hash.
 - Published 1.1.1 installer: DocuRebuild-1.1.1-setup.exe, 204.19 MB, SHA-256
   9CC17F7EDF0138A7FC452844C89B0F2EC653970258F3888A661AB3773FAC13CB.
 - Locally built 1.1.3 installer: DocuRebuild-1.1.3-setup.exe, 205,444,142 bytes
@@ -131,6 +133,14 @@ WORKING RULES
   verified checksum evidence.
 
 SESSION LOG (most recent first; append after each approved task)
+- 2026-11-28: 1.1.4 published. Annotated tag `v1.1.4` at `6d17b57` pushed and a
+  non-draft GitHub release created with DocuRebuild-1.1.4-setup.exe
+  (205,449,910 bytes, SHA-256 38F29388...58DD6). Installer QA on Windows 11 x64:
+  silent per-user install, installed-build smoke 12/12 in 13 s, quiet uninstall
+  with %LOCALAPPDATA%\DocuRebuild retained, then reinstall; the first installed
+  smoke attempt timed out on import and passed on rerun. The release asset was
+  downloaded anonymously and matched size and hash exactly. v1.1.1 remains
+  available; nothing newer was published.
 - 2026-11-28: OCR cancellation and stale-run recovery.
   New POST /projects/{id}/ocr/runs/{run_id}/cancel and a Cancel text extraction
   button in the dialog; queued/running -> cancelling -> cancelled with an

@@ -711,7 +711,7 @@ The approved next step, a read-only cross-page aggregation, is now implemented.
   `npm run smoke:desktop` cycle. Installer 204.19 -> 195.92 MB; installed
   646.64 -> 598.39 MB; Chromium locales 55 -> 1. Smoke passed 12/12 in 14 s with
   0 console errors. Only `apps/desktop/package.json` changed in the application;
-  the build is now carried by the locally built, unpublished 1.1.2 installer.
+  the build is carried by the published 1.1.4 installer.
 - 2026-11-28: Task 02 evaluated with the owner's approval. Installed PaddleOCR
   3.7.0 / PaddlePaddle 3.3.1 in a throwaway venv, confirmed there is no Burmese
   model, and scored its English output on the real-scan corpus with the
