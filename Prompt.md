@@ -55,15 +55,17 @@ Verify the baseline before changing code:
   npm run lint
 
 All 01_MUST_HAVE, 02_SHOULD_HAVE and 04_QUICK_WINS prompt-pack tasks are complete.
-Optional tasks 01, 03, 04 and 05 are evaluated; task 02 (PaddleOCR) is deferred
-because it needs a heavy local install and a measured real-scan benchmark. Do not
-re-implement a completed or evaluated item without an explicit owner decision.
+Optional tasks 01, 03 and 05 are evaluated; task 04 (locale trimming) is applied
+and verified (installer 204.19 -> 195.92 MB, 12/12 smoke); task 02 (PaddleOCR) is
+deferred because it needs a heavy local install and a measured real-scan
+benchmark. Do not re-implement a completed or evaluated item without an explicit
+owner decision.
 
 If the owner approves further optional work, pick exactly ONE item from the
 "Remaining work" table in CONTINUE_PROMPT.md, read its prompt file in the prompt
-pack, and follow its acceptance criteria. Prefer low-cost work: the footprint task
-only needs a verified `npm run desktop:dist` + `npm run smoke:desktop` rebuild
-before any size claim.
+pack, and follow its acceptance criteria. The remaining candidates are the
+deferred PaddleOCR benchmark and the read-only cross-page region aggregation
+(only if approved); neither is a release blocker.
 
 Use disposable test data; keep originals and user projects untouched. Add tests and
 both English and Burmese locale keys for any UI string. Update the progress docs,

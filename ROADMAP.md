@@ -6,10 +6,11 @@ This is the short, current roadmap for the Windows x64 desktop release.
 
 Last updated: 2026-11-28 (v1.1.1 released; all `01_MUST_HAVE` and
 `02_SHOULD_HAVE` prompt-pack tasks complete; the quick-win regression audit is
-done with no confirmed defect and no code change; optional tasks 01, 03, 04 and
-05 are evaluated (region proposals kept derived; provider quota matrix; installer
-footprint measured; macOS/Linux feasibility) and task 02 (PaddleOCR) is deferred;
-status docs and the paste-ready handover refreshed in `CONTINUE_PROMPT.md`).
+done with no confirmed defect and no code change; optional tasks 01, 03 and 05
+are evaluated, task 04 is applied and verified, and task 02 (PaddleOCR) is
+deferred; the installer locale trimming cut the unreleased build from 204.19 to
+195.92 MB; status docs and the paste-ready handover refreshed in
+`CONTINUE_PROMPT.md`).
 
 ## Release status
 
@@ -194,6 +195,18 @@ cross-page aggregation is the recommended next step only if the owner approves
 it. Two regression tests now lock the stale/regeneration invariants. Full design
 and decision: `docs/optional-future/PROGRESS.md`.
 
+**Installer footprint reduction (28 November 2026).** The electron-builder config
+now keeps only the `en-US` Chromium locale (`electronLanguages` in
+`apps/desktop/package.json`); the application's English/Burmese UI and the
+`eng`/`mya`/`osd` OCR data are unaffected because they come from the web bundle
+and bundled Tesseract. A full `npm run desktop:dist` rebuild and the 12/12
+`npm run smoke:desktop` suite verified the trimmed build. Measured: installer
+204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB, Chromium locales 55 files
+(48.82 MB) -> 1 file (0.56 MB). The installer shrinks less than the installed
+footprint because the dropped locale files compress well in the NSIS payload.
+This build is unreleased; the published v1.1.1 asset is unchanged. Full evidence:
+`docs/optional-future/PROGRESS.md`.
+
 ## Completed prompt-pack tasks (MUST HAVE and SHOULD HAVE)
 
 All eight tasks in `01_MUST_HAVE` and `02_SHOULD_HAVE` of the remaining-work
@@ -248,7 +261,8 @@ what remain.
 - Remaining OMML edge cases (colour, accent semantics).
 - Provider-specific AI parameters beyond temperature/timeout, and proactive
   quota prediction.
-- Installer footprint reduction (Chromium locales, Tesseract build, sidecar).
+- A slimmer Tesseract build (the Chromium locale trimming is now applied; the
+  bundled Tesseract runtime is still 178.10 MB).
 - Automatic update checking and delta updates.
 - Additional OCR engines behind the existing adapter, only if they preserve the
   review/verification guarantees.
@@ -276,7 +290,7 @@ evidence in `docs/should-have/PROGRESS.md`, `docs/quick-wins/PROGRESS.md`,
 | 2 | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | evaluated — design and stale-safety trade-off documented; decision: keep proposals derived and non-persisted; a read-only cross-page aggregation is the recommended next step only if approved; two regression tests lock the invariants; `docs/optional-future/PROGRESS.md` |
 | 3 | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | deferred — needs a heavy local install and a measured real-scan benchmark; plan documented, no result claimed; `docs/optional-future/PROGRESS.md` |
 | 4 | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | evaluated — capability matrix delivered; report-only, no provider calls; only OpenAI/Anthropic (admin keys), OpenRouter and DeepSeek have verified official endpoints; `docs/optional-future/PROGRESS.md` |
-| 5 | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | measured — component sizes recorded; locale trimming (~48 MB potential) needs a verified rebuild; no packaging change yet; `docs/optional-future/PROGRESS.md` |
+| 5 | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | done — `electronLanguages: ["en-US"]` applied; verified `desktop:dist` + 12/12 smoke; installer 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB; unreleased; `docs/optional-future/PROGRESS.md` |
 | 6 | `03_OPTIONAL_FUTURE/05_macOS_Linux_Feasibility.md` | evaluated — platform matrix, blockers and effort estimate; report only, no implementation; `docs/optional-future/PROGRESS.md` |
 
 ## Explicitly out of scope for 1.x
@@ -289,7 +303,8 @@ evidence in `docs/should-have/PROGRESS.md`, `docs/quick-wins/PROGRESS.md`,
 ## Known limitations
 
 See `PROJECT_MEMORY.md` §12 and `CHANGELOG.md` §1.1.0. The headline limits are:
-Windows x64 only, ~204 MB installer / ~650 MB installed, a three-page real-scan
+Windows x64 only, ~196 MB installer / ~598 MB installed (unreleased locale-trimmed
+build; the published 1.1.1 asset is ~204 MB / ~650 MB), a three-page real-scan
 OCR corpus (not a population estimate, one transcriber, no scored Burmese-only
 case), page-wide equation proposals depend on OCR equation blocks, nested tables
 are inserted as separate linked tables because the editor has no nested-table

@@ -19,6 +19,9 @@
     "appId": "com.docurebuild.app",
     "productName": "DocuRebuild",
     "copyright": "Copyright (C) 2026 DocuRebuild contributors",
+    "electronLanguages": [
+      "en-US"
+    ],
     "directories": {
       "output": "../../dist/desktop-installer",
       "buildResources": "build"

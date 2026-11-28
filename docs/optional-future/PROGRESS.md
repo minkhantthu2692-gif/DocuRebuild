@@ -20,7 +20,7 @@ not claim any unverified result.
 | 01 | Persisted region proposals and batch review | evaluated | Design + stale-safety trade-off documented; **no persistence change** (see decision); two regression tests lock the invariants |
 | 02 | PaddleOCR adapter evaluation | deferred | Needs a heavy local install + a measured real-scan benchmark; plan documented, no result claimed |
 | 03 | Provider quota introspection | evaluated | Capability matrix delivered; report-only, no provider calls implemented |
-| 04 | Windows installer footprint optimisation | measured | Component sizes measured; optimisations identified; no packaging change (needs a verified rebuild) |
+| 04 | Windows installer footprint optimisation | done | Applied `electronLanguages: ["en-US"]`; verified rebuild + 12/12 smoke; installer 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB |
 | 05 | macOS/Linux feasibility study | evaluated | Platform matrix, risks and effort estimate; report only, no implementation |
 
 ---
@@ -351,11 +351,42 @@ supporting DLLs. All three required languages are present.
    `eng`, `mya` and `osd` must be re-verified with the OCR benchmark and the
    desktop smoke suite before any swap.
 
-**Decision: measurement complete; no packaging change.** The acceptance bar is a
-measurable reduction with no loss of OCR languages, functionality, security or
-install/upgrade reliability, which requires a full `npm run desktop:dist` +
-`npm run smoke:desktop` cycle. That rebuild is deferred to a build-capable
-session. No size reduction is claimed.
+**Applied and verified (2026-11-28).** Added `electronLanguages: ["en-US"]` to
+`apps/desktop/package.json`, then ran the full rebuild and smoke cycle:
+
+- `npm run desktop:dist` -> success (web build 14.21 s, PyInstaller sidecar,
+  bundled Tesseract reused, NSIS installer built).
+- `npm run smoke:desktop` -> passed 12/12 steps in 14 s; 0 console errors, 0
+  uncaught exceptions.
+
+Measured result:
+
+| Metric | Before | After | Change |
+| --- | --- | --- | --- |
+| Installer `DocuRebuild-1.1.1-setup.exe` | 204.19 MB (214,103,864 B) | 195.92 MB (205,432,372 B) | -8.27 MB |
+| Installed `win-unpacked` | 646.64 MB | 598.39 MB | -48.25 MB |
+| Chromium `locales/` | 55 files, 48.82 MB | 1 file (`en-US.pak`), 0.56 MB | -48.26 MB |
+
+The installer shrinks less than the installed footprint because the dropped
+locale `.pak` files compress well inside the NSIS 7z payload. The new installer's
+SHA-256 is
+`BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649`
+(unpublished; the published v1.1.1 asset is unchanged).
+
+**Why this is safe:** Electron's native UI strings are English; the
+application's English/Burmese UI and all OCR languages (`eng`, `mya`, `osd`) come
+from the web bundle and bundled Tesseract, not Chromium `.pak` files. The desktop
+smoke suite exercised launch, project creation, PDF import, source rendering,
+OCR/review, edit/save/reopen, all four exports, backup/restore and clean shutdown
+on the trimmed build. No OCR language, feature or security property was removed.
+
+**Remaining footprint work (not done):** a slimmer Tesseract build (178.10 MB,
+dominated by `libtesseract-5.dll` and ICU) would need a compatible build plus a
+re-run of the OCR benchmark and smoke suite; it is deferred.
+
+**Decision:** the locale trimming is applied and verified. The unreleased build
+must not be published as 1.1.1; a future release (for example 1.1.2) should carry
+it.
 
 ---
 
@@ -420,3 +451,9 @@ approved.**
   matrix and blockers documented. Task 02 (PaddleOCR) deferred with a plan
   because it needs a heavy local install and a measured benchmark. No application
   code, schema, API, UI, locale or dependency changed.
+- 2026-11-28: Task 04 applied. Added `electronLanguages: ["en-US"]` to the
+  electron-builder config and ran the full `npm run desktop:dist` +
+  `npm run smoke:desktop` cycle. Installer 204.19 -> 195.92 MB; installed
+  646.64 -> 598.39 MB; Chromium locales 55 -> 1. Smoke passed 12/12 in 14 s with
+  0 console errors. Only `apps/desktop/package.json` changed in the application;
+  the build is unreleased.

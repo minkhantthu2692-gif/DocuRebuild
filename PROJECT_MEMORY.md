@@ -6,8 +6,8 @@ repository, run the checks and continue work without any previous conversation.
 
 Last updated: 2026-11-28 (v1.1.1 released with desktop E2E smoke suite verified;
 optional tasks evaluated: region proposals kept derived (§10 item 16), provider
-quota report-only (§10 item 17), platform/footprint posture (§10 items 18-19);
-PaddleOCR deferred).
+quota report-only (§10 item 17), platform posture (§10 item 18); installer
+footprint trimmed and verified (§10 item 19); PaddleOCR deferred).
 
 ## 1. What the product is
 
@@ -359,13 +359,18 @@ AI credentials are configured in the application, not in environment files.
     not cross-compile (needs a CI matrix), the packaged data path would diverge
     from `platformdirs` on macOS/Linux, and macOS needs signing/notarization.
     Nothing is implemented until the owner approves a platform scope change.
-19. **Installer footprint is measured, not yet optimised.** The 1.1.1 build
-    measures 204.19 MB installer / 646.64 MB installed; Chromium locales are
-    48.82 MB (keeping only `en-US` would save ~48.26 MB) and Tesseract is
-    178.10 MB. No packaging change was made because any reduction must be proven
-    with `npm run desktop:dist` + `npm run smoke:desktop` and must keep `eng`,
-    `mya`, `osd`, licences and upgrade reliability. Details:
-    `docs/optional-future/PROGRESS.md`.
+19. **Chromium locales are trimmed; Tesseract slimming is still open.** The
+    packaged build sets `electronLanguages: ["en-US"]`, keeping one Chromium
+    locale instead of 55. This is safe because Electron's native UI is English
+    and the app's English/Burmese UI plus the `eng`/`mya`/`osd` OCR data come from
+    the web bundle and bundled Tesseract. A full `npm run desktop:dist` rebuild
+    and the 12/12 `npm run smoke:desktop` suite verified the change: installer
+    204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB, locales 48.82 -> 0.56 MB.
+    The installer shrinks less than the installed footprint because the dropped
+    files compress well in the NSIS payload. The build is unreleased; the
+    published 1.1.1 asset is unchanged. A slimmer Tesseract build (178.10 MB) is
+    deferred until a compatible build can be benchmarked and smoke-tested.
+    Details: `docs/optional-future/PROGRESS.md`.
 
 ## 11. Verification commands and current results
 
@@ -396,8 +401,9 @@ secret scan.
 ## 12. Known limitations
 
 - Windows x64 only; no macOS/Linux package, no code-signing certificate.
-- Installer ~204 MB, installed footprint ~650 MB (Chromium locales, Tesseract,
-  sidecar). Trimming is an optional future task.
+- Installer ~196 MB, installed footprint ~598 MB in the unreleased
+  locale-trimmed build; the published 1.1.1 asset is ~204 MB / ~650 MB. Tesseract
+  (178.10 MB) dominates the remaining size; a slimmer build is deferred.
 - OCR accuracy is measured on synthetic pages and a three-page real-scan corpus;
   the latter has one transcriber, no scored Burmese-only case and is not a
   population estimate.
@@ -435,10 +441,13 @@ secret scan.
 ## 13. Release state
 
 - Version 1.1.1 everywhere. License AGPL-3.0-or-later.
-- Working tree after the release: `main` at `0d2aa0e` contains the four
-  `02_SHOULD_HAVE` commits (`04f0b5f`, `0708826`, `25ffbc7`, `0d2aa0e`) on top
-  of v1.1.1. They are verified (450 backend / 364 web tests) but have **not**
-  been published as a new installer; see `CONTINUE_PROMPT.md` for the next task.
+- Working tree after the release: `main` contains the four `02_SHOULD_HAVE`
+  commits, the quick-win audit, the optional evaluations and the verified locale
+  trimming on top of v1.1.1. Current suite: 452 backend / 364 web tests. The
+  locale-trimmed installer (195.92 MB, SHA-256
+  `BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649`) is
+  **unreleased** and must not be published as 1.1.1; a future version should
+  carry it. See `CONTINUE_PROMPT.md` for the next task.
 - Repository: <https://github.com/minkhantthu2692-gif/DocuRebuild>
 - Current release: <https://github.com/minkhantthu2692-gif/DocuRebuild/releases/tag/v1.1.1>,
   published 28 November 2026 from tag `v1.1.1` at commit `486688e`, and marked

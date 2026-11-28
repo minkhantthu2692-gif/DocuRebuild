@@ -53,6 +53,17 @@ supported 1.0 distribution.
   artwork, so it now merges with the artwork box when the two share most of the
   smaller box on both axes (`regions._caption_band_matches`).
 
+### Changed
+
+- **Smaller Windows installer.** The packaged build now keeps only the `en-US`
+  Chromium locale, removing 54 unused Electron locale files. The English/Burmese
+  application UI and the `eng`/`mya`/`osd` OCR languages are unaffected because
+  they come from the web bundle and bundled Tesseract. A full
+  `npm run desktop:dist` rebuild and the 12/12 `npm run smoke:desktop` suite
+  verified the trimmed build: installer 204.19 -> 195.92 MB, installed footprint
+  646.64 -> 598.39 MB, Chromium locales 55 -> 1 file. This build is unreleased;
+  the published 1.1.1 asset is unchanged.
+
 ### Documentation
 
 - Extended `docs/optional-future/PROGRESS.md` with three report-only

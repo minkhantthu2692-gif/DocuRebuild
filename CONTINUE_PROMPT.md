@@ -10,9 +10,9 @@ record; `docs/should-have/PROGRESS.md` holds the per-task evidence for the
 the optional-evaluation commits, version `1.1.1` released (28 November 2026). The
 post-release task work is committed on `main` but is **not** a published release.
 All `01_MUST_HAVE`, `02_SHOULD_HAVE` and `04_QUICK_WINS` tasks are complete;
-optional tasks 01, 03, 04 and 05 are evaluated and task 02 (PaddleOCR) is
-deferred. Verify with `git status -sb` and `git log --oneline -10` before
-starting; do not discard unfamiliar work.
+optional tasks 01, 03 and 05 are evaluated, task 04 (locale trimming) is applied
+and verified, and task 02 (PaddleOCR) is deferred. Verify with `git status -sb`
+and `git log --oneline -10` before starting; do not discard unfamiliar work.
 
 ## Paste-ready prompt
 
@@ -36,10 +36,11 @@ Verify the baseline before changing code:
   npm run lint
 
 All 01_MUST_HAVE, 02_SHOULD_HAVE and 04_QUICK_WINS prompt-pack tasks are done
-(see the tables in CONTINUE_PROMPT.md). Optional tasks 01, 03, 04 and 05 are
-evaluated; task 02 (PaddleOCR) is deferred because it needs a heavy local install
-and a measured real-scan benchmark. Do not implement a deferred or evaluated
-item without an explicit owner decision.
+(see the tables in CONTINUE_PROMPT.md). Optional tasks 01, 03 and 05 are
+evaluated; task 04 (locale trimming) is applied and verified; task 02 (PaddleOCR)
+is deferred because it needs a heavy local install and a measured real-scan
+benchmark. Do not implement a deferred or evaluated item without an explicit
+owner decision.
 
 If the owner approves further optional work, pick exactly ONE item from the
 "Remaining work" table, read its prompt file in
@@ -80,7 +81,9 @@ Full per-task findings, commands, numbers, limitations and changed files are in
 (the four `02_SHOULD_HAVE` tasks took it to 450; the optional region-proposal
 evaluation added two regression tests), **59 web files / 364 tests**, typecheck
 and lint clean. The published v1.1.1 installer was built from `486688e`, before
-these commits; the task work is not yet in a release asset.
+these commits. The current unreleased build was rebuilt with the locale trim and
+passed the 12/12 `npm run smoke:desktop` suite (installer 195.92 MB); it must not
+be published as 1.1.1.
 
 ## Completed — 04_QUICK_WINS
 
@@ -104,7 +107,7 @@ has a `done` row above without an explicit owner decision.
 | 2 | Persisted region proposals and batch review | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | evaluated — design + stale-safety documented; decision: keep proposals derived/non-persisted; read-only aggregation is the next step only if approved; `docs/optional-future/PROGRESS.md` |
 | 3 | PaddleOCR adapter evaluation | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | deferred — needs a heavy local install and a measured real-scan benchmark; plan documented, no result claimed |
 | 4 | Provider quota/billing introspection | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | evaluated — capability matrix; report-only, no provider calls; verified endpoints only for OpenAI/Anthropic (admin keys), OpenRouter and DeepSeek |
-| 5 | Windows installer footprint optimisation | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | measured — component sizes recorded; ~48 MB locale trimming possible; no packaging change without a verified rebuild |
+| 5 | Windows installer footprint optimisation | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | done — `electronLanguages: ["en-US"]` applied; verified `desktop:dist` + 12/12 smoke; installer 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB; unreleased; `docs/optional-future/PROGRESS.md` |
 | 6 | macOS/Linux feasibility study | `03_OPTIONAL_FUTURE/05_macOS_Linux_Feasibility.md` | evaluated — platform matrix, blockers and effort estimate; report only, no implementation |
 
 Other honest gaps already recorded in `ROADMAP.md` and `PROJECT_MEMORY.md` §12:
@@ -149,4 +152,5 @@ npm run smoke:desktop         # after a new packaged build
 | 2026-11-28 | Status documentation refresh | this handover created; docs aligned; no release published | `0ef502d` |
 | 2026-11-28 | `04_QUICK_WINS` 01 audit | seven earlier requests all VERIFIED WORKING; no confirmed defect; no application/test/locale changes; audit record added | this commit |
 | 2026-11-28 | `03_OPTIONAL_FUTURE` 01 evaluation | design + stale-safety trade-off documented; decision to keep proposals derived/non-persisted; two regression tests added; no production code change | `a933ff6` |
-| 2026-11-28 | `03_OPTIONAL_FUTURE` 02-05 evaluation | 02 deferred (heavy install + benchmark); 03 provider-quota matrix, 04 footprint measurement, 05 macOS/Linux feasibility documented; report-only, no application code change | this commit |
+| 2026-11-28 | `03_OPTIONAL_FUTURE` 02-05 evaluation | 02 deferred (heavy install + benchmark); 03 provider-quota matrix, 04 footprint measurement, 05 macOS/Linux feasibility documented; report-only, no application code change | `9d115b0` |
+| 2026-11-28 | `03_OPTIONAL_FUTURE` 04 applied | `electronLanguages: ["en-US"]`; full `desktop:dist` + 12/12 `smoke:desktop`; installer 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB; unreleased | this commit |
