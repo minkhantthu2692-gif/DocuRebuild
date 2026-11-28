@@ -55,6 +55,9 @@ vi.mock("@/hooks/use-projects", () => ({
 vi.mock("@/components/workspace/ocr-dialog", () => ({ OcrDialog: () => null }));
 vi.mock("@/components/workspace/edits-dialog", () => ({ EditsDialog: () => null }));
 vi.mock("@/components/workspace/elements-dialog", () => ({ ElementsDialog: () => null }));
+vi.mock("@/components/workspace/region-review-dialog", () => ({
+  RegionReviewDialog: () => null,
+}));
 vi.mock("@/hooks/use-elements", () => ({
   useElements: () => ({ data: [] }),
   useRegionProposals: () => ({ data: undefined, isLoading: false, isError: false }),

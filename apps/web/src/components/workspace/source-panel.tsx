@@ -6,6 +6,7 @@
   Image as ImageIcon,
   Images,
   Layers,
+  LayoutList,
   ListChecks,
   Maximize2,
   MoreHorizontal,
@@ -87,6 +88,7 @@ import { containFrame, layoutBoxes, layoutRect, type ImageFrame } from "@/lib/la
 import { cn } from "@/lib/utils";
 import { OcrDialog } from "./ocr-dialog";
 import { EditsDialog } from "./edits-dialog";
+import { RegionReviewDialog } from "./region-review-dialog";
 import { ElementsDialog } from "./elements-dialog";
 import { AiReviewDialog } from "./ai-review-dialog";
 import { usePaidAiGuard } from "./paid-ai-confirm-dialog";
@@ -312,6 +314,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   const [deleteTarget, setDeleteTarget] = useState<PageSummary | null>(null);
   const [ocrOpen, setOcrOpen] = useState(false);
   const [aiReviewOpen, setAiReviewOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [editsOpen, setEditsOpen] = useState(false);
   const [elementsOpen, setElementsOpen] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
@@ -328,6 +331,12 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const activeFrameRef = useRef<ImageFrame | null>(null);
+  // A proposal chosen from the cross-page review for another page. It is held
+  // here so the page-change reset cannot discard it before the new page loads.
+  const crossPageReviewRef = useRef<{
+    pageId: string;
+    proposal: RegionProposal;
+  } | null>(null);
   const handledJobRef = useRef<string | null>(null);
   const resumeCheckedRef = useRef(false);
 
@@ -405,6 +414,12 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     setPendingProposal(null);
     activeFrameRef.current = null;
     resetAiRegions();
+    const crossPage = crossPageReviewRef.current;
+    if (crossPage && crossPage.pageId === currentPage?.id) {
+      crossPageReviewRef.current = null;
+      setPendingProposal(crossPage.proposal);
+      setElementsOpen(true);
+    }
   }, [currentPage?.id, resetAiRegions]);
 
   const elementsQuery = useElements(projectId, currentPage?.id ?? null);
@@ -490,6 +505,21 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     resetAiRegions();
     setPendingProposal(proposal);
     setElementsOpen(true);
+  };
+
+  const openCrossPageProposal = (pageId: string, proposal: RegionProposal) => {
+    setReviewOpen(false);
+    if (currentPage?.id === pageId) {
+      applyProposal(proposal);
+      return;
+    }
+    crossPageReviewRef.current = { pageId, proposal };
+    setSelectedId(pageId);
+  };
+
+  const openCrossPagePage = (pageId: string) => {
+    setReviewOpen(false);
+    setSelectedId(pageId);
   };
 
   const handleElementsOpenChange = (open: boolean) => {
@@ -1096,6 +1126,16 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
             />
 
             <ToolButton
+              label={t("elements.review.open")}
+              icon={LayoutList}
+              active={reviewOpen}
+              onClick={() => {
+                cancelRegionSelect();
+                setReviewOpen(true);
+              }}
+            />
+
+            <ToolButton
               label={t("aiReview.open")}
               icon={ListChecks}
               active={aiReviewOpen}
@@ -1471,6 +1511,14 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
         projectId={projectId}
         open={aiReviewOpen}
         onOpenChange={setAiReviewOpen}
+      />
+
+      <RegionReviewDialog
+        projectId={projectId}
+        open={reviewOpen}
+        onOpenChange={setReviewOpen}
+        onOpenPage={openCrossPagePage}
+        onReviewProposal={openCrossPageProposal}
       />
 
       <Dialog

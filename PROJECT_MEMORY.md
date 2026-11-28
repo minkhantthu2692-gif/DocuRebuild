@@ -5,7 +5,8 @@ developer) should be able to read this document and `AGENTS.md`, clone the
 repository, run the checks and continue work without any previous conversation.
 
 Last updated: 2026-11-28 (v1.1.1 released with desktop E2E smoke suite verified;
-optional tasks evaluated: region proposals kept derived (§10 item 16), provider
+optional tasks evaluated: region proposals kept derived with a read-only
+cross-page review (§10 item 16), provider
 quota report-only (§10 item 17), platform posture (§10 item 18); installer
 footprint trimmed and verified (§10 item 19); PaddleOCR deferred).
 
@@ -336,11 +337,14 @@ AI credentials are configured in the application, not in environment files.
     could diverge. Accepted regions are already persisted as `elements` (with
     their own `source_asset_id` stale flag); dismissed regions are cheap to
     re-derive. The optional batch-review task was evaluated on 2026-11-28 and
-    deliberately did **not** add a proposal table. If cross-page review is later
-    approved, start with a read-only derived aggregation that reuses
-    `propose_regions` and carries the same `ocr_run_id` + `source_asset_id` +
-    `rotation` identity; persist only user dismissals if demand is proven. Full
-    design and the invariants any persistence must keep: `docs/optional-future/PROGRESS.md`.
+    deliberately did **not** add a proposal table. The owner approved a read-only
+    cross-page aggregation, implemented as
+    `GET /projects/{id}/region-proposals` (`regions.propose_project_regions`):
+    it reuses `propose_regions` and carries the same `ocr_run_id` +
+    `source_asset_id` + `rotation` identity, is bounded to 100 pages per request
+    (200 maximum) with `truncated`/`next_page_number` for resuming, and offers no
+    batch accept. Persist only user dismissals if demand is proven. Full design
+    and the invariants any persistence must keep: `docs/optional-future/PROGRESS.md`.
 17. **Provider quota is report-only until a verified, key-compatible feature is
     approved.** The optional task was evaluated on 2026-11-28 and deliberately
     added no provider calls. Verified official endpoints exist only for OpenAI
@@ -375,8 +379,8 @@ AI credentials are configured in the application, not in environment files.
 ## 11. Verification commands and current results
 
 ```powershell
-backend/.venv/Scripts/python -m pytest backend/tests -q   # 452 passed
-npm run test:web                                          # 364 tests / 59 files
+backend/.venv/Scripts/python -m pytest backend/tests -q   # 456 passed
+npm run test:web                                          # 368 tests / 60 files
 npm run typecheck                                         # clean
 npm run lint                                              # clean
 npm run build                                             # production build
@@ -442,8 +446,9 @@ secret scan.
 
 - Version 1.1.1 everywhere. License AGPL-3.0-or-later.
 - Working tree after the release: `main` contains the four `02_SHOULD_HAVE`
-  commits, the quick-win audit, the optional evaluations and the verified locale
-  trimming on top of v1.1.1. Current suite: 452 backend / 364 web tests. The
+  commits, the quick-win audit, the optional evaluations, the read-only cross-page
+  region review and the verified locale trimming on top of v1.1.1. Current suite:
+  456 backend / 368 web tests. The
   locale-trimmed installer (195.92 MB, SHA-256
   `BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649`) is
   **unreleased** and must not be published as 1.1.1; a future version should

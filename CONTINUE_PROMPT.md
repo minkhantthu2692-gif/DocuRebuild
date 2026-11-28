@@ -10,8 +10,9 @@ record; `docs/should-have/PROGRESS.md` holds the per-task evidence for the
 the optional-evaluation commits, version `1.1.1` released (28 November 2026). The
 post-release task work is committed on `main` but is **not** a published release.
 All `01_MUST_HAVE`, `02_SHOULD_HAVE` and `04_QUICK_WINS` tasks are complete;
-optional tasks 01, 03 and 05 are evaluated, task 04 (locale trimming) is applied
-and verified, and task 02 (PaddleOCR) is deferred. Verify with `git status -sb`
+optional tasks 01, 03 and 05 are evaluated, task 01's approved read-only
+cross-page region review is implemented, task 04 (locale trimming) is applied and
+verified, and task 02 (PaddleOCR) is deferred. Verify with `git status -sb`
 and `git log --oneline -10` before starting; do not discard unfamiliar work.
 
 ## Paste-ready prompt
@@ -37,8 +38,9 @@ Verify the baseline before changing code:
 
 All 01_MUST_HAVE, 02_SHOULD_HAVE and 04_QUICK_WINS prompt-pack tasks are done
 (see the tables in CONTINUE_PROMPT.md). Optional tasks 01, 03 and 05 are
-evaluated; task 04 (locale trimming) is applied and verified; task 02 (PaddleOCR)
-is deferred because it needs a heavy local install and a measured real-scan
+evaluated; task 01's approved read-only cross-page region review is implemented;
+task 04 (locale trimming) is applied and verified; task 02 (PaddleOCR) is
+deferred because it needs a heavy local install and a measured real-scan
 benchmark. Do not implement a deferred or evaluated item without an explicit
 owner decision.
 
@@ -77,10 +79,10 @@ and stale-run recovery were identified as gaps by task 03 and remain known gaps.
 | 04 | Opaque PDF drawing extraction | rendered-page raster fallback for opaque PDFs, 2 backend tests, `docs/figure-detection.md` | `0d2aa0e` |
 
 Full per-task findings, commands, numbers, limitations and changed files are in
-`docs/should-have/PROGRESS.md`. Latest verified totals: **452 backend tests**
+`docs/should-have/PROGRESS.md`. Latest verified totals: **456 backend tests**
 (the four `02_SHOULD_HAVE` tasks took it to 450; the optional region-proposal
-evaluation added two regression tests), **59 web files / 364 tests**, typecheck
-and lint clean. The published v1.1.1 installer was built from `486688e`, before
+evaluation added two regression tests and the cross-page review added four),
+**60 web files / 368 tests**, typecheck, lint and production build clean. The published v1.1.1 installer was built from `486688e`, before
 these commits. The current unreleased build was rebuilt with the locale trim and
 passed the 12/12 `npm run smoke:desktop` suite (installer 195.92 MB); it must not
 be published as 1.1.1.
@@ -104,7 +106,7 @@ has a `done` row above without an explicit owner decision.
 | Order | Item | Prompt / record | Status |
 | --- | --- | --- | --- |
 | 1 | Audit earlier requested fixes; fix at most one confirmed defect | `04_QUICK_WINS_AND_REGRESSION_CHECKS/01_Audit_Previously_Requested_Fixes.md` | done — all verified; no code change |
-| 2 | Persisted region proposals and batch review | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | evaluated — design + stale-safety documented; decision: keep proposals derived/non-persisted; read-only aggregation is the next step only if approved; `docs/optional-future/PROGRESS.md` |
+| 2 | Persisted region proposals and batch review | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | done — evaluation kept proposals derived/non-persisted; the approved read-only cross-page aggregation is implemented (bounded to 100 pages/request, 200 max, resumable, no batch accept) with 4 backend + 4 web tests; `docs/optional-future/PROGRESS.md` |
 | 3 | PaddleOCR adapter evaluation | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | deferred — needs a heavy local install and a measured real-scan benchmark; plan documented, no result claimed |
 | 4 | Provider quota/billing introspection | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | evaluated — capability matrix; report-only, no provider calls; verified endpoints only for OpenAI/Anthropic (admin keys), OpenRouter and DeepSeek |
 | 5 | Windows installer footprint optimisation | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | done — `electronLanguages: ["en-US"]` applied; verified `desktop:dist` + 12/12 smoke; installer 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB; unreleased; `docs/optional-future/PROGRESS.md` |
@@ -153,4 +155,5 @@ npm run smoke:desktop         # after a new packaged build
 | 2026-11-28 | `04_QUICK_WINS` 01 audit | seven earlier requests all VERIFIED WORKING; no confirmed defect; no application/test/locale changes; audit record added | this commit |
 | 2026-11-28 | `03_OPTIONAL_FUTURE` 01 evaluation | design + stale-safety trade-off documented; decision to keep proposals derived/non-persisted; two regression tests added; no production code change | `a933ff6` |
 | 2026-11-28 | `03_OPTIONAL_FUTURE` 02-05 evaluation | 02 deferred (heavy install + benchmark); 03 provider-quota matrix, 04 footprint measurement, 05 macOS/Linux feasibility documented; report-only, no application code change | `9d115b0` |
-| 2026-11-28 | `03_OPTIONAL_FUTURE` 04 applied | `electronLanguages: ["en-US"]`; full `desktop:dist` + 12/12 `smoke:desktop`; installer 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB; unreleased | this commit |
+| 2026-11-28 | `03_OPTIONAL_FUTURE` 04 applied | `electronLanguages: ["en-US"]`; full `desktop:dist` + 12/12 `smoke:desktop`; installer 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB; unreleased | `419f492` |
+| 2026-11-28 | `03_OPTIONAL_FUTURE` 01 read-only review | project-level aggregation endpoint with bounded/resumable scan, review dialog, source-panel navigation, both locales, 4 backend + 4 web tests; proposals stay derived; 456 backend / 60 files / 368 web tests | this commit |

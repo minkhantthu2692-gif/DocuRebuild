@@ -666,6 +666,29 @@
         "no_geometry": "The latest OCR result has no text geometry to suggest regions from."
       }
     },
+    "review": {
+      "open": "Review regions across pages",
+      "title": "Cross-page region review",
+      "description": "Read-only overview of region suggestions from the latest OCR run on each page. Selecting one opens that page and the normal review dialog; nothing is saved here.",
+      "loading": "Reading region suggestions across pages…",
+      "errorTitle": "Could not read cross-page suggestions",
+      "retry": "Retry",
+      "emptyTitle": "No region suggestions yet",
+      "emptyDescription": "Run OCR on at least one page to get suggestions, then open this overview again.",
+      "summary_one": "{{count}} suggestion on {{pages}} page(s)",
+      "summary_other": "{{count}} suggestions on {{pages}} page(s)",
+      "page": "Page {{page}}",
+      "proposalCount_one": "{{count}} suggestion",
+      "proposalCount_other": "{{count}} suggestions",
+      "openPage": "Open page",
+      "truncated": "Only the first pages were scanned. Continue from page {{page}} by opening it directly.",
+      "confidence": {
+        "high": "High confidence",
+        "medium": "Medium confidence",
+        "low": "Low confidence"
+      },
+      "close": "Close"
+    },
     "ai": {
       "request": "Ask AI for regions",
       "requestAgain": "Ask AI again",

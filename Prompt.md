@@ -49,8 +49,8 @@ Run git status -sb and git log --oneline -10 first; verify the tree state and do
 discard unfamiliar work.
 
 Verify the baseline before changing code:
-  backend\.venv\Scripts\python.exe -m pytest backend/tests -q   # 452 passed
-  npm run test:web                                             # 364 tests / 59 files
+backend\.venv\Scripts\python.exe -m pytest backend/tests -q   # 456 passed
+npm run test:web                                             # 368 tests / 60 files
   npm run typecheck
   npm run lint
 
@@ -63,9 +63,9 @@ owner decision.
 
 If the owner approves further optional work, pick exactly ONE item from the
 "Remaining work" table in CONTINUE_PROMPT.md, read its prompt file in the prompt
-pack, and follow its acceptance criteria. The remaining candidates are the
-deferred PaddleOCR benchmark and the read-only cross-page region aggregation
-(only if approved); neither is a release blocker.
+pack, and follow its acceptance criteria. The only remaining candidate is the
+deferred PaddleOCR benchmark (needs a heavy local install and a measured
+real-scan benchmark); it is not a release blocker.
 
 Use disposable test data; keep originals and user projects untouched. Add tests and
 both English and Burmese locale keys for any UI string. Update the progress docs,

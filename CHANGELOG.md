@@ -8,6 +8,14 @@ supported 1.0 distribution.
 
 ### Added
 
+- **Cross-page region review.** A new **Review regions across pages** action
+  lists the figure, table and equation suggestions from each page's latest OCR
+  run in one read-only overview. Selecting one navigates to its page and opens
+  the normal element review dialog, where the crop is still confirmed before
+  anything is saved; there is no batch accept. The overview is derived on demand
+  (nothing new is persisted), reuses the per-page staleness rules, and scans at
+  most 100 pages per request (200 maximum), reporting where to continue when a
+  project is larger.
 - **Opaque PDF drawing proposals.** A PDF page with no usable embedded image and
   no vector drawing is now analysed from its rendered page, so artwork stored as
   opaque page/form content (for example a scanned page) can be proposed for

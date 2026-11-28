@@ -1096,6 +1096,32 @@ export interface RegionProposals {
   proposals: RegionProposal[];
 }
 
+/** One page in a read-only cross-page proposal overview. */
+export interface PageRegionProposals {
+  page_id: string;
+  page_number: number;
+  status: RegionProposalStatus;
+  page_width: number | null;
+  page_height: number | null;
+  ocr_run_id: string | null;
+  engine: string | null;
+  proposal_count: number;
+  proposals: RegionProposal[];
+}
+
+/**
+ * Derived, non-persisted aggregation of the per-page proposals. `truncated`
+ * means the scan stopped at the page window; `next_page_number` is the first
+ * page not included and can be passed back as `after_page_number`.
+ */
+export interface ProjectRegionProposals {
+  pages: PageRegionProposals[];
+  total_proposals: number;
+  pages_with_proposals: number;
+  truncated: boolean;
+  next_page_number: number | null;
+}
+
 /**
  * One equation region read from the latest OCR layout. `text` is unverified OCR
  * output used as a LaTeX starting point, never document content on its own.

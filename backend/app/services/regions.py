@@ -716,6 +716,78 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
     }
 
 
+DEFAULT_PROJECT_REVIEW_PAGES = 100
+MAX_PROJECT_REVIEW_PAGES = 200
+
+
+def propose_project_regions(
+    project_dir: Path,
+    *,
+    limit: int = DEFAULT_PROJECT_REVIEW_PAGES,
+    after_page_number: int | None = None,
+) -> dict[str, Any]:
+    """Aggregate read-only region proposals across a project's pages.
+
+    Each page is evaluated with :func:`propose_regions`, so the identity and
+    staleness rules are exactly the same as the per-page endpoint: a proposal is
+    only returned for a successful OCR run whose ``source_asset_id`` and
+    ``rotation`` still match the page. Nothing is persisted and no crop is
+    created; the caller navigates to a page and reviews it through the normal
+    element flow.
+
+    Pages are processed in page order and the scan is bounded by ``limit`` so an
+    explicit cross-page review cannot walk an unbounded document in one request.
+    Pages without proposals are omitted, but the returned ``next_page_number``
+    lets a caller continue after the processed window.
+    """
+    bounded = max(1, min(int(limit), MAX_PROJECT_REVIEW_PAGES))
+    query = "SELECT id, page_number FROM pages"
+    params: list[Any] = []
+    if after_page_number is not None:
+        query += " WHERE page_number > ?"
+        params.append(int(after_page_number))
+    query += " ORDER BY page_number ASC LIMIT ?"
+    params.append(bounded + 1)
+    with project_db(project_dir) as conn:
+        rows = conn.execute(query, params).fetchall()
+
+    truncated = len(rows) > bounded
+    next_page_number = (
+        int(rows[bounded]["page_number"]) if truncated else None
+    )
+    rows = rows[:bounded]
+
+    pages: list[dict[str, Any]] = []
+    total = 0
+    for row in rows:
+        result = propose_regions(project_dir, row["id"])
+        proposals = result["proposals"]
+        if not proposals:
+            continue
+        total += len(proposals)
+        pages.append(
+            {
+                "page_id": row["id"],
+                "page_number": int(row["page_number"]),
+                "status": result["status"],
+                "page_width": result["page_width"],
+                "page_height": result["page_height"],
+                "ocr_run_id": result["ocr_run_id"],
+                "engine": result["engine"],
+                "proposal_count": len(proposals),
+                "proposals": proposals,
+            }
+        )
+
+    return {
+        "pages": pages,
+        "total_proposals": total,
+        "pages_with_proposals": len(pages),
+        "truncated": truncated,
+        "next_page_number": next_page_number,
+    }
+
+
 EQUATION_GAP_RATIO = 0.35
 
 

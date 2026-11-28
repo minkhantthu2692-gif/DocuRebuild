@@ -43,3 +43,23 @@ class RegionProposalsOut(BaseModel):
     ocr_run_id: str | None
     engine: str | None
     proposals: list[RegionProposalOut]
+
+
+class PageRegionProposalsOut(BaseModel):
+    page_id: str
+    page_number: int
+    status: ProposalStatus
+    page_width: int | None
+    page_height: int | None
+    ocr_run_id: str | None
+    engine: str | None
+    proposal_count: int
+    proposals: list[RegionProposalOut]
+
+
+class ProjectRegionProposalsOut(BaseModel):
+    pages: list[PageRegionProposalsOut]
+    total_proposals: int
+    pages_with_proposals: int
+    truncated: bool
+    next_page_number: int | None

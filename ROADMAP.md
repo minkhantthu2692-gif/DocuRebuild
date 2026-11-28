@@ -7,10 +7,10 @@ This is the short, current roadmap for the Windows x64 desktop release.
 Last updated: 2026-11-28 (v1.1.1 released; all `01_MUST_HAVE` and
 `02_SHOULD_HAVE` prompt-pack tasks complete; the quick-win regression audit is
 done with no confirmed defect and no code change; optional tasks 01, 03 and 05
-are evaluated, task 04 is applied and verified, and task 02 (PaddleOCR) is
-deferred; the installer locale trimming cut the unreleased build from 204.19 to
-195.92 MB; status docs and the paste-ready handover refreshed in
-`CONTINUE_PROMPT.md`).
+are evaluated, task 01's approved read-only cross-page review is implemented,
+task 04 is applied and verified, and task 02 (PaddleOCR) is deferred; the
+installer locale trimming cut the unreleased build from 204.19 to 195.92 MB;
+status docs and the paste-ready handover refreshed in `CONTINUE_PROMPT.md`).
 
 ## Release status
 
@@ -190,10 +190,22 @@ documents that trade-off, a stable identity/versioning design (`ocr_run_id` +
 `source_asset_id` + `rotation` + page revision) that any future persistence must
 enforce, and the decision: keep proposals derived and non-persisted because a
 proposal table would duplicate state already captured by accepted `elements` and
-reintroduce a second source of truth for a navigation-only benefit. A read-only
-cross-page aggregation is the recommended next step only if the owner approves
-it. Two regression tests now lock the stale/regeneration invariants. Full design
-and decision: `docs/optional-future/PROGRESS.md`.
+reintroduce a second source of truth for a navigation-only benefit. The owner
+approved the read-only cross-page aggregation, which is implemented below. Two
+regression tests now lock the stale/regeneration invariants. Full design and
+decision: `docs/optional-future/PROGRESS.md`.
+
+**Read-only cross-page region review (28 November 2026).** A new **Review
+regions across pages** action lists each page's derived figure, table and
+equation suggestions in one overview. `GET /projects/{id}/region-proposals`
+aggregates the existing per-page `propose_regions()` result, so the same
+`ocr_run_id`, source-asset and rotation staleness rules apply and no proposal is
+persisted. The scan is bounded to 100 pages per request (200 maximum) and
+returns `truncated`/`next_page_number` for resuming. Selecting a suggestion
+navigates to the page and opens the normal element review dialog; there is no
+batch accept and nothing is saved without confirmation. Tests cover page order,
+skipped/stale pages, the bounded scan, the dialog hand-off, the empty state and
+the truncated note. Backend 456 tests and web 60 files / 368 tests pass.
 
 **Installer footprint reduction (28 November 2026).** The electron-builder config
 now keeps only the `en-US` Chromium locale (`electronLanguages` in
@@ -218,10 +230,9 @@ prompt pack are complete. Each task has a detailed evidence section in
 | 01 MUST HAVE | Real-scan OCR baseline, accessibility audit, large-document performance/cancellation, desktop E2E smoke suite | `docs/ocr-benchmark.md`, `docs/performance.md`, `npm run smoke:desktop`, report §§13-15 | `8cb208c`, `09b5f99`, `ad7809d` |
 | 02 SHOULD HAVE | Page-wide figure detection, page-wide equation proposals, nested table separation, opaque PDF drawing extraction | `docs/figure-detection.md`, `docs/should-have/PROGRESS.md`, report §16 | `04f0b5f`, `0708826`, `25ffbc7`, `0d2aa0e` |
 
-Current tree verification: 452 backend tests, 59 web files / 364 tests,
-typecheck and lint clean (the extra two backend tests are the optional
-region-proposal regression tests). These commits are on `main` after the v1.1.1
-release tag; no installer has been published from them.
+Current tree verification: 456 backend tests, 60 web files / 368 tests,
+typecheck, lint and production build clean. These commits are on `main` after
+the v1.1.1 release tag; no installer has been published from them.
 
 ## Known gaps for a wider (non-Windows) production release
 
@@ -287,7 +298,7 @@ evidence in `docs/should-have/PROGRESS.md`, `docs/quick-wins/PROGRESS.md`,
 | Order | Task | Next action |
 | --- | --- | --- |
 | 1 | `04_QUICK_WINS_AND_REGRESSION_CHECKS/01_Audit_Previously_Requested_Fixes.md` | done — all seven VERIFIED WORKING; no confirmed defect, no code change; `docs/quick-wins/PROGRESS.md` |
-| 2 | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | evaluated — design and stale-safety trade-off documented; decision: keep proposals derived and non-persisted; a read-only cross-page aggregation is the recommended next step only if approved; two regression tests lock the invariants; `docs/optional-future/PROGRESS.md` |
+| 2 | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | done — evaluation kept proposals derived and non-persisted; the approved read-only cross-page aggregation is implemented (bounded, resumable, no batch accept) with 4 backend + 4 web tests; `docs/optional-future/PROGRESS.md` |
 | 3 | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | deferred — needs a heavy local install and a measured real-scan benchmark; plan documented, no result claimed; `docs/optional-future/PROGRESS.md` |
 | 4 | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | evaluated — capability matrix delivered; report-only, no provider calls; only OpenAI/Anthropic (admin keys), OpenRouter and DeepSeek have verified official endpoints; `docs/optional-future/PROGRESS.md` |
 | 5 | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | done — `electronLanguages: ["en-US"]` applied; verified `desktop:dist` + 12/12 smoke; installer 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB; unreleased; `docs/optional-future/PROGRESS.md` |

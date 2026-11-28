@@ -72,6 +72,7 @@ import type {
   ProjectBackupSummary,
   ProjectBulkDeleteResult,
   ProjectDetail,
+  ProjectRegionProposals,
   ProjectSummary,
   RegionProposals,
   TableProposal,
@@ -483,6 +484,19 @@ export const api = {
     }),
   getRegionProposals: (projectId: string, pageId: string) =>
     request<RegionProposals>(`/projects/${projectId}/pages/${pageId}/region-proposals`),
+  getProjectRegionProposals: (
+    projectId: string,
+    options: { limit?: number; afterPageNumber?: number | null } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (options.limit) params.set("limit", String(options.limit));
+    if (options.afterPageNumber)
+      params.set("after_page_number", String(options.afterPageNumber));
+    const query = params.toString();
+    return request<ProjectRegionProposals>(
+      `/projects/${projectId}/region-proposals${query ? `?${query}` : ""}`,
+    );
+  },
   getTableProposal: (projectId: string, pageId: string, blockId: string) =>
     request<TableProposal>(
       `/projects/${projectId}/pages/${pageId}/ocr/blocks/${blockId}/table-proposal`,

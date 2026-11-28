@@ -17,7 +17,7 @@ not claim any unverified result.
 
 | # | Task | Status | Outcome |
 | --- | --- | --- | --- |
-| 01 | Persisted region proposals and batch review | evaluated | Design + stale-safety trade-off documented; **no persistence change** (see decision); two regression tests lock the invariants |
+| 01 | Persisted region proposals and batch review | evaluated + read-only review | Design + stale-safety trade-off documented; **no persistence change**; the approved read-only cross-page aggregation is implemented and bounded |
 | 02 | PaddleOCR adapter evaluation | deferred | Needs a heavy local install + a measured real-scan benchmark; plan documented, no result claimed |
 | 03 | Provider quota introspection | evaluated | Capability matrix delivered; report-only, no provider calls implemented |
 | 04 | Windows installer footprint optimisation | done | Applied `electronLanguages: ["en-US"]`; verified rebuild + 12/12 smoke; installer 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB |
@@ -437,6 +437,83 @@ account and certificate; full QA (install/upgrade/OCR/export/backup) per platfor
 is the largest cost. **Decision: report only; no implementation until separately
 approved.**
 
+## Task 01 — read-only cross-page review (implemented 2026-11-28)
+
+The evaluation decision (keep proposals derived and non-persisted) is unchanged.
+The approved next step, a read-only cross-page aggregation, is now implemented.
+
+### Backend
+
+- `GET /api/projects/{project_id}/region-proposals`
+  (`backend/app/api/routes/regions.py`) returns `ProjectRegionProposalsOut`
+  (`backend/app/schemas/regions.py`): per-page `page_id`, `page_number`, status,
+  page size, `ocr_run_id`, engine, `proposal_count` and the same proposal list as
+  the per-page endpoint, plus `total_proposals`, `pages_with_proposals`,
+  `truncated` and `next_page_number`.
+- `regions.propose_project_regions()` (`backend/app/services/regions.py`) calls
+  the existing `propose_regions()` for each page in page order. It therefore
+  reuses the exact identity and staleness rules: a page whose OCR run is missing,
+  not ready, failed, or whose `source_asset_id`/`rotation` no longer match is
+  omitted (or returns no proposals). Nothing is persisted and no crop is made.
+- The scan is bounded: `limit` defaults to 100 and is capped at 200; pages
+  without proposals are omitted. When more pages exist, `truncated` is true and
+  `next_page_number` is the first page outside the window, so the caller can
+  resume with `after_page_number`.
+- Tests (`backend/tests/test_regions.py`): aggregation across two pages in order
+  with the expected figure/table/equation kinds; skipping a page without OCR;
+  omitting a page after rotation makes its OCR stale; bounded scan and resume.
+
+### Frontend
+
+- A new **Review regions across pages** toolbar action in the source panel opens
+  `RegionReviewDialog`
+  (`apps/web/src/components/workspace/region-review-dialog.tsx`), a read-only
+  list grouped by page with kind, source, confidence and caption.
+- Selecting a suggestion closes the dialog, navigates to that page and hands the
+  rectangle to the existing element review dialog (`applyProposal`). A page that
+  is not current is held in a ref across the page-change reset, so the proposal
+  is not lost. "Open page" navigates without selecting a suggestion.
+- The dialog has no save or insert action. It shows loading, error/retry, empty
+  and truncated states. The aggregation is only fetched while the dialog is
+  open (`enabled: open`).
+- i18n keys added under `elements.review` in both English and Burmese.
+- Test (`apps/web/src/test/region-review-dialog.test.tsx`): page order and
+  selection hand-off, no save action, empty state, truncated continuation note.
+  `source-panel-import.test.tsx` now stubs the new dialog so its focused tests
+  stay isolated.
+
+### Verification
+
+- `pytest backend/tests -q` -> 456 passed (was 452; +4).
+- `npm run test:web` -> 60 files / 368 tests passed (was 59/364; +1 file, +4).
+- `npm run typecheck`, `npm run lint`, `npm run build` -> clean.
+
+### Limitations
+
+- The overview is read-only and bounded to 100 pages per request (max 200); the
+  UI does not paginate automatically and points the user at the next page
+  instead.
+- Only pages with at least one proposal are listed; a page whose OCR is stale or
+  missing is absent rather than shown with a status. The per-page overlay
+  remains the place to see those statuses.
+- Selecting a suggestion still saves nothing until the normal element dialog
+  confirms it, preserving the review-before-insert rule.
+- No cross-page batch accept/insert was added; the evaluation rejected automatic
+  batch acceptance.
+
+### Files changed
+
+`backend/app/schemas/regions.py`, `backend/app/services/regions.py`,
+`backend/app/api/routes/regions.py`, `backend/tests/test_regions.py`,
+`packages/shared-types/src/index.ts`, `apps/web/src/lib/api.ts`,
+`apps/web/src/hooks/use-elements.ts`,
+`apps/web/src/components/workspace/region-review-dialog.tsx` (new),
+`apps/web/src/components/workspace/source-panel.tsx`,
+`apps/web/src/i18n/locales/en/workspace.json`,
+`apps/web/src/i18n/locales/my/workspace.json`,
+`apps/web/src/test/region-review-dialog.test.tsx` (new),
+`apps/web/src/test/source-panel-import.test.tsx`.
+
 ## Session log
 
 - 2026-11-28: Task 01 evaluated. Documented the safety trade-off, the stable
@@ -451,6 +528,11 @@ approved.**
   matrix and blockers documented. Task 02 (PaddleOCR) deferred with a plan
   because it needs a heavy local install and a measured benchmark. No application
   code, schema, API, UI, locale or dependency changed.
+- 2026-11-28: Task 01 read-only cross-page review implemented. Added the
+  project-level aggregation endpoint with a bounded, resumable scan, the review
+  dialog and source-panel navigation, both locale sets and tests. 456 backend
+  tests, 60 web files / 368 tests, typecheck/lint/build clean. Proposals remain
+  derived and non-persisted; no batch accept.
 - 2026-11-28: Task 04 applied. Added `electronLanguages: ["en-US"]` to the
   electron-builder config and ran the full `npm run desktop:dist` +
   `npm run smoke:desktop` cycle. Installer 204.19 -> 195.92 MB; installed

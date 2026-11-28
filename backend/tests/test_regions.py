@@ -774,3 +774,113 @@ def test_opaque_pdf_without_a_drawing_proposes_no_figure(
     _, figures = _figure_proposals(client, project["id"], page["id"])
 
     assert figures == []
+
+def test_project_region_proposals_aggregate_pages_in_order(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(
+        ocr, "_perform_ocr", lambda *args, **kwargs: _fake_result(LAYOUT_BLOCKS)
+    )
+    pages = upload_pages(
+        client, project["id"], ["review-a.png", "review-b.png"]
+    )
+    for page in pages:
+        _run_ocr(client, project["id"], page["id"])
+
+    response = client.get(f"/api/projects/{project['id']}/region-proposals")
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["pages_with_proposals"] == 2
+    assert body["truncated"] is False
+    assert body["next_page_number"] is None
+    assert [entry["page_number"] for entry in body["pages"]] == [1, 2]
+    assert body["total_proposals"] == sum(
+        entry["proposal_count"] for entry in body["pages"]
+    )
+    for entry in body["pages"]:
+        assert entry["status"] == "ready"
+        assert entry["ocr_run_id"]
+        assert entry["proposal_count"] == len(entry["proposals"])
+        kinds = {proposal["kind"] for proposal in entry["proposals"]}
+        assert {"table", "equation", "figure"} <= kinds
+
+
+def test_project_region_proposals_skip_pages_without_ocr(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(
+        ocr, "_perform_ocr", lambda *args, **kwargs: _fake_result(LAYOUT_BLOCKS)
+    )
+    pages = upload_pages(
+        client, project["id"], ["review-with-ocr.png", "review-no-ocr.png"]
+    )
+    _run_ocr(client, project["id"], pages[0]["id"])
+
+    body = client.get(f"/api/projects/{project['id']}/region-proposals").json()
+
+    assert body["pages_with_proposals"] == 1
+    assert [entry["page_number"] for entry in body["pages"]] == [1]
+
+
+def test_project_region_proposals_omit_a_stale_page(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(
+        ocr, "_perform_ocr", lambda *args, **kwargs: _fake_result(LAYOUT_BLOCKS)
+    )
+    pages = upload_pages(
+        client, project["id"], ["review-fresh.png", "review-rotated.png"]
+    )
+    for page in pages:
+        _run_ocr(client, project["id"], page["id"])
+    rotated = client.post(
+        f"/api/projects/{project['id']}/pages/{pages[1]['id']}/rotate",
+        json={"degrees": 90},
+    )
+    assert rotated.status_code == 200, rotated.text
+
+    body = client.get(f"/api/projects/{project['id']}/region-proposals").json()
+
+    assert body["pages_with_proposals"] == 1
+    assert [entry["page_number"] for entry in body["pages"]] == [1]
+
+
+def test_project_region_proposals_bound_the_scan_and_resume(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(
+        ocr, "_perform_ocr", lambda *args, **kwargs: _fake_result(LAYOUT_BLOCKS)
+    )
+    pages = upload_pages(
+        client, project["id"], ["review-1.png", "review-2.png", "review-3.png"]
+    )
+    for page in pages:
+        _run_ocr(client, project["id"], page["id"])
+
+    first = client.get(
+        f"/api/projects/{project['id']}/region-proposals?limit=1"
+    ).json()
+    assert first["truncated"] is True
+    assert first["next_page_number"] == 2
+    assert [entry["page_number"] for entry in first["pages"]] == [1]
+
+    rest = client.get(
+        f"/api/projects/{project['id']}/region-proposals"
+        "?limit=2&after_page_number=1"
+    ).json()
+    assert rest["truncated"] is False
+    assert rest["next_page_number"] is None
+    assert [entry["page_number"] for entry in rest["pages"]] == [2, 3]

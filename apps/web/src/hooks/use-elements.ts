@@ -53,6 +53,22 @@ export function useRegionProposals(
   });
 }
 
+export function useProjectRegionProposals(
+  projectId: string,
+  enabled: boolean,
+  afterPageNumber: number | null = null,
+) {
+  return useQuery({
+    queryKey: ["project-region-proposals", projectId, afterPageNumber],
+    queryFn: () =>
+      api.getProjectRegionProposals(projectId, {
+        afterPageNumber,
+      }),
+    enabled,
+    staleTime: 0,
+  });
+}
+
 export function useCreateElement(projectId: string, pageId: string) {
   const queryClient = useQueryClient();
   return useMutation({
