@@ -8,6 +8,7 @@ EquationProposalStatus = Literal[
     "ready",
     "no_ocr_run",
     "ocr_not_ready",
+    "ocr_cancelled",
     "ocr_failed",
     "ocr_stale",
     "no_geometry",

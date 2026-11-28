@@ -4,10 +4,11 @@ This is the durable context file for DocuRebuild. A new AI agent (or a new human
 developer) should be able to read this document and `AGENTS.md`, clone the
 repository, run the checks and continue work without any previous conversation.
 
-Last updated: 2026-11-28 (v1.1.3 built, smoke-tested and pushed to `main` but
-not published as a GitHub release; v1.1.1 remains the published release with the
-desktop E2E smoke suite verified. 1.1.3 adds the equation-extraction LaTeX
-normalisation. Optional tasks evaluated: region proposals kept
+Last updated: 2026-11-28 (v1.1.4 built, smoke-tested and pushed to `main` with
+OCR cancellation and stale-run recovery, but not published as a GitHub release.
+v1.1.1 remains the published release with the desktop E2E smoke suite verified. 1.1.4 adds OCR cancellation, stale-run recovery and the
+equation-extraction LaTeX normalisation. Optional tasks evaluated: region
+proposals kept
 derived with a read-only cross-page review (§10 item 16), provider quota
 report-only (§10 item 17), platform posture (§10 item 18); installer footprint
 trimmed and verified (§10 item 19); PaddleOCR evaluated with a benchmark-backed
@@ -60,7 +61,7 @@ npm run dev
 
 # Build the desktop payload and installer
 npm run desktop:dist
-# -> dist/desktop-installer/DocuRebuild-1.1.3-setup.exe
+# -> dist/desktop-installer/DocuRebuild-1.1.4-setup.exe
 ```
 
 The desktop payload build (`scripts/build-desktop.mjs`) does three things:
@@ -184,8 +185,7 @@ complete; per-task evidence is in `docs/should-have/PROGRESS.md`,
 `PROJECT_COMPLETION_REPORT.md` §§16-17 and `CONTINUE_PROMPT.md`. Deferred or partial
 work is listed in `ROADMAP.md`. Notable gaps: a larger real-scan OCR corpus,
 macOS/Linux packaging, code signing, an interactive screen-reader pass (the audit
-itself is done), OCR cancellation/stale-run recovery and account-level AI billing
-verification. A desktop E2E smoke suite is available (`npm run smoke:desktop`;
+itself is done) and account-level AI billing verification. A desktop E2E smoke suite is available (`npm run smoke:desktop`;
 see section 11).
 
 ## 7. OCR details
@@ -193,6 +193,17 @@ see section 11).
 - Engine: bundled Tesseract 5.4.0.20240606 with `eng`, `mya`, `osd`.
 - Runner: `backend/app/services/ocr.py`, bounded worker pool, timeout, max image
   edge, no network.
+- Cancellation: each run owns a `threading.Event` in an in-process registry.
+  `POST /api/projects/{id}/ocr/runs/{run_id}/cancel` moves the row to
+  `cancelling`, sets the event, and the worker terminates the local engine
+  process; partial output is discarded and the row becomes `cancelled` with an
+  `ocr_cancelled` history event. A finished run is refused with
+  `ocr_not_running`, and only a `running` row can become `succeeded`.
+- Recovery: a `queued`/`running`/`cancelling` row with no live registry entry is
+  finished on read as `failed`/`ocr_interrupted` (or `cancelled` while
+  cancelling). `get_run`, `get_latest_ocr`, the region/equation proposal services
+  and graceful shutdown apply this rule; proposal payloads report
+  `ocr_cancelled`.
 - Page segmentation: user-selectable Tesseract PSM 3 (automatic), 4 (single
   column), 6 (single block) or 11 (sparse text). Unsupported values are rejected
   with `ocr_invalid_segmentation_mode`; they are never silently replaced.
@@ -375,7 +386,8 @@ AI credentials are configured in the application, not in environment files.
     204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB, locales 48.82 -> 0.56 MB.
     The installer shrinks less than the installed footprint because the dropped
     files compress well in the NSIS payload. The build is carried by the locally
-    verified 1.1.2 and 1.1.3 installers; the published 1.1.1 asset is unchanged. A
+    verified 1.1.2, 1.1.3 and 1.1.4 installers; the published 1.1.1 asset is
+    unchanged. A
     slimmer Tesseract build (178.10 MB) is
     deferred until a compatible build can be benchmarked and smoke-tested.
     Details: `docs/optional-future/PROGRESS.md`.
@@ -400,7 +412,7 @@ AI credentials are configured in the application, not in environment files.
 ## 11. Verification commands and current results
 
 ```powershell
-backend/.venv/Scripts/python -m pytest backend/tests -q   # 468 passed
+backend/.venv/Scripts/python -m pytest backend/tests -q   # 475 passed
 npm run test:web                                          # 369 tests / 60 files
 npm run typecheck                                         # clean
 npm run lint                                              # clean
@@ -413,8 +425,8 @@ build over the DevTools protocol with a disposable data profile. It covers
 launch/sidecar → create project → import PDF → render → OCR/review/insert →
 edit/save/reopen → export → backup/restore → clean shutdown, and exits non-zero
 on failure with a JSON report (`docs/smoke/desktop-smoke.json`, ignored). It
-requires Node 22+ (global `WebSocket`). The 1.1.3 packaged `win-unpacked` build
-passed 12/12 steps in 17 s on 28 November 2026; the installer was built but was
+requires Node 22+ (global `WebSocket`). The 1.1.4 packaged `win-unpacked` build
+passed 12/12 steps in 15 s on 28 November 2026; the installer was built but was
 not installed or published in this task.
 
 Installed-build QA (1.0.0, Windows 11 x64, N100/16 GB) is recorded in
@@ -428,7 +440,7 @@ secret scan.
 ## 12. Known limitations
 
 - Windows x64 only; no macOS/Linux package, no code-signing certificate.
-- Installer ~196 MB, installed footprint ~598 MB in the 1.1.3 build; the
+- Installer ~196 MB, installed footprint ~598 MB in the 1.1.4 build; the
   published 1.1.1 asset is ~204 MB / ~650 MB. Tesseract
   (178.10 MB) dominates the remaining size; a slimmer build is deferred.
 - OCR accuracy is measured on synthetic pages and a three-page real-scan corpus;
@@ -459,26 +471,30 @@ secret scan.
   factory reset against a copy of real data.
 - The local vault is plaintext by design; only explicit downloads can be
   password-encrypted, and a forgotten password cannot be recovered.
-- OCR has no cancel action, and an OCR run interrupted by a process crash stays
-  `running` after restart. Import jobs are recovered as `import_interrupted`;
-  OCR needs equivalent stale-state recovery. A crash during OCR also leaves one
-  preparation PNG in `tmp/`, and a crash mid-import can leave one unreferenced
-  processed image from the in-flight page. See `docs/performance.md`.
+- OCR runs can be cancelled while queued or running, and a run left active by a
+  crash or quit recovers as `ocr_interrupted` (or `cancelled` while cancelling)
+  on the next read, including from the proposal endpoints. A hard kill during
+  OCR still leaves one preparation PNG in `tmp/`, and a crash mid-import can
+  leave one unreferenced processed image from the in-flight page. See
+  `docs/performance.md`.
 
 ## 13. Release state
 
-- Version 1.1.3 everywhere. License AGPL-3.0-or-later.
+- Version 1.1.4 everywhere. The OCR cancellation change, version bump, build and
+  docs are pushed to `main` but not published as a GitHub release. License
+  AGPL-3.0-or-later.
 - `main` contains the four `02_SHOULD_HAVE` commits, the quick-win audit, the
   optional evaluations, the read-only cross-page region review, the verified
-  locale trimming, the equation-extraction LaTeX normalisation and the version
-  bump on top of v1.1.1. Current suite: 468 backend / 369 web tests; typecheck,
-  lint and production build clean.
-- The locally built 1.1.3 installer is
-  `dist/desktop-installer/DocuRebuild-1.1.3-setup.exe`, 205,444,142 bytes (195.93
+  locale trimming, the equation-extraction LaTeX normalisation and OCR
+  cancellation/stale-run recovery on top of v1.1.1. Current suite: 475 backend /
+  369 web tests; typecheck, lint and production build clean.
+- The locally built 1.1.4 installer is
+  `dist/desktop-installer/DocuRebuild-1.1.4-setup.exe`, 205,449,910 bytes (195.93
   MB), SHA-256
-  `BCB80868CF88EE9A8581BB12CA84FB2B798CFC137E77D082640B62FD7D687E20`. It passed
-  12/12 `npm run smoke:desktop` steps on the packaged build in 17 s and is pushed
-  to `main` but **not published** as a GitHub release. The earlier locale-trimmed
+  `38F29388F64DF555BF9C46DBDBC094CE2868FE4DE84BE619B212FD9837758DD6`. It passed
+  12/12 `npm run smoke:desktop` steps on the packaged build in 15 s. It is pushed
+  to `main` but **not published** as a GitHub release. The 1.1.3 installer
+  (`BCB80868...87E20`) remains in `dist/` unchanged. The earlier locale-trimmed
   file named `DocuRebuild-1.1.1-setup.exe` in `dist/` (195.92 MB, SHA-256
   `BABE4B5949BF996701BC5BD3FB6F707D59FA33D1746B7E2E7FF4839ED484F649`) remains
   byte-identical and must not be confused with the published 1.1.1 asset below.
@@ -500,6 +516,10 @@ secret scan.
   accessibility audit, a large-document performance/cancellation drill
   (`docs/performance.md`), and the automated desktop E2E smoke suite
   (`npm run smoke:desktop`). No schema migration.
+- 1.1.4 (unpublished build) adds OCR cancellation from the OCR dialog and
+  API, stale-run recovery after a crash or quit, an `ocr_interrupted` failure
+  code and an `ocr_cancelled` proposal status. No schema migration; upgrading
+  keeps existing projects.
 - 1.1.3 (unpublished build) starts equation review from normalised LaTeX rebuilt
   from the stored OCR word boxes and strengthens the optional AI equation prompt.
   No schema migration; upgrading keeps existing projects.

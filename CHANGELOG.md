@@ -6,6 +6,50 @@ supported 1.0 distribution.
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-11-28
+
+A Windows x64 maintenance build carrying the OCR cancellation and stale-run
+recovery work on top of 1.1.3. No schema migration; existing projects are
+unchanged. Not published as a GitHub release.
+
+### Added
+
+- **Cancel a text extraction that is still running.** The OCR dialog now offers
+  **Cancel text extraction** while a page run is queued or running, backed by
+  `POST /api/projects/{id}/ocr/runs/{run_id}/cancel`. The run moves to
+  `cancelling`, the local Tesseract process is terminated, any partial output is
+  discarded and the run is stored as `cancelled` with an `ocr_cancelled` activity
+  event. The previous run's stored text is left untouched, nothing is inserted or
+  approved, and a finished run is refused with `ocr_not_running`.
+- **Interrupted OCR runs recover after a restart.** A run left `queued` or
+  `running` by a crash or a quit is now reported as `failed` with
+  `ocr_interrupted` instead of staying "running" forever; a run left in
+  `cancelling` is finished as `cancelled`. The same recovery covers the region
+  and equation proposal endpoints, which previously kept answering "OCR is
+  still running" for a run no worker owned.
+
+### Changed
+
+- **Graceful shutdown records in-flight OCR runs.** Quitting the app marks every
+  active OCR run `ocr_interrupted` before the worker pool stops, so the next
+  session never shows a stale "running" page.
+- **Only a `running` run can become `succeeded`.** A cancel request, a shutdown
+  notice or a late worker result can no longer overwrite a finished run; the
+  worker re-checks the stored status before it writes blocks.
+- **Cancelled OCR has its own proposal status.** Region and equation proposals
+  return `ocr_cancelled` with dedicated English and Burmese copy instead of the
+  generic "latest run failed" message.
+- **Version 1.1.4.** Root, web, desktop, shared and design-token manifests, the
+  workspace pins in `apps/web`, `package-lock.json`, `backend/app/__init__.py`
+  and `backend/pyproject.toml` now read 1.1.4. A clean `npm run desktop:dist`
+  produced a separate `DocuRebuild-1.1.4-setup.exe` (205,449,910 bytes, 195.93
+  MB, SHA-256
+  `38F29388F64DF555BF9C46DBDBC094CE2868FE4DE84BE619B212FD9837758DD6`) without
+  touching the 1.1.1, 1.1.2 or 1.1.3 installers. `npm run smoke:desktop` passed
+  12/12 packaged steps in 15 s (Tesseract 5.4.0, 4 OCR blocks, 343 characters
+  inserted, exports, backup/restore, sidecar stopped). This build is pushed to
+  `main` but **not** published as a GitHub release.
+
 ## [1.1.3] - 2026-11-28
 
 A Windows x64 maintenance build that carries the equation-extraction improvement

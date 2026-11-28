@@ -11,6 +11,7 @@ from app.db.project_schema import project_db
 from app.services import artwork as artwork_service
 from app.services import equation_latex
 from app.services import image_edits as edits_service
+from app.services import ocr as ocr_service
 from app.services import pdf as pdf_service
 
 # A figure suggestion is anchored to a figure-like caption, to artwork the page
@@ -531,6 +532,7 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
     the normal crop path, so a bad suggestion costs nothing and is never treated as
     verified content.
     """
+    ocr_service.recover_active_runs(project_dir, page_id)
     with project_db(project_dir) as conn:
         page = _get_page(conn, page_id)
         page_width = page["width"]
@@ -605,8 +607,10 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
 
     if run is None:
         return _empty("no_ocr_run", None, base_width, base_height)
-    if run["status"] in {"queued", "running"}:
+    if run["status"] in {"queued", "running", "cancelling"}:
         return _empty("ocr_not_ready", run, base_width, base_height)
+    if run["status"] == "cancelled":
+        return _empty("ocr_cancelled", run, base_width, base_height)
     if run["status"] != "succeeded":
         return _empty("ocr_failed", run, base_width, base_height)
 
@@ -816,6 +820,7 @@ def propose_page_equations(project_dir: Path, page_id: str) -> dict[str, Any]:
     nothing is saved, transcribed or inserted, and the caller must review the LaTeX
     preview through the normal equation dialog.
     """
+    ocr_service.recover_active_runs(project_dir, page_id)
     with project_db(project_dir) as conn:
         page = _get_page(conn, page_id)
         page_width = page["width"]
@@ -862,8 +867,10 @@ def propose_page_equations(project_dir: Path, page_id: str) -> dict[str, Any]:
 
     if run is None:
         return payload("no_ocr_run", [])
-    if run["status"] in {"queued", "running"}:
+    if run["status"] in {"queued", "running", "cancelling"}:
         return payload("ocr_not_ready", [])
+    if run["status"] == "cancelled":
+        return payload("ocr_cancelled", [])
     if run["status"] != "succeeded":
         return payload("ocr_failed", [])
     current_asset = page["display_asset_id"] or page["original_asset_id"]

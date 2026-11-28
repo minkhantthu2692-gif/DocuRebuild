@@ -72,6 +72,7 @@
       "empty": "No text blocks with layout information for this page yet.",
       "stale": "This page changed after extraction. Run text extraction again to refresh the layout.",
       "failed": "The last text extraction failed, so there is no layout to show.",
+      "cancelled": "The last text extraction was cancelled. Run it again to refresh the layout.",
       "running": "Extracting text… the layout appears when the run finishes.",
       "error": "The text layout could not be loaded."
     }
@@ -379,7 +380,8 @@
       "element_asset_restored": "Region image repaired from backup",
       "ocr_started": "Text extraction started",
       "ocr_succeeded": "Text extraction completed",
-      "ocr_failed": "Text extraction failed"
+      "ocr_failed": "Text extraction failed",
+      "ocr_cancelled": "Text extraction cancelled"
     },
     "note": "Activity is stored only in this project's local database. It is not uploaded and it is not a backup."
   },
@@ -468,12 +470,16 @@
     "rerun": "Run OCR again",
     "running": "Extracting text…",
     "queued": "Waiting for the OCR engine…",
+    "cancel": "Cancel text extraction",
+    "cancelling": "Cancelling text extraction…",
     "notRun": "Not run yet",
     "notRunTitle": "No OCR result for this page",
     "notRunDescription": "Choose a recognition language and run OCR. You can always type or correct the text manually.",
     "status": {
       "queued": "Queued",
       "running": "Running",
+      "cancelling": "Cancelling",
+      "cancelled": "Cancelled",
       "succeeded": "Complete",
       "failed": "Failed"
     },
@@ -488,6 +494,10 @@
       "description": "The image or rotation is different from the one that was processed. Run OCR again before inserting this text.",
       "embeddedTitle": "This page changed after text extraction",
       "embeddedDescription": "The image or rotation is different from the one the text was extracted from. Extract the text again before inserting it."
+    },
+    "cancelled": {
+      "title": "Text extraction cancelled",
+      "description": "Nothing from this run was saved. Run text extraction again when you are ready."
     },
     "failed": "OCR failed",
     "engine": "Engine",
@@ -584,6 +594,7 @@
       "status": {
         "noOcrRun": "Run OCR on this page first.",
         "notReady": "OCR is still running. Try again when it finishes.",
+        "cancelled": "The latest text extraction was cancelled. Run it again to refresh these candidates.",
         "failed": "The latest OCR run failed. Re-run OCR and try again.",
         "stale": "The page or its OCR has changed. Re-run OCR to refresh these candidates.",
         "noGeometry": "This page has no usable text geometry, so no equation regions can be proposed."
@@ -661,6 +672,7 @@
       "status": {
         "no_ocr_run": "Run OCR on this page to get region suggestions.",
         "ocr_not_ready": "OCR is still running. Suggestions appear when it finishes.",
+        "ocr_cancelled": "The latest text extraction was cancelled. Run it again to get region suggestions.",
         "ocr_failed": "The latest OCR run failed, so there are no suggestions.",
         "ocr_stale": "The latest OCR result is stale after a page change. Run OCR again.",
         "no_geometry": "The latest OCR result has no text geometry to suggest regions from."

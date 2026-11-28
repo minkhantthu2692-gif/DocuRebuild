@@ -332,7 +332,13 @@ export interface ProjectManifest {
 /*                                    OCR                                     */
 /* -------------------------------------------------------------------------- */
 
-export type OcrRunStatus = "queued" | "running" | "succeeded" | "failed";
+export type OcrRunStatus =
+  | "queued"
+  | "running"
+  | "cancelling"
+  | "cancelled"
+  | "succeeded"
+  | "failed";
 export type OcrBlockKind =
   | "paragraph"
   | "heading"
@@ -1058,6 +1064,7 @@ export type RegionProposalStatus =
   | "ready"
   | "no_ocr_run"
   | "ocr_not_ready"
+  | "ocr_cancelled"
   | "ocr_failed"
   | "ocr_stale"
   | "no_geometry";

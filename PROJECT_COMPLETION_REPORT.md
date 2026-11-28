@@ -3,12 +3,13 @@
 **Original report date:** 26 November 2026
 **Original snapshot:** v1.1.0 release verification at commit `b0c139d`, following
 the 1.0/1.1 desktop delivery recorded in section 13 and `PROJECT_MEMORY.md`
-**Current state:** 28 November 2026, `main` at the 1.1.3 version/docs commit,
-version **1.1.3** built, smoke-tested and pushed but not published as a GitHub
-release; v1.1.1 remains the published release from `486688e`. The post-release
-quality and prompt-pack work is carried by the locally built 1.1.3 installer.
-The current status, completed prompt-pack tasks and remaining work are in
-**sections 16-18** and in `CONTINUE_PROMPT.md`.
+**Current state:** 28 November 2026, `main` after `bbf1449` (the 1.1.3
+version/docs commit): version **1.1.4** built, smoke-tested and pushed, carrying
+OCR cancellation and stale-run recovery, but not published as a GitHub release.
+v1.1.1 remains the published release from `486688e`. The post-release quality,
+prompt-pack and reliability work is carried by the locally built 1.1.4
+installer. The current status, completed prompt-pack
+tasks and remaining work are in **sections 16-19** and in `CONTINUE_PROMPT.md`.
 **Scope of this report:** audit of implemented behaviour, not a plan for new features
 
 **How to read the historical sections:** sections 1-13 describe the v1.1.0
@@ -1087,3 +1088,41 @@ installed app shares `%APPDATA%\DocuRebuild` and holds the single-instance lock.
 The 1.1.3 installer itself was **not** installed on a clean machine and no GitHub
 release was published from it. The published release remains v1.1.1; pushing
 the version bump to `main` does not change that.
+
+## 19. 1.1.4 local build verification (28 November 2026)
+
+Version 1.1.4 was bumped across the root, web, desktop, shared and design-token
+package manifests (including the workspace pins in `apps/web`),
+`package-lock.json`, `backend/app/__init__.py` and `backend/pyproject.toml`. It
+carries the OCR cancellation and stale-run recovery described in
+`CHANGELOG.md`. The change, the version bump, the rebuilt installer and these
+docs are committed and pushed to `main`; nothing was published as a release.
+
+A clean `npm run desktop:dist` rebuilt the web client, the PyInstaller sidecar and
+the NSIS payload with the existing bundled Tesseract runtime. It produced a
+**separate** installer, `dist/desktop-installer/DocuRebuild-1.1.4-setup.exe`,
+205,449,910 bytes (195.93 MB), SHA-256
+`38F29388F64DF555BF9C46DBDBC094CE2868FE4DE84BE619B212FD9837758DD6`. The 1.1.1,
+1.1.2 and 1.1.3 installers in `dist/` were not overwritten.
+
+Verification after the change:
+
+| Check | Result |
+| --- | --- |
+| `backend\.venv\Scripts\python.exe -m pytest backend/tests -q` | 475 passed, 1 warning in 285.48 s |
+| `npm run test:web` | 60 files / 369 tests passed |
+| `npm run typecheck` | clean |
+| `npm run lint` | clean |
+| `npm run build` | production build clean |
+| `npm run desktop:dist` | 1.1.4 installer built; no code signing certificate configured |
+| `npm run smoke:desktop` | 12/12 steps passed in 15 s on the packaged `win-unpacked` build |
+
+The smoke run covered launch/sidecar authentication, project creation, PDF
+import, source rendering, OCR review/insert (Tesseract 5.4.0, 4 blocks, 343
+characters inserted, 95.1 mean confidence), edit/autosave/reopen, all four
+exports, backup/restore and clean sidecar shutdown. It does not click the new
+Cancel button; cancellation is covered by seven backend tests. The packaged
+smoke must run with no other DocuRebuild instance open because the installed app
+shares `%APPDATA%\DocuRebuild` and holds the single-instance lock. The 1.1.4
+installer itself was **not** installed on a clean machine and no GitHub release
+was published from it.

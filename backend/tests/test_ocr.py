@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import subprocess
+import sys
+import threading
 import time
+from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
+from app.db.project_schema import project_db
 from tests.conftest import upload_pages
 
 
@@ -80,7 +85,7 @@ def _wait_for_run(
         response = client.get(f"/api/projects/{project_id}/pages/{page_id}/ocr")
         assert response.status_code == 200, response.text
         latest = response.json()
-        if latest and latest["status"] in {"succeeded", "failed"}:
+        if latest and latest["status"] in {"succeeded", "failed", "cancelled"}:
             return latest
         time.sleep(0.05)
     raise AssertionError(f"OCR run did not finish: {latest}")
@@ -582,3 +587,154 @@ def test_segmentation_mode_uses_configured_default(monkeypatch) -> None:
         assert error.code == "ocr_invalid_segmentation_mode"
     else:  # pragma: no cover - the call must be rejected.
         raise AssertionError("An unsupported mode must be rejected.")
+
+
+def _insert_run(project: dict, page_id: str, run_id: str, status: str) -> None:
+    """Insert a run row directly to model a worker this process does not own."""
+    with project_db(Path(project["directory"])) as conn:
+        conn.execute(
+            """
+            INSERT INTO ocr_runs (id, page_id, status, engine, languages, text,
+                                  created_at, updated_at)
+            VALUES (?, ?, ?, 'tesseract', 'eng', '',
+                    '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+            """,
+            (run_id, page_id, status),
+        )
+
+
+def test_cancel_stops_a_running_extraction(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    started = threading.Event()
+
+    def block_until_cancelled(project_dir, page_id, languages, mode=None, cancel=None):
+        assert cancel is not None
+        started.set()
+        while not cancel.is_set():
+            time.sleep(0.01)
+        raise ocr.OcrCancelled()
+
+    monkeypatch.setattr(ocr, "_perform_ocr", block_until_cancelled)
+
+    page = upload_pages(client, project["id"], ["ocr-cancel.png"])[0]
+    response = client.post(
+        f"/api/projects/{project['id']}/pages/{page['id']}/ocr",
+        json={"languages": ["eng"]},
+    )
+    assert response.status_code == 202, response.text
+    run_id = response.json()["id"]
+    assert started.wait(timeout=5), "The OCR worker never started"
+
+    requested = client.post(f"/api/projects/{project['id']}/ocr/runs/{run_id}/cancel")
+    assert requested.status_code == 200, requested.text
+    assert requested.json()["status"] in {"cancelling", "cancelled"}
+
+    run = _wait_for_run(client, project["id"], page["id"])
+    assert run["status"] == "cancelled", run
+    assert run["blocks"] == []
+    assert run["text"] == ""
+
+
+def test_finished_run_cannot_be_cancelled(client: TestClient, project: dict) -> None:
+    page = upload_pages(client, project["id"], ["ocr-done.png"])[0]
+    _insert_run(project, page["id"], "done-run", "succeeded")
+
+    response = client.post(f"/api/projects/{project['id']}/ocr/runs/done-run/cancel")
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ocr_not_running"
+
+
+def test_cancel_finishes_a_queued_run_without_a_worker(
+    client: TestClient, project: dict
+) -> None:
+    page = upload_pages(client, project["id"], ["ocr-queued.png"])[0]
+    _insert_run(project, page["id"], "orphan-run", "queued")
+
+    response = client.post(f"/api/projects/{project['id']}/ocr/runs/orphan-run/cancel")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "cancelled"
+    assert body["completed_at"] is not None
+
+
+def test_interrupted_run_is_recovered_as_failed(
+    client: TestClient, project: dict
+) -> None:
+    page = upload_pages(client, project["id"], ["ocr-interrupted.png"])[0]
+    _insert_run(project, page["id"], "interrupted-run", "running")
+
+    body = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/ocr"
+    ).json()
+    assert body["status"] == "failed"
+    assert body["error_code"] == "ocr_interrupted"
+    assert "Run OCR again" in (body["error"] or "")
+
+
+def test_recovered_cancelling_run_is_finished(
+    client: TestClient, project: dict
+) -> None:
+    page = upload_pages(client, project["id"], ["ocr-stale-cancel.png"])[0]
+    _insert_run(project, page["id"], "stale-cancel", "cancelling")
+
+    body = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/ocr"
+    ).json()
+    assert body["status"] == "cancelled"
+
+
+def test_shutdown_marks_in_flight_runs_interrupted(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    started = threading.Event()
+
+    def block_until_cancelled(project_dir, page_id, languages, mode=None, cancel=None):
+        started.set()
+        while cancel is not None and not cancel.is_set():
+            time.sleep(0.01)
+        raise ocr.OcrCancelled()
+
+    monkeypatch.setattr(ocr, "_perform_ocr", block_until_cancelled)
+
+    page = upload_pages(client, project["id"], ["ocr-shutdown.png"])[0]
+    response = client.post(
+        f"/api/projects/{project['id']}/pages/{page['id']}/ocr",
+        json={"languages": ["eng"]},
+    )
+    assert response.status_code == 202, response.text
+    assert started.wait(timeout=5), "The OCR worker never started"
+
+    ocr.shutdown_ocr_executor()
+
+    body = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/ocr"
+    ).json()
+    assert body["status"] == "failed"
+    assert body["error_code"] == "ocr_interrupted"
+
+
+def test_run_command_terminates_the_engine_when_cancelled(client: TestClient) -> None:
+    from app.services import ocr
+
+    cancel = threading.Event()
+    timer = threading.Timer(0.2, cancel.set)
+    timer.start()
+    started = time.monotonic()
+    try:
+        with pytest.raises(ocr.OcrCancelled):
+            ocr._run_command(
+                [sys.executable, "-c", "import time; time.sleep(30)"],
+                30,
+                cancel=cancel,
+            )
+    finally:
+        timer.cancel()
+
+    assert time.monotonic() - started < 10

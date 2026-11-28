@@ -26,7 +26,12 @@ export function useLatestOcr(projectId: string, pageId: string | null, enabled: 
     enabled: enabled && Boolean(pageId),
     refetchInterval: (query) => {
       const run = query.state.data as OcrRun | null | undefined;
-      return run && (run.status === "queued" || run.status === "running") ? 900 : false;
+      return run &&
+        (run.status === "queued" ||
+          run.status === "running" ||
+          run.status === "cancelling")
+        ? 900
+        : false;
     },
   });
 }
@@ -43,6 +48,16 @@ export function useStartOcr(projectId: string) {
       languages: string[];
       pageSegmentationMode?: number;
     }) => api.startOcr(projectId, pageId, languages, pageSegmentationMode),
+    onSuccess: (run) => {
+      queryClient.setQueryData(latestKey(projectId, run.page_id), run);
+    },
+  });
+}
+
+export function useCancelOcr(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) => api.cancelOcr(projectId, runId),
     onSuccess: (run) => {
       queryClient.setQueryData(latestKey(projectId, run.page_id), run);
     },

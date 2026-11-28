@@ -12,6 +12,7 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
 from typing import Any
@@ -36,10 +37,30 @@ PREFERRED_LANGUAGES = ("eng", "mya")
 PAGE_SEGMENTATION_MODES = (3, 4, 6, 11)
 CACHE_TTL_SECONDS = 15.0
 
+ACTIVE_STATUSES = ("queued", "running", "cancelling")
+TERMINAL_STATUSES = ("succeeded", "failed", "cancelled")
+
+
+class OcrCancelled(Exception):
+    """Raised when a run is cancelled while the local engine is working."""
+
+
 _engine_cache: tuple[float, dict[str, Any]] | None = None
 _engine_lock = threading.Lock()
 _executor: ThreadPoolExecutor | None = None
 _executor_lock = threading.Lock()
+
+
+@dataclass
+class _ActiveRun:
+    """A run this backend process owns, so a cancel request can reach it."""
+
+    event: threading.Event
+    project_dir: Path
+
+
+_registry: dict[str, _ActiveRun] = {}
+_registry_lock = threading.Lock()
 
 
 def _now() -> str:
@@ -129,7 +150,7 @@ def _engine_candidates() -> list[tuple[str, list[str]]]:
     return candidates
 
 
-def _run_command(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
+def _command_env() -> dict[str, str]:
     settings = get_settings()
     env = os.environ.copy()
     if settings.tessdata_dir is not None:
@@ -137,18 +158,79 @@ def _run_command(args: list[str], timeout: float) -> subprocess.CompletedProcess
     # Keep Tesseract from saturating every CPU core while the local API is
     # serving the workspace. The job pool already bounds concurrency.
     env.setdefault("OMP_THREAD_LIMIT", "1")
+    return env
+
+
+def _terminate_process(process: subprocess.Popen[str]) -> None:
+    """Stop an engine process, escalating only if terminate is ignored."""
+    for stop in (process.terminate, process.kill):
+        try:
+            stop()
+            process.wait(timeout=5)
+            return
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+
+
+def _run_command(
+    args: list[str],
+    timeout: float,
+    cancel: threading.Event | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run the engine, optionally stopping it when ``cancel`` becomes set.
+
+    Detection and standalone crops pass no event and keep the simple blocking
+    call. A page run passes its own event so a user cancellation terminates the
+    engine instead of waiting for a page that can take many seconds.
+    """
+    env = _command_env()
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
-    return subprocess.run(
+    if cancel is None:
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            env=env,
+            creationflags=creationflags,
+            check=False,
+        )
+
+    process = subprocess.Popen(
         args,
-        capture_output=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
         errors="replace",
-        timeout=timeout,
         env=env,
         creationflags=creationflags,
-        check=False,
     )
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            try:
+                stdout, stderr = process.communicate(timeout=0.15)
+                break
+            except subprocess.TimeoutExpired:
+                if cancel.is_set():
+                    _terminate_process(process)
+                    raise OcrCancelled() from None
+                if time.monotonic() >= deadline:
+                    _terminate_process(process)
+                    raise
+    finally:
+        if process.poll() is None:  # pragma: no cover - only if killing failed.
+            _terminate_process(process)
+        try:
+            # Reap the process and close both pipes, including after a cancel.
+            process.communicate(timeout=5)
+        except (subprocess.TimeoutExpired, ValueError):
+            pass
+    return subprocess.CompletedProcess(args, process.returncode, stdout or "", stderr or "")
 
 
 def _parse_version(text: str) -> str | None:
@@ -359,6 +441,20 @@ def shutdown_ocr_executor(*, wait: bool = False) -> None:
     with _executor_lock:
         executor = _executor
         _executor = None
+    with _registry_lock:
+        runs = list(_registry.items())
+        _registry.clear()
+    # Record the interruption before signalling the worker: the worker then
+    # sees a finished run and cannot overwrite it with a late success or cancel.
+    for run_id, active in runs:
+        _mark_failed(
+            active.project_dir,
+            run_id,
+            "Text extraction was interrupted because the local backend stopped.",
+            "ocr_interrupted",
+        )
+    for _run_id, active in runs:
+        active.event.set()
     if executor is not None:
         executor.shutdown(wait=wait, cancel_futures=True)
 
@@ -429,6 +525,9 @@ def start_ocr(
         },
     )
 
+    active = _ActiveRun(threading.Event(), project_dir)
+    with _registry_lock:
+        _registry[run_id] = active
     try:
         _get_executor().submit(
             _execute_ocr_run,
@@ -437,8 +536,11 @@ def start_ocr(
             page_id,
             requested,
             segmentation_mode,
+            active.event,
         )
     except RuntimeError:
+        with _registry_lock:
+            _registry.pop(run_id, None)
         _mark_failed(
             project_dir,
             run_id,
@@ -449,18 +551,28 @@ def start_ocr(
     return get_run(project_dir, run_id)
 
 
+def _unregister(run_id: str) -> None:
+    with _registry_lock:
+        _registry.pop(run_id, None)
+
+
 def _mark_failed(project_dir: Path, run_id: str, message: str, code: str) -> None:
     try:
         with project_db(project_dir) as conn:
             now = _now()
-            conn.execute(
+            cursor = conn.execute(
                 """
                 UPDATE ocr_runs
                 SET status = 'failed', error = ?, error_code = ?, completed_at = ?, updated_at = ?
-                WHERE id = ?
+                WHERE id = ? AND status IN ('queued', 'running', 'cancelling')
                 """,
                 (message, code, now, now, run_id),
             )
+            changed = cursor.rowcount > 0
+        if not changed:
+            # A run that already finished keeps its result; a late failure or
+            # shutdown notice must never rewrite it.
+            return
         record_history(
             project_dir,
             "ocr_failed",
@@ -471,21 +583,165 @@ def _mark_failed(project_dir: Path, run_id: str, message: str, code: str) -> Non
         logger.exception("Could not mark OCR run %s as failed", run_id)
 
 
+def _mark_cancelled(project_dir: Path, run_id: str) -> None:
+    try:
+        with project_db(project_dir) as conn:
+            run = conn.execute(
+                "SELECT page_id FROM ocr_runs WHERE id = ?", (run_id,)
+            ).fetchone()
+            now = _now()
+            cursor = conn.execute(
+                """
+                UPDATE ocr_runs
+                SET status = 'cancelled', error = NULL, error_code = NULL,
+                    completed_at = ?, updated_at = ?
+                WHERE id = ? AND status IN ('queued', 'running', 'cancelling')
+                """,
+                (now, now, run_id),
+            )
+            changed = cursor.rowcount > 0
+        if not changed:
+            return
+        record_history(
+            project_dir,
+            "ocr_cancelled",
+            "Text extraction cancelled",
+            {
+                "run_id": run_id,
+                "page_id": run["page_id"] if run is not None else None,
+            },
+        )
+    except Exception:  # pragma: no cover - project may have been removed.
+        logger.exception("Could not mark OCR run %s as cancelled", run_id)
+
+
+def _recover_if_stale(project_dir: Path, row) -> None:
+    """Finish runs that no live worker in this process owns.
+
+    The registry only holds runs started by this backend process. A row still
+    marked active without a registry entry was left behind by a restart or a
+    crash, so it must not stay "running" forever in the workspace.
+    """
+    if row["status"] not in ACTIVE_STATUSES:
+        return
+    with _registry_lock:
+        live = row["id"] in _registry
+    if live:
+        return
+    if row["status"] == "cancelling":
+        # The user had already asked to stop; no worker is left to do it.
+        _mark_cancelled(project_dir, row["id"])
+        return
+    _mark_failed(
+        project_dir,
+        row["id"],
+        "Text extraction was interrupted before it finished. Run OCR again.",
+        "ocr_interrupted",
+    )
+
+
+def recover_active_runs(project_dir: Path, page_id: str | None = None) -> None:
+    """Recover active OCR rows left behind by an earlier backend process.
+
+    The proposal endpoints read the latest run directly; calling this first
+    keeps them from reporting "still running" for a run that will never finish.
+    """
+    with project_db(project_dir) as conn:
+        if page_id is None:
+            rows = conn.execute(
+                "SELECT * FROM ocr_runs WHERE status IN ('queued', 'running', 'cancelling')"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM ocr_runs
+                WHERE page_id = ? AND status IN ('queued', 'running', 'cancelling')
+                """,
+                (page_id,),
+            ).fetchall()
+    for row in rows:
+        _recover_if_stale(project_dir, row)
+
+
+def cancel_ocr(project_dir: Path, run_id: str) -> dict[str, Any]:
+    """Stop a page OCR run that is queued or running.
+
+    The row moves to ``cancelling`` first, the worker is signalled, and the
+    worker records ``cancelled`` after the engine process has stopped. When no
+    live worker owns the run (for example after a restart) the row is finished
+    immediately instead of being left in ``cancelling``.
+    """
+    with project_db(project_dir) as conn:
+        run = conn.execute("SELECT * FROM ocr_runs WHERE id = ?", (run_id,)).fetchone()
+        if run is None:
+            raise AppError(404, "ocr_run_not_found", "OCR run not found.")
+        if run["status"] in TERMINAL_STATUSES:
+            raise AppError(
+                409,
+                "ocr_not_running",
+                "This text extraction has already finished and cannot be cancelled.",
+            )
+        conn.execute(
+            """
+            UPDATE ocr_runs SET status = 'cancelling', updated_at = ?
+            WHERE id = ? AND status IN ('queued', 'running', 'cancelling')
+            """,
+            (_now(), run_id),
+        )
+
+    with _registry_lock:
+        active = _registry.get(run_id)
+    if active is None:
+        _mark_cancelled(project_dir, run_id)
+    else:
+        active.event.set()
+
+    return get_run(project_dir, run_id)
+
+
 def _execute_ocr_run(
     run_id: str,
     project_dir: Path,
     page_id: str,
     languages: list[str],
     page_segmentation_mode: int | None = None,
+    cancel: threading.Event | None = None,
 ) -> None:
     try:
         with project_db(project_dir) as conn:
-            conn.execute(
-                "UPDATE ocr_runs SET status = 'running', updated_at = ? WHERE id = ?",
-                (_now(), run_id),
+            current = conn.execute(
+                "SELECT status FROM ocr_runs WHERE id = ?", (run_id,)
+            ).fetchone()
+            if current is None:
+                return
+            started = current["status"] == "queued" and not (
+                cancel is not None and cancel.is_set()
             )
-        result = _perform_ocr(project_dir, page_id, languages, page_segmentation_mode)
+            if started:
+                conn.execute(
+                    """
+                    UPDATE ocr_runs SET status = 'running', updated_at = ?
+                    WHERE id = ? AND status = 'queued'
+                    """,
+                    (_now(), run_id),
+                )
+        if not started:
+            # Cancelled, or already finished, before a worker picked it up.
+            # Recorded outside the transaction so no second connection is
+            # opened while this one still holds its read lock.
+            _mark_cancelled(project_dir, run_id)
+            return
+        result = _perform_ocr(
+            project_dir, page_id, languages, page_segmentation_mode, cancel=cancel
+        )
         with project_db(project_dir) as conn:
+            current = conn.execute(
+                "SELECT status FROM ocr_runs WHERE id = ?", (run_id,)
+            ).fetchone()
+            if current is None or current["status"] != "running":
+                # The run was cancelled while the engine was working, so its
+                # result is discarded instead of being stored as a success.
+                raise OcrCancelled()
             conn.execute("DELETE FROM ocr_blocks WHERE run_id = ?", (run_id,))
             now = _now()
             for block in result["blocks"]:
@@ -525,7 +781,7 @@ def _execute_ocr_run(
                 UPDATE ocr_runs
                 SET status = 'succeeded', text = ?, mean_confidence = ?, engine_version = ?,
                     error = NULL, error_code = NULL, completed_at = ?, updated_at = ?
-                WHERE id = ?
+                WHERE id = ? AND status = 'running'
                 """,
                 (
                     result["text"],
@@ -547,6 +803,8 @@ def _execute_ocr_run(
                 "blocks": len(result["blocks"]),
             },
         )
+    except OcrCancelled:
+        _mark_cancelled(project_dir, run_id)
     except AppError as exc:
         _mark_failed(project_dir, run_id, exc.message, exc.code)
     except subprocess.TimeoutExpired:
@@ -564,6 +822,8 @@ def _execute_ocr_run(
             "OCR failed. Check the local engine installation and try again.",
             "ocr_failed",
         )
+    finally:
+        _unregister(run_id)
 
 
 def _prepare_image(path: Path) -> tuple[Path, float, tuple[int, int]]:
@@ -932,6 +1192,7 @@ def _perform_ocr(
     page_id: str,
     languages: list[str],
     page_segmentation_mode: int | None = None,
+    cancel: threading.Event | None = None,
 ) -> dict[str, Any]:
     settings = get_settings()
     status = detect_engine()
@@ -962,6 +1223,7 @@ def _perform_ocr(
                 "tessedit_create_tsv=1",
             ],
             timeout=max(10, settings.ocr_timeout_seconds),
+            cancel=cancel,
         )
     finally:
         temp_path.unlink(missing_ok=True)
@@ -1216,12 +1478,24 @@ def get_run(project_dir: Path, run_id: str) -> dict[str, Any]:
         run = conn.execute("SELECT * FROM ocr_runs WHERE id = ?", (run_id,)).fetchone()
         if run is None:
             raise AppError(404, "ocr_run_not_found", "OCR run not found.")
+    _recover_if_stale(project_dir, run)
+    with project_db(project_dir) as conn:
+        run = conn.execute("SELECT * FROM ocr_runs WHERE id = ?", (run_id,)).fetchone()
+        if run is None:  # pragma: no cover - the row cannot disappear while read.
+            raise AppError(404, "ocr_run_not_found", "OCR run not found.")
         return _run_payload(conn, run)
 
 
 def get_latest_ocr(project_dir: Path, page_id: str) -> dict[str, Any] | None:
     with project_db(project_dir) as conn:
         _get_page(conn, page_id)
+        run = conn.execute(
+            "SELECT * FROM ocr_runs WHERE page_id = ? ORDER BY created_at DESC LIMIT 1",
+            (page_id,),
+        ).fetchone()
+    if run is not None:
+        _recover_if_stale(project_dir, run)
+    with project_db(project_dir) as conn:
         run = conn.execute(
             "SELECT * FROM ocr_runs WHERE page_id = ? ORDER BY created_at DESC LIMIT 1",
             (page_id,),

@@ -788,7 +788,9 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
     else if (latestOcrQuery.isError) overlayMessage = "viewer.overlay.error";
     else if (!latestOcr) overlayMessage = "viewer.overlay.empty";
     else if (latestOcr.status === "failed") overlayMessage = "viewer.overlay.failed";
-    else if (latestOcr.status === "queued" || latestOcr.status === "running") {
+    else if (latestOcr.status === "cancelled") {
+      overlayMessage = "viewer.overlay.cancelled";
+    } else if (latestOcr.status === "queued" || latestOcr.status === "running") {
       overlayMessage = "viewer.overlay.running";
     } else if (latestOcr.stale) overlayMessage = "viewer.overlay.stale";
     else if (overlayBoxes.length === 0) overlayMessage = "viewer.overlay.empty";

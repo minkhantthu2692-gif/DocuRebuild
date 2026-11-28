@@ -73,6 +73,8 @@ export function PageEquationsDialog({
         return t("ocr.equation.status.noOcrRun");
       case "ocr_not_ready":
         return t("ocr.equation.status.notReady");
+      case "ocr_cancelled":
+        return t("ocr.equation.status.cancelled");
       case "ocr_failed":
         return t("ocr.equation.status.failed");
       case "ocr_stale":

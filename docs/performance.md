@@ -239,10 +239,13 @@ normal quit:
 - One OCR preparation PNG remained in the data folder's `tmp/` directory,
   because the process could not run its `finally` cleanup. It is one file per
   interrupted OCR, not a growing queue in normal use.
-- The interrupted OCR run row remains `status: running` after restart. Import
-  jobs are recovered as interrupted, but OCR runs have no equivalent stale-state
-  recovery, and OCR has no cancel action in the API or UI. This is recorded as an
-  open reliability gap below; no OCR cancellation feature was added in this task.
+- The interrupted OCR run row remained `status: running` after restart at the
+  time of the drill. Import jobs were recovered as interrupted, but OCR runs had
+  no equivalent stale-state recovery and no cancel action. **Addressed
+  2026-11-28:** orphaned `queued`/`running` rows now recover as
+  `failed`/`ocr_interrupted` (and `cancelling` as `cancelled`), and a queued or
+  running run can be cancelled from the API and the OCR dialog. The `tmp/` PNG
+  residue above is unchanged.
 
 ## What changed
 

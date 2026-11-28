@@ -60,6 +60,18 @@ def read_ocr_run(project: ProjectDep, run_id: str) -> dict[str, Any]:
     return ocr_service.get_run(directory, run_id)
 
 
+@router.post("/projects/{project_id}/ocr/runs/{run_id}/cancel", response_model=OcrRunOut)
+def cancel_ocr_run(
+    project: ProjectDep,
+    run_id: str,
+    session: DbSession,
+) -> dict[str, Any]:
+    directory = project_service.ensure_project_storage(project)
+    run = ocr_service.cancel_ocr(directory, run_id)
+    touch_project(session, project)
+    return run
+
+
 @router.patch(
     "/projects/{project_id}/pages/{page_id}/ocr/blocks/{block_id}",
     response_model=OcrRunOut,

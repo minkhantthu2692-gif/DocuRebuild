@@ -322,6 +322,7 @@ PUT    /api/projects/{id}/pages/order
 GET    /api/projects/{id}/pages/{page_id}/ocr
 POST   /api/projects/{id}/pages/{page_id}/ocr
 GET    /api/projects/{id}/ocr/runs/{run_id}
+POST   /api/projects/{id}/ocr/runs/{run_id}/cancel
 PATCH  /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}
 GET    /api/projects/{id}/pages/{page_id}/ocr/blocks/{block_id}/table-proposal
 GET    /api/projects/{id}/pages/{page_id}/table-proposals
@@ -454,6 +455,18 @@ src/
 - Existing results stay reviewable and insertable even when the engine is later
   unavailable or a language pack is missing; the dialog shows the setup banner
   and the stored run together instead of hiding the user's prior work.
+- A queued or running run can be cancelled. The row moves to `cancelling`, a
+  per-run event terminates the local engine process instead of waiting for it,
+  partial output is discarded, and the row becomes `cancelled` with an
+  `ocr_cancelled` activity event. A run that already finished is refused with
+  `ocr_not_running`. Only a `running` run can be stored as `succeeded`, so a
+  cancel, a shutdown notice or a late worker result cannot overwrite a result.
+- A persisted run with an active status but no live worker event is treated as
+  interrupted: `queued`/`running` become `failed` with `ocr_interrupted`, and
+  `cancelling` becomes `cancelled`. `get_run`, `get_latest_ocr`, the region and
+  equation proposal endpoints and graceful shutdown apply this rule, so a crash
+  or quit never leaves a page "running" forever. Proposal payloads report
+  `ocr_cancelled` separately from `ocr_failed`.
 - A run becomes stale when the page image or its rotation changes after
   completion; the UI surfaces this instead of silently reusing stale text. This
   also applies to embedded PDF text after a rotation.

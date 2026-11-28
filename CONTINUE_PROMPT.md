@@ -15,9 +15,10 @@ of 2026-11-28; do not reconstruct context by re-reading the rest of the docs.
 FRESH SESSION CHECKS
 - Working directory: C:\Users\minkh\OneDrive\Desktop\DocuRebuild
 - Run git status -sb and git log --oneline -10. At handover: branch `main`, HEAD
-  is the 1.1.3 version/docs commit on top of `4c7914c`, `origin/main` in sync and
-  the working tree clean. Treat unfamiliar work as the owner's; do not discard
-  it.
+  is the 1.1.4 commit (OCR cancellation/stale-run recovery, version bump and
+  docs) on top of `bbf1449`, `origin/main` in sync and the working tree clean.
+  The locally built DocuRebuild-1.1.4-setup.exe is not published as a release.
+  Treat unfamiliar work as the owner's; do not discard it.
 - Do not create a new project or re-initialise git.
 - AGENTS.md should already be in your context. If it is absent, read it once;
   otherwise do not re-open the other status documents.
@@ -34,11 +35,17 @@ CURRENT VERIFIED STATE
 - Version 1.1.1 is published from commit 486688e. Work after that tag is on main
   but has not been published as a GitHub release; do not publish it without an
   explicit owner request.
-- Version 1.1.3 is built, smoke-tested and pushed to main but is **not** published
-  as a GitHub release. The published release remains v1.1.1.
-- Latest checks: 468 backend tests, 60 web files / 369 tests, typecheck, lint and
-  production build clean. The packaged 1.1.3 win-unpacked build passed 12/12
-  npm run smoke:desktop steps in 17 s.
+- Version 1.1.4 is built, smoke-tested and pushed to `main` but is **not**
+  published as a GitHub release. The published release remains v1.1.1.
+- Latest checks: 475 backend tests, 60 web files / 369 tests, typecheck, lint and
+  production build clean. `npm run desktop:dist` produced the 1.1.4 installer and
+  `npm run smoke:desktop` passed 12/12 packaged steps in 15 s (Tesseract 5.4.0,
+  4 OCR blocks, 343 characters inserted, backup/restore, sidecar stopped). The
+  smoke does not exercise the Cancel button; cancellation is covered by backend
+  tests.
+- Locally built 1.1.4 installer: DocuRebuild-1.1.4-setup.exe,
+  205,449,910 bytes (195.93 MB), SHA-256
+  38F29388F64DF555BF9C46DBDBC094CE2868FE4DE84BE619B212FD9837758DD6.
 - Published 1.1.1 installer: DocuRebuild-1.1.1-setup.exe, 204.19 MB, SHA-256
   9CC17F7EDF0138A7FC452844C89B0F2EC653970258F3888A661AB3773FAC13CB.
 - Locally built 1.1.3 installer: DocuRebuild-1.1.3-setup.exe, 205,444,142 bytes
@@ -51,7 +58,7 @@ CURRENT VERIFIED STATE
   1.1.1. The 1.1.2 installer (56BEA0EB...88117) also remains in dist/ unchanged.
 
 BASELINE COMMANDS (run before changing behaviour)
-  backend\.venv\Scripts\python.exe -m pytest backend/tests -q   # 468 passed
+  backend\.venv\Scripts\python.exe -m pytest backend/tests -q   # 475 passed
   npm run test:web                                             # 369 tests / 60 files
   npm run typecheck
   npm run lint
@@ -79,16 +86,19 @@ REMAINING WORK
 - No prompt-pack work is pending. The PaddleOCR adapter evaluation is complete
   with a benchmark-backed decision not to implement; Tesseract remains the sole
   default engine. Mobile/PWA/camera/cloud are out of scope, not backlog.
+- OCR cancellation and stale-run recovery are done (see the session log).
 - Other recorded items are known gaps, not tasks unless the owner approves one:
-  OCR cancellation/stale-run recovery, a larger real-scan corpus, text-only
-  merged-cell detection, a bundled offline LaTeX typesetter, OMML edge cases,
-  automatic update checking and account-level provider quota verification.
+  a larger real-scan corpus, text-only merged-cell detection, a bundled offline
+  LaTeX typesetter, OMML edge cases, automatic update checking and account-level
+  provider quota verification.
 
 KNOWN GAPS (recorded, not tasks unless approved)
 - Windows x64 only, no code signing; interactive NVDA/Narrator pass blocked.
-- OCR cancellation and stale-run recovery; larger real-scan corpus; text-only
-  merged-cell detection; bundled offline LaTeX typesetter; OMML edge cases;
-  automatic update checking; account-level provider quota verification.
+- Larger real-scan corpus; text-only merged-cell detection; bundled offline
+  LaTeX typesetter; OMML edge cases; automatic update checking; account-level
+  provider quota verification. A hard kill can still leave one OCR preparation
+  PNG in the data folder's tmp/ (the run itself now recovers as
+  ocr_interrupted).
 - Provider quota remains report-only; macOS/Linux remains a feasibility report.
 
 DURABLE INVARIANTS
@@ -96,6 +106,9 @@ DURABLE INVARIANTS
   source asset and rotation; never persist them. Accepted regions are elements.
 - Imports are serialised per project; PDF documents are closed through
   pdf.close_document() to release native memory.
+- OCR cancellation is cooperative: a per-run event stops the engine process,
+  only a running row can become succeeded, and active rows without a live worker
+  recover as ocr_interrupted (or cancelled while cancelling).
 - Use design tokens for all UI values; no hardcoded colours, sizes or spacing.
 - Every user-facing string needs keys in both en and my; key-parity tests pass.
 - Alembic migrations are never rewritten after users apply them.
@@ -118,6 +131,21 @@ WORKING RULES
   verified checksum evidence.
 
 SESSION LOG (most recent first; append after each approved task)
+- 2026-11-28: OCR cancellation and stale-run recovery.
+  New POST /projects/{id}/ocr/runs/{run_id}/cancel and a Cancel text extraction
+  button in the dialog; queued/running -> cancelling -> cancelled with an
+  ocr_cancelled activity event, the engine process is terminated and partial
+  output discarded, finished runs are refused with ocr_not_running, and only a
+  running row can become succeeded. Registry recovery marks orphaned
+  queued/running rows failed with ocr_interrupted and orphaned cancelling rows
+  cancelled, from get/latest OCR and the region/equation proposals; graceful
+  shutdown records active runs interrupted. Proposals gained ocr_cancelled in
+  en/my. Version bumped to 1.1.4; 475 backend / 60 web files / 369 tests,
+  typecheck, lint and build clean; clean desktop:dist produced
+  DocuRebuild-1.1.4-setup.exe (205,449,910 bytes, SHA-256 38F29388...58DD6) and
+  npm run smoke:desktop passed 12/12 packaged steps in 15 s (Tesseract 5.4.0, 4
+  blocks, 343 characters, sidecar stopped). Earlier installers untouched.
+  Committed and pushed to main; no release published.
 - 2026-11-28 (1.1.3 version/docs commit): version bump to 1.1.3 across all
   manifests, clean npm run desktop:dist producing the separate
   DocuRebuild-1.1.3-setup.exe (205,444,142 bytes / 195.93 MB,

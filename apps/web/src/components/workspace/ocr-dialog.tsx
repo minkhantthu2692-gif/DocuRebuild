@@ -42,7 +42,13 @@ import {
   usePageAiSuggestions,
 } from "@/hooks/use-ai";
 import { useAppMeta } from "@/hooks/use-app";
-import { useOcrCapabilities, useLatestOcr, useStartOcr, useUpdateOcrBlock } from "@/hooks/use-ocr";
+import {
+  useCancelOcr,
+  useLatestOcr,
+  useOcrCapabilities,
+  useStartOcr,
+  useUpdateOcrBlock,
+} from "@/hooks/use-ocr";
 import { formatDateTime, resolveLocale } from "@/lib/format";
 import {
   buildLanguageOptions,
@@ -89,6 +95,7 @@ export function OcrDialog({
   const tasksQuery = useAiTasks();
   const latestQuery = useLatestOcr(projectId, page?.id ?? null, open);
   const startOcr = useStartOcr(projectId);
+  const cancelOcr = useCancelOcr(projectId);
   const updateBlock = useUpdateOcrBlock(projectId);
   const createSuggestion = useCreateAiSuggestion(projectId);
   const decideSuggestion = useDecideAiSuggestion(projectId);
@@ -113,7 +120,9 @@ export function OcrDialog({
 
   const run = latestQuery.data ?? null;
   const blocks = useMemo(() => run?.blocks ?? [], [run]);
-  const busy = startOcr.isPending || run?.status === "queued" || run?.status === "running";
+  const running = run?.status === "queued" || run?.status === "running";
+  const cancelling = run?.status === "cancelling";
+  const busy = startOcr.isPending || running || cancelling;
   const aiAvailable = metaQuery.data?.capabilities.ai === true;
   const cleanupTask = tasksQuery.data?.tasks.ocr_cleanup;
   const aiConfigured = aiAvailable && cleanupTask?.configured === true;
@@ -224,6 +233,13 @@ export function OcrDialog({
       },
       { onError: (error) => toast.error(errorMessage(error)) },
     );
+  };
+
+  const handleCancel = () => {
+    if (!run || !running) return;
+    cancelOcr.mutate(run.id, {
+      onError: (error) => toast.error(errorMessage(error)),
+    });
   };
 
   const saveCorrections = async (silent = false): Promise<boolean> => {
@@ -431,11 +447,13 @@ export function OcrDialog({
                   disabled={busy || languageOptions.length === 0}
                 >
                   {busy ? <Spinner className="size-icon-sm" /> : run && !embeddedText ? <RefreshCw /> : <Play />}
-                  {busy
-                    ? t("ocr.running")
-                    : run && !embeddedText
-                      ? t("ocr.rerun")
-                      : t("ocr.run")}
+                  {cancelling
+                    ? t("ocr.cancelling")
+                    : busy
+                      ? t("ocr.running")
+                      : run && !embeddedText
+                        ? t("ocr.rerun")
+                        : t("ocr.run")}
                 </Button>
                 <span className="text-center text-2xs text-muted-foreground sm:text-right">
                   {run ? t(`ocr.status.${run.status}`) : t("ocr.notRun")}
@@ -552,6 +570,13 @@ export function OcrDialog({
                       icon={CircleAlert}
                       title={t("ocr.failed")}
                       description={runError}
+                    />
+                  ) : run.status === "cancelled" ? (
+                    <EmptyState
+                      compact
+                      icon={X}
+                      title={t("ocr.cancelled.title")}
+                      description={t("ocr.cancelled.description")}
                     />
                   ) : run.status === "succeeded" ? (
                     <>
@@ -894,7 +919,24 @@ export function OcrDialog({
                   ) : (
                     <div className="flex flex-col items-center justify-center gap-2 py-10 text-center text-xs text-muted-foreground" role="status" aria-live="polite">
                       <Spinner className="size-icon-lg text-primary" />
-                      <p>{run.status === "queued" ? t("ocr.queued") : t("ocr.running")}</p>
+                      <p>
+                        {run.status === "queued"
+                          ? t("ocr.queued")
+                          : run.status === "cancelling"
+                            ? t("ocr.cancelling")
+                            : t("ocr.running")}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-1 gap-1.5"
+                        disabled={run.status === "cancelling" || cancelOcr.isPending}
+                        onClick={handleCancel}
+                        data-testid="ocr-cancel"
+                      >
+                        <X />
+                        {t("ocr.cancel")}
+                      </Button>
                     </div>
                   )}
                 </>

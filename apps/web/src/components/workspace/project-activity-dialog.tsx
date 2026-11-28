@@ -95,6 +95,7 @@ const KNOWN_EVENTS = new Set([
   "ocr_started",
   "ocr_succeeded",
   "ocr_failed",
+  "ocr_cancelled",
 ]);
 
 function eventDetails(event: HistoryEvent, t: TFunction, locale: string): string[] {

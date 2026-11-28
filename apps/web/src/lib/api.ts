@@ -427,6 +427,10 @@ export const api = {
     }),
   getOcrRun: (projectId: string, runId: string) =>
     request<OcrRun>(`/projects/${projectId}/ocr/runs/${runId}`),
+  cancelOcr: (projectId: string, runId: string) =>
+    request<OcrRun>(`/projects/${projectId}/ocr/runs/${runId}/cancel`, {
+      method: "POST",
+    }),
   updateOcrBlock: (
     projectId: string,
     pageId: string,

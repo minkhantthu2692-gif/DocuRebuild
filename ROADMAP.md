@@ -4,15 +4,17 @@ This is the short, current roadmap for the Windows x64 desktop release.
 `docs/roadmap.md` keeps the detailed phase-by-phase implementation history;
 `PROJECT_MEMORY.md` records architecture and handover context.
 
-Last updated: 2026-11-28 (v1.1.3 built, smoke-tested and pushed to `main` but
-not published as a GitHub release; v1.1.1 remains the published release. All
+Last updated: 2026-11-28 (v1.1.4 built, smoke-tested and pushed to `main` with
+the OCR cancellation/stale-run fix, but not published as a GitHub release;
+v1.1.1 remains the published release. All
 `01_MUST_HAVE` and `02_SHOULD_HAVE` prompt-pack tasks are complete; the quick-win
 regression audit found no defect; optional tasks 01, 03 and 05 are evaluated,
 task 01's approved read-only cross-page review is implemented, task 04 is
 applied and verified, task 02 (PaddleOCR) is evaluated with a decision not to
-implement, installer locale trimming cut the build from 204.19 to 195.92 MB, and
-1.1.3 adds the equation-extraction LaTeX normalisation. Status docs and the
-paste-ready handover are refreshed in `CONTINUE_PROMPT.md`).
+implement, installer locale trimming cut the build from 204.19 to 195.92 MB,
+1.1.3 added the equation-extraction LaTeX normalisation, and 1.1.4 builds the
+recorded OCR cancellation/stale-run fix. Status docs and the paste-ready handover
+are refreshed in `CONTINUE_PROMPT.md`).
 
 ## Release status
 
@@ -21,6 +23,15 @@ scope (published 28 November 2026).** The installer, bundled OCR, local
 database/storage, BYOK AI, backup/restore and export are implemented and
 verified. Everything labelled *Complete* in the 1.x MUST HAVE table ships in
 `DocuRebuild-1.1.1-setup.exe`.
+
+**1.1.4 is built, smoke-tested and pushed to `main`, but is not published as a
+GitHub release.** Its installer is
+`dist/desktop-installer/DocuRebuild-1.1.4-setup.exe` (205,449,910 bytes, 195.93
+MB, SHA-256
+`38F29388F64DF555BF9C46DBDBC094CE2868FE4DE84BE619B212FD9837758DD6`). It adds OCR
+cancellation and stale-run recovery on top of 1.1.3, and `npm run smoke:desktop`
+passed 12/12 steps in 15 s on the packaged build. The 1.1.3 installer remains in
+`dist/` unchanged and the published 1.1.1 asset is untouched.
 
 **1.1.3 is built, smoke-tested and pushed to `main`, but no GitHub release has
 been published from it.** Its installer is
@@ -161,6 +172,31 @@ defects were found and fixed: PyMuPDF native stores accumulated ~19 MB per impor
 project collided on `page_number` (imports are now serialised per project). Full
 evidence, limitations and reproduction commands are in `docs/performance.md`.
 
+**OCR cancellation and stale-run recovery (28 November 2026).** The reliability
+
+gap recorded by the performance drill is closed. A queued or running page run
+can be cancelled from the OCR dialog (the button sits in the running panel) or
+with `POST /api/projects/{id}/ocr/runs/{run_id}/cancel`: the run moves to
+`cancelling`, the pooled worker terminates the local Tesseract process instead
+of waiting for it, partial output is discarded, and the row ends as `cancelled`
+with an `ocr_cancelled` activity event. A finished run is refused with
+`ocr_not_running`. Independently, any run left `queued`/`running`/`cancelling`
+by a crash, a hard kill or a quit is recovered on the next read (including from
+the region and equation proposal endpoints) as `failed` with
+`ocr_interrupted`, or as `cancelled` when the user had already asked to stop.
+Graceful shutdown records active runs as interrupted, and only a `running` row
+can become `succeeded`, so a late result cannot overwrite a finished run. The
+proposal payloads gained an `ocr_cancelled` status with English and Burmese
+copy. Verified with 475 backend tests (7 new: cooperative cancel, cancel
+without a worker, cancel refused after completion, interrupted-run recovery,
+stale-cancelling recovery, shutdown interruption and engine-process
+termination), 369 web tests, typecheck, lint and a production build. A clean
+`npm run desktop:dist` produced a separate 1.1.4 installer
+(`DocuRebuild-1.1.4-setup.exe`, 205,449,910 bytes, SHA-256
+`38F29388...58DD6`), and `npm run smoke:desktop` passed 12/12 steps in 15 s on
+that packaged build. The change and build are pushed to `main`; no release was
+published.
+
 **Real-scan OCR validation (27 November 2026).** A three-page public-domain
 corpus with transcripts typed from the page now lives in
 `backend/tests/fixtures/ocr-real/`, and `docs/ocr-benchmark.md` publishes the
@@ -249,8 +285,8 @@ and bundled Tesseract. A full `npm run desktop:dist` rebuild and the 12/12
 204.19 -> 195.92 MB, installed 646.64 -> 598.39 MB, Chromium locales 55 files
 (48.82 MB) -> 1 file (0.56 MB). The installer shrinks less than the installed
 footprint because the dropped locale files compress well in the NSIS payload.
-This trimmed build now ships in the locally verified 1.1.2 and 1.1.3 installers;
-the published v1.1.1 asset is unchanged. Full evidence:
+This trimmed build now ships in the locally verified 1.1.2 and 1.1.3 installers
+and the locally verified 1.1.4 build; the published v1.1.1 asset is unchanged. Full evidence:
 `docs/optional-future/PROGRESS.md`.
 
 **PaddleOCR adapter evaluation (28 November 2026).** With the owner's approval,
@@ -278,11 +314,12 @@ prompt pack are complete. Each task has a detailed evidence section in
 | 01 MUST HAVE | Real-scan OCR baseline, accessibility audit, large-document performance/cancellation, desktop E2E smoke suite | `docs/ocr-benchmark.md`, `docs/performance.md`, `npm run smoke:desktop`, report §§13-15 | `8cb208c`, `09b5f99`, `ad7809d` |
 | 02 SHOULD HAVE | Page-wide figure detection, page-wide equation proposals, nested table separation, opaque PDF drawing extraction | `docs/figure-detection.md`, `docs/should-have/PROGRESS.md`, report §16 | `04f0b5f`, `0708826`, `25ffbc7`, `0d2aa0e` |
 
-Current tree verification: 468 backend tests, 60 web files / 369 tests,
+Current tree verification: 475 backend tests, 60 web files / 369 tests,
 typecheck, lint and production build clean. These commits are on `main` after
-the v1.1.1 release tag; the locally verified 1.1.2 installer carries the
-post-v1.1.1 work and the 1.1.3 installer adds the equation-extraction
-normalisation; neither is published as a GitHub release.
+the v1.1.1 release tag. The locally verified 1.1.2 and 1.1.3 installers carry
+the post-v1.1.1 work (1.1.3 adds the equation-extraction normalisation); the
+locally verified 1.1.4 build adds OCR cancellation and stale-run recovery. None
+is published as a GitHub release.
 
 ## Known gaps for a wider (non-Windows) production release
 
@@ -304,11 +341,13 @@ what remain.
    edit/save/reopen, export (Markdown/TXT/DOCX/PDF), backup/restore and clean
    shutdown with sidecar stop verification. Uses disposable data directories
    and deterministic CDP-driven steps. Report at `docs/smoke/desktop-smoke.json`.
-3. **OCR cancellation and crash recovery.** OCR runs cannot be cancelled from
-   the API or UI, and a run interrupted by a crash stays `running` after
-   restart. Imports already recover as `import_interrupted`; OCR needs the same
-   treatment. A hard kill during import can also leave one unreferenced
-   processed image from the in-flight page.
+3. **OCR cancellation and crash recovery.** ✅ Completed 2026-11-28. A queued or
+   running page run can be cancelled from the OCR dialog and the API; the local
+   Tesseract process is terminated, partial output is discarded, and the run is
+   recorded as `cancelled`. Runs left active by a crash, hard kill or quit
+   recover as `ocr_interrupted` (queued/running) or `cancelled` (cancelling),
+   including from the proposal endpoints. A hard kill during import can still
+   leave one unreferenced processed image from the in-flight page.
 4. **Code signing.** A certificate and signed installer/release process.
 5. **macOS/Linux packaging** if those platforms become supported.
 
@@ -365,15 +404,16 @@ evidence in `docs/should-have/PROGRESS.md`, `docs/quick-wins/PROGRESS.md`,
 ## Known limitations
 
 See `PROJECT_MEMORY.md` §12 and `CHANGELOG.md` §1.1.0. The headline limits are:
-Windows x64 only, ~196 MB installer / ~598 MB installed in the 1.1.3 build
+Windows x64 only, ~196 MB installer / ~598 MB installed in the 1.1.4 build
 (the published 1.1.1 asset is ~204 MB / ~650 MB), a three-page real-scan
 OCR corpus (not a population estimate, one transcriber, no scored Burmese-only
 case), page-wide equation proposals depend on OCR equation blocks, nested tables
 are inserted as separate linked tables because the editor has no nested-table
 node, opaque PDF artwork is proposed from the rendered page at low confidence and
 may still need manual selection, no code signing, no
-interactive screen-reader certification, no OCR cancellation or stale-run
-recovery, and one accepted low-severity KaTeX advisory. Performance and memory
+interactive screen-reader certification, one accepted low-severity KaTeX
+advisory, and a hard kill can still leave one OCR preparation PNG in the data
+folder's `tmp/` (the run itself now recovers as `ocr_interrupted`). Performance and memory
 were measured to 400 pages on one N100/16 GB machine (`docs/performance.md`); a
 1,000-page import, low-memory hardware and low-power/thermal variations remain
 unmeasured. An automated desktop E2E smoke suite is now available
