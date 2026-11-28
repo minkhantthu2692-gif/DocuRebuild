@@ -468,7 +468,17 @@ export interface TableProposal {
 }
 
 /** A table candidate that may span several blocks, typically PDF rows. */
+/** A child grid sits inside one cell of the parent candidate. */
+export interface TableNested {
+  parent_key: string;
+  /** Zero-based parent cell coordinates. */
+  parent_row: number;
+  parent_column: number;
+}
+
 export interface TableProposalCandidate {
+  /** Stable within one response, derived from the source rectangle. */
+  key: string;
   block_ids: string[];
   rows: number;
   columns: number;
@@ -478,6 +488,10 @@ export interface TableProposalCandidate {
   warnings: TableProposalWarning[];
   source: TableSourceBox;
   cells: TableProposalCell[];
+  /** Set when this candidate is a nested grid inside a parent cell. */
+  nested?: TableNested | null;
+  /** Number of nested grids linked to this candidate. */
+  nested_count?: number;
 }
 
 export interface PageTableProposals {

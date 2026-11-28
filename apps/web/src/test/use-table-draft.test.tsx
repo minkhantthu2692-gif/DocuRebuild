@@ -7,6 +7,7 @@ import { useTableDraft } from "@/hooks/use-table-draft";
 
 function proposal(overrides: Partial<TableProposalCandidate> = {}): TableProposalCandidate {
   return {
+    key: "table-0-0-10-10",
     block_ids: ["a"],
     rows: 2,
     columns: 2,

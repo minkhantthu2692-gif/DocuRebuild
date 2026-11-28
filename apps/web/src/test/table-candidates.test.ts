@@ -34,6 +34,7 @@ function cell(
 
 function candidate(cells: TableProposalCell[]): TableProposalCandidate {
   return {
+    key: "table-0-0-100-100",
     block_ids: ["a"],
     rows: 2,
     columns: 2,

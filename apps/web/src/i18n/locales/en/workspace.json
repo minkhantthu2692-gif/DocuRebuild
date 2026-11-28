@@ -570,7 +570,11 @@
       "detectCount": "{{count}} table candidate(s)",
       "blockCount": "{{count}} blocks",
       "back": "Back to list",
-      "sourceNotePage": "Source: page {{page}} · detected table · review each cell"
+      "sourceNotePage": "Source: page {{page}} · detected table · review each cell",
+      "nestedIn": "Nested in table {{index}}",
+      "containsNested": "{{count}} nested table(s)",
+      "nestedHint": "This grid sits inside cell (row {{row}}, column {{column}}) of table {{parent}}. It is reviewed and inserted as a separate table so the parent structure is not flattened.",
+      "nestedSourceNote": "Source: page {{page}} · nested in table {{parent}} cell (row {{row}}, column {{column}}) · inserted as a separate table"
     },
     "equation": {
       "detect": "Detect equations",

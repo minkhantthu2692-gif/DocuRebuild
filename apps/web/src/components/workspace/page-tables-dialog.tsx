@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import type { PageSummary } from "@docurebuild/shared-types";
+import type { PageSummary, TableProposalCandidate } from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,12 @@ export function PageTablesDialog({
   const [acknowledged, setAcknowledged] = useState(false);
 
   const candidate = selected !== null ? (candidates[selected] ?? null) : null;
+  const parentIndexOf = (item: TableProposalCandidate) =>
+    item.nested
+      ? candidates.findIndex(
+          (candidateItem) => candidateItem.key === item.nested?.parent_key,
+        )
+      : -1;
   // A vector-grid candidate may not have any block ids, so the selected index
   // is the only stable identity while the list is open.
   const draft = useTableDraft(
@@ -102,15 +108,24 @@ export function PageTablesDialog({
   const handleInsert = () => {
     if (!candidate || !canInsert) return;
     const spans = proposalSpans(candidate);
+    const nestedParent = parentIndexOf(candidate);
+    const note = includeNote
+      ? candidate.nested
+        ? t("ocr.table.nestedSourceNote", {
+            page: page?.page_number ?? "—",
+            parent: nestedParent >= 0 ? nestedParent + 1 : "—",
+            row: candidate.nested.parent_row + 1,
+            column: candidate.nested.parent_column + 1,
+          })
+        : t("ocr.table.sourceNotePage", { page: page?.page_number ?? "—" })
+      : null;
     insertTable({
       rows: draft.rows,
       alignments: proposalAlignments(candidate),
       rowSpans: spans.rowSpan,
       colSpans: spans.colSpan,
       headerRow,
-      note: includeNote
-        ? t("ocr.table.sourceNotePage", { page: page?.page_number ?? "—" })
-        : null,
+      note,
     });
     toast.success(t("ocr.table.inserted"));
     onOpenChange(false);
@@ -150,17 +165,31 @@ export function PageTablesDialog({
             }
           />
         ) : candidate ? (
-          <TableReview
-            proposal={candidate}
-            draft={draft}
-            sourceImageUrl={sourceImageUrl}
-            pageWidth={proposalsQuery.data?.page_width}
-            pageHeight={proposalsQuery.data?.page_height}
-            headerRow={headerRow}
-            onHeaderRowChange={setHeaderRow}
-            acknowledged={acknowledged}
-            onAcknowledgedChange={setAcknowledged}
-          />
+          <>
+            {candidate.nested ? (
+              <p className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-2xs leading-relaxed text-muted-foreground">
+                {t("ocr.table.nestedHint", {
+                  parent:
+                    parentIndexOf(candidate) >= 0
+                      ? parentIndexOf(candidate) + 1
+                      : "—",
+                  row: candidate.nested.parent_row + 1,
+                  column: candidate.nested.parent_column + 1,
+                })}
+              </p>
+            ) : null}
+            <TableReview
+              proposal={candidate}
+              draft={draft}
+              sourceImageUrl={sourceImageUrl}
+              pageWidth={proposalsQuery.data?.page_width}
+              pageHeight={proposalsQuery.data?.page_height}
+              headerRow={headerRow}
+              onHeaderRowChange={setHeaderRow}
+              acknowledged={acknowledged}
+              onAcknowledgedChange={setAcknowledged}
+            />
+          </>
         ) : candidates.length === 0 ? (
           <EmptyState
             compact
@@ -206,6 +235,23 @@ export function PageTablesDialog({
                             <Badge variant="outline">
                               {t("ocr.table.blockCount", {
                                 count: item.block_ids.length,
+                              })}
+                            </Badge>
+                          ) : null}
+                          {item.nested ? (
+                            <Badge variant="warning">
+                              {t("ocr.table.nestedIn", {
+                                index:
+                                  parentIndexOf(item) >= 0
+                                    ? parentIndexOf(item) + 1
+                                    : "—",
+                              })}
+                            </Badge>
+                          ) : null}
+                          {item.nested_count ? (
+                            <Badge variant="outline">
+                              {t("ocr.table.containsNested", {
+                                count: item.nested_count,
                               })}
                             </Badge>
                           ) : null}

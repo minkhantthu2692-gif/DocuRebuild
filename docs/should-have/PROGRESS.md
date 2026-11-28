@@ -24,7 +24,7 @@ Working rules for every task (from the prompt pack):
 | --- | --- | --- | --- |
 | 01 | Page-wide figure detection | done | this task commit |
 | 02 | Page-wide equation proposals | done | this task commit |
-| 03 | Nested table separation | not started | — |
+| 03 | Nested table separation | done | this task commit |
 | 04 | Opaque PDF drawing extraction | not started | — |
 
 ## How to resume
@@ -263,7 +263,7 @@ Files changed: `backend/app/services/regions.py`,
 ## Task 03 — Nested table reconstruction
 
 **Prompt:** `02_SHOULD_HAVE/03_Nested_Table_Separation.md`
-**Status:** not started.
+**Status:** done.
 
 ### Findings before changing code
 
@@ -303,6 +303,96 @@ without corrupting the parent structure.
 - Largest task of the four. Nested editor tables may be unsupported; a separate
   linked table may be the honest, non-destructive fallback.
 - Export (DOCX/PDF) nested tables need explicit handling; test both.
+
+### Result
+
+- Confirmed the editor has no nested-table node: Tiptap `TableKit` and
+  `table-insertion.ts` emit a flat grid, and the DB has no nested-table model.
+  Implemented the prompt's explicit fallback: the inner grid is a **separate
+  linked proposal** tied to the parent cell, never a flattened parent.
+- `backend/app/services/table_structure.py`:
+  - `_vector_candidates` now tags every drawn grid with a stable
+    `key` (`table-<x>-<y>-<width>-<height>`), its `block_ids`, `nested_count: 0`
+    and private `_geometry` (x/y boundary positions, merged rectangles, cell
+    owner map, per-cell word buckets, typical word height).
+  - `_candidate` (OCR path) also carries `key`, `block_ids` and
+    `nested_count: 0`; `_table_key(source)` derives the key from the rectangle.
+  - `_link_nested_candidates` links a child vector grid only when its own drawn
+    rectangle sits wholly inside one parent cell with `NESTED_INSET = 2.0`; the
+    smallest containing parent wins, and the child gets
+    `nested = {parent_key, parent_row, parent_column}` while the parent's
+    `nested_count` is incremented.
+  - `_remove_child_words` clears the child's words from the parent cell (using
+    the cell's merged-rectangle anchor) and recomputes `has_confidence`,
+    `uncertain_cells`, `empty_cells` and `warnings`, so the nested content is
+    not duplicated and the parent cell is visibly empty.
+  - `propose_page_tables` truncates to `MAX_CANDIDATES` first, links only the
+    returned set (a cut child never leaves a stale parent claim) and strips
+    `_geometry` before returning.
+- Schemas: added `TableNestedOut` and `TableCandidateOut.key/nested/nested_count`
+  (`backend/app/schemas/tables.py`); shared types gained `TableNested` and the
+  same candidate fields (`packages/shared-types/src/index.ts`).
+- Frontend (`apps/web/src/components/workspace/page-tables-dialog.tsx`):
+  candidate list shows "Nested in table N" on a child and "N nested table(s)"
+  on a parent; the review view shows a hint naming the parent table and 1-based
+  cell; inserting a child writes a `nestedSourceNote` that records the parent
+  and cell. A parent keeps the existing page source note. Added
+  `ocr.table.nestedIn/containsNested/nestedHint/nestedSourceNote` to both `en`
+  and `my` workspace locales.
+- Tests:
+  - `backend/tests/test_table_structure.py`:
+    `test_vector_candidates_link_a_nested_grid_to_its_parent_cell` (unit:
+    parent 2x2 at 0-200 x 0-100, child 2x2 at 10-90 x 10-40; child linked to
+    parent cell 0,0, parent cell emptied, sibling cells intact) and
+    `test_page_candidates_link_a_nested_drawn_table` (PDF upload -> page
+    endpoint -> exactly two candidates, linkage, no `_geometry` leakage).
+  - `backend/tests/test_docx_export.py` and `test_pdf_export.py`: a parent
+    table with an empty cell, the nested source note, then a separate child
+    table; both grids survive export and the parent structure is not merged
+    back.
+  - `apps/web/src/test/page-tables-dialog.test.tsx`: badges, child hint, child
+    insert note, and the unchanged parent note.
+
+Files changed: `backend/app/services/table_structure.py`,
+`backend/app/schemas/tables.py`, `packages/shared-types/src/index.ts`,
+`apps/web/src/components/workspace/page-tables-dialog.tsx`,
+`apps/web/src/i18n/locales/en/workspace.json`,
+`apps/web/src/i18n/locales/my/workspace.json`,
+`backend/tests/test_table_structure.py`, `backend/tests/test_docx_export.py`,
+`backend/tests/test_pdf_export.py`,
+`apps/web/src/test/page-tables-dialog.test.tsx` (new),
+`apps/web/src/test/table-candidates.test.ts`,
+`apps/web/src/test/table-review.test.tsx`,
+`apps/web/src/test/use-table-draft.test.tsx`, `CHANGELOG.md`, `ROADMAP.md`,
+`docs/should-have/PROGRESS.md`.
+
+### Commands / evidence
+
+- `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_table_structure.py -q`
+  -> `36 passed in 44.74s`.
+- `... -m pytest backend/tests/test_docx_export.py backend/tests/test_pdf_export.py -q -k nested_table`
+  -> `2 passed`.
+- `... -m pytest backend/tests -q` -> `448 passed in 439.87s` (was 444; +4).
+- `npm run test:web` -> `59 files / 364 tests passed` (was 58/361; +1 file,
+  +3 tests).
+- `npm run typecheck` and `npm run lint` -> exit 0.
+
+### Limitations
+
+- True nested editor tables are unsupported; the child is inserted as a separate
+  table with a note naming the parent and cell. This is the prompt's allowed
+  non-destructive fallback.
+- Only drawn-rule (vector PDF) nesting is detected. A nested table present only
+  as OCR word boxes, with no drawn inner grid, is not linked; manual crop
+  insertion remains available.
+- A child is linked only when it fits wholly inside one parent cell with a 2 px
+  inset. Partial or ambiguous nesting is left as independent proposals instead
+  of being flattened into a misleading parent.
+- The parent cell that held the nested grid is intentionally emptied and flagged
+  `empty_cells`; the reviewer decides whether to keep the separate child and can
+  edit either table.
+- Detection requires the child's own closed rectangular rule grid; a nested
+  table drawn without a complete border is not detected.
 
 ---
 
@@ -369,4 +459,5 @@ unless the owner asks).
 - 2026-11-28: Task 01 done and pushed (`04f0b5f`). Tasks 02-04 not started.
 - 2026-11-28: Task 02 done (this task commit). Backend 444 passed; web 58 files /
   361 tests passed; typecheck/lint clean. Task 03 is next.
-  Add a dated line here after each task with the commit hash and test counts.
+- 2026-11-28: Task 03 done (this task commit). Backend 448 passed; web 59 files /
+  364 tests passed; typecheck/lint clean. Task 04 is next.

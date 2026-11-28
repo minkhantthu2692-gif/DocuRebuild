@@ -51,6 +51,20 @@ to delete a project folder outside the data folder.
 
 ## Completed after 1.1.0
 
+**Nested table separation (28 November 2026).** A table drawn wholly inside one
+cell of a larger drawn table is now offered as a separate proposal linked to its
+parent cell, instead of being flattened into the parent or duplicated. The
+page-wide table endpoint returns a stable candidate key, the child's parent key
+and 1-based cell, and the parent's nested count; the child's words are removed
+from the parent cell so the two proposals never repeat content. The review dialog
+badges both sides, explains the relationship, and writes the parent/cell into the
+inserted source note. True nested editor tables are not supported by Tiptap, so
+the child is inserted as a separate table with a clear note, which is the
+non-destructive fallback the task allowed. Detection is limited to closed
+drawn-rule grids; OCR word-box nesting without drawn rules remains a manual crop.
+DOCX and PDF exports keep both grids and the parent structure. Backend 448 tests
+and web 364 tests pass.
+
 **Page-wide equation proposals (28 November 2026).** Equation blocks from the
 latest OCR layout are now listed for a page through
 `GET /projects/{id}/pages/{page_id}/equation-proposals`, ordered top-to-bottom and
@@ -170,8 +184,8 @@ These are quality/reach gaps, not missing 1.x features. They are deliberately
 
 - Opaque PDF drawing extraction when a page exposes no vector paths and no
   embedded image (Task 04 of the SHOULD HAVE series).
-- Nested-table detection and automatic page-wide table detection beyond the
-  current row-block/drawn-rule/crop paths.
+- Automatic page-wide table detection beyond the current row-block, drawn-rule,
+  nested-drawn-grid and crop paths.
 - A bundled offline LaTeX typesetter for PDF export (equations currently export
   as LaTeX source).
 - Remaining OMML edge cases (colour, accent semantics).
@@ -203,8 +217,9 @@ These are quality/reach gaps, not missing 1.x features. They are deliberately
 See `PROJECT_MEMORY.md` §12 and `CHANGELOG.md` §1.1.0. The headline limits are:
 Windows x64 only, ~204 MB installer / ~650 MB installed, a three-page real-scan
 OCR corpus (not a population estimate, one transcriber, no scored Burmese-only
-case), page-wide equation proposals depend on OCR equation blocks, opaque PDF
-drawings may need manual selection, no code signing, no
+case), page-wide equation proposals depend on OCR equation blocks, nested tables
+are inserted as separate linked tables because the editor has no nested-table
+node, opaque PDF drawings may need manual selection, no code signing, no
 interactive screen-reader certification, no OCR cancellation or stale-run
 recovery, and one accepted low-severity KaTeX advisory. Performance and memory
 were measured to 400 pages on one N100/16 GB machine (`docs/performance.md`); a

@@ -15,6 +15,7 @@ beforeAll(async () => {
 
 function proposal(): TableProposalCandidate {
   return {
+    key: "table-0-100-240-80",
     block_ids: ["a"],
     rows: 2,
     columns: 2,
@@ -102,6 +103,7 @@ function renderReview(sourceImageUrl: string | null = null, data?: TableProposal
 
 function mergedProposal(): TableProposalCandidate {
   return {
+    key: "table-0-100-300-120",
     block_ids: ["a"],
     rows: 3,
     columns: 3,

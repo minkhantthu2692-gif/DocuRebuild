@@ -784,3 +784,68 @@ def test_export_endpoint_returns_docx(client: TestClient, project: dict) -> None
     assert exported
     assert exported[0]["payload"]["format"] == "docx"
     assert exported[0]["payload"]["byte_size"] == len(response.content)
+
+
+def _table_node(rows: list[list[str]]) -> dict:
+    return {
+        "type": "table",
+        "content": [
+            {
+                "type": "tableRow",
+                "content": [
+                    {
+                        "type": "tableCell",
+                        "attrs": {"colspan": 1, "rowspan": 1},
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [{"type": "text", "text": text}],
+                            }
+                        ],
+                    }
+                    for text in row
+                ],
+            }
+            for row in rows
+        ],
+    }
+
+
+def test_docx_export_keeps_a_nested_table_separate_from_its_parent(
+    tmp_path: Path,
+) -> None:
+    """The child table is inserted separately, so exports must not merge it back.
+
+    The parent cell that held the nested grid stays empty instead of being
+    flattened, and the child keeps its own rows and columns.
+    """
+    note = (
+        "Source: page 4 · nested in table 1 cell (row 1, column 1) · "
+        "inserted as a separate table"
+    )
+    content = {
+        "type": "doc",
+        "content": [
+            _table_node([["", "P2"], ["P3", "P4"]]),
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": note}],
+            },
+            _table_node([["C1", "C2"], ["C3", "C4"]]),
+        ],
+    }
+    document = _open(render_docx(content, tmp_path))
+
+    assert len(document.tables) == 2
+    parent, child = document.tables
+    assert parent.cell(0, 0).text == ""
+    assert parent.cell(0, 1).text == "P2"
+    assert parent.cell(1, 0).text == "P3"
+    assert parent.cell(1, 1).text == "P4"
+    assert [cell.text for row in child.rows for cell in row.cells] == [
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+    ]
+    assert any("nested in table 1" in text for text in _paragraph_texts(document))

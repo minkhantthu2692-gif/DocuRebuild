@@ -672,3 +672,55 @@ def test_export_endpoint_returns_pdf(client: TestClient, project: dict) -> None:
     assert exported
     assert exported[0]["payload"]["format"] == "pdf"
     assert exported[0]["payload"]["byte_size"] == len(response.content)
+
+
+def _table_node(rows: list[list[str]]) -> dict:
+    return {
+        "type": "table",
+        "content": [
+            {
+                "type": "tableRow",
+                "content": [
+                    {
+                        "type": "tableCell",
+                        "attrs": {"colspan": 1, "rowspan": 1},
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [{"type": "text", "text": text}],
+                            }
+                        ],
+                    }
+                    for text in row
+                ],
+            }
+            for row in rows
+        ],
+    }
+
+
+def test_pdf_export_keeps_a_nested_table_separate_from_its_parent(
+    tmp_path: Path,
+) -> None:
+    """The child table is inserted separately, so the export keeps both grids."""
+    note = (
+        "Source: page 4 · nested in table 1 cell (row 1, column 1) · "
+        "inserted as a separate table"
+    )
+    content = {
+        "type": "doc",
+        "content": [
+            _table_node([["", "P2"], ["P3", "P4"]]),
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": note}],
+            },
+            _table_node([["C1", "C2"], ["C3", "C4"]]),
+        ],
+    }
+    text = _text(_open(render_pdf(content, tmp_path)))
+
+    for expected in ("P2", "P3", "P4", "C1", "C2", "C3", "C4"):
+        assert expected in text
+    assert "nested in table 1" in text
+    assert "inserted as a separate table" in text

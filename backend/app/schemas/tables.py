@@ -48,7 +48,16 @@ class TableProposalOut(BaseModel):
     cells: list[TableCellOut]
 
 
+class TableNestedOut(BaseModel):
+    """A child grid sits inside one cell of the parent candidate."""
+
+    parent_key: str
+    parent_row: int
+    parent_column: int
+
+
 class TableCandidateOut(BaseModel):
+    key: str
     block_ids: list[str]
     rows: int
     columns: int
@@ -58,6 +67,8 @@ class TableCandidateOut(BaseModel):
     warnings: list[TableWarning]
     source: TableSourceOut
     cells: list[TableCellOut]
+    nested: TableNestedOut | None = None
+    nested_count: int = 0
 
 
 class PageTableProposalsOut(BaseModel):

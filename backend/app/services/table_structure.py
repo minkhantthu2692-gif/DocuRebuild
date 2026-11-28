@@ -82,6 +82,9 @@ MIN_VECTOR_FILL_RATIO = 0.2
 # An OCR candidate inside a vector grid describes the same table with a coarser
 # structure, so it is dropped rather than listed twice.
 VECTOR_COVER_RATIO = 0.85
+# A nested grid must sit clearly inside one parent cell. A child whose rules touch
+# the cell border is treated as part of the parent instead of a separate table.
+NESTED_INSET = 2.0
 
 Word = dict[str, Any]
 Band = tuple[float, float]
@@ -489,10 +492,21 @@ def _blocks_can_join(left, right, typical_height: float) -> bool:
     return gap <= limit
 
 
+def _table_key(source: dict[str, float]) -> str:
+    """Stable within one response, derived from the source rectangle."""
+    return (
+        f"table-{round(source['x'])}-{round(source['y'])}-"
+        f"{round(source['width'])}-{round(source['height'])}"
+    )
+
+
 def _candidate(blocks, rows: list[list[Word]], bands: list[Band]) -> dict[str, Any]:
+    payload = _grid_payload(rows, bands)
     return {
+        "key": _table_key(payload["source"]),
         "block_ids": [block["id"] for block in blocks],
-        **_grid_payload(rows, bands),
+        "nested_count": 0,
+        **payload,
     }
 
 
@@ -821,25 +835,183 @@ def _vector_candidates(
         if empty_cells:
             warnings.append("empty_cells")
 
+        source = {
+            "x": round(left, 1),
+            "y": round(top, 1),
+            "width": round(right - left, 1),
+            "height": round(bottom - top, 1),
+        }
         candidates.append(
             {
+                "key": _table_key(source),
                 "block_ids": list(contributing),
+                "nested_count": 0,
                 "rows": rows,
                 "columns": columns,
                 "has_confidence": has_confidence,
                 "uncertain_cells": uncertain_cells,
                 "empty_cells": empty_cells,
                 "warnings": warnings,
-                "source": {
-                    "x": round(left, 1),
-                    "y": round(top, 1),
-                    "width": round(right - left, 1),
-                    "height": round(bottom - top, 1),
-                },
+                "source": source,
                 "cells": cells,
+                # Kept only long enough to link a nested grid to its parent cell;
+                # the page path strips it before the response is built.
+                "_geometry": {
+                    "x_positions": x_positions,
+                    "y_positions": y_positions,
+                    "rectangles": rectangles,
+                    "owner": owner,
+                    "buckets": buckets,
+                    "typical_height": typical_height,
+                },
             }
         )
     return candidates
+
+
+def _cell_at(geometry: dict[str, Any], x: float, y: float) -> tuple[int, int]:
+    """Map a point to the parent grid coordinate that owns it."""
+    xs = geometry["x_positions"]
+    ys = geometry["y_positions"]
+    column = min(max(bisect_right(xs, x) - 1, 0), len(xs) - 2)
+    row = min(max(bisect_right(ys, y) - 1, 0), len(ys) - 2)
+    return row, column
+
+
+def _cell_bounds(
+    geometry: dict[str, Any], row: int, column: int
+) -> tuple[float, float, float, float]:
+    xs = geometry["x_positions"]
+    ys = geometry["y_positions"]
+    rectangles = geometry["rectangles"]
+    owner = geometry["owner"]
+    anchor_row, anchor_column, last_row, last_column = rectangles[owner[row][column]]
+    return (
+        xs[anchor_column],
+        ys[anchor_row],
+        xs[last_column + 1],
+        ys[last_row + 1],
+    )
+
+
+def _point_inside(x: float, y: float, box: dict[str, float]) -> bool:
+    return (
+        box["x"] <= x <= box["x"] + box["width"]
+        and box["y"] <= y <= box["y"] + box["height"]
+    )
+
+
+def _refresh_totals(candidate: dict[str, Any]) -> None:
+    cells = candidate["cells"]
+    uncertain = sum(1 for cell in cells if cell["uncertain"])
+    empty = sum(1 for cell in cells if cell["empty"])
+    has_confidence = any(cell["confidence"] is not None for cell in cells)
+    warnings: list[str] = []
+    if not has_confidence:
+        warnings.append("no_confidence")
+    if uncertain:
+        warnings.append("low_confidence")
+    if empty:
+        warnings.append("empty_cells")
+    candidate.update(
+        {
+            "has_confidence": has_confidence,
+            "uncertain_cells": uncertain,
+            "empty_cells": empty,
+            "warnings": warnings,
+        }
+    )
+
+
+def _remove_child_words(
+    parent: dict[str, Any], child_source: dict[str, float], row: int, column: int
+) -> None:
+    """Clear the parent cell that holds a nested grid, then refresh its totals.
+
+    The child's words belong to the child proposal. Leaving them in the parent
+    would duplicate the nested content and hide that the cell is not plain text.
+    """
+    geometry = parent["_geometry"]
+    rect_index = geometry["owner"][row][column]
+    bucket = geometry["buckets"][rect_index]
+    kept = [
+        word
+        for word in bucket
+        if not _point_inside(
+            word["x"] + word["width"] / 2, _centre_y(word), child_source
+        )
+    ]
+    if len(kept) == len(bucket):
+        return
+    geometry["buckets"][rect_index] = kept
+    anchor_row, anchor_column, _last_row, last_column = geometry["rectangles"][
+        rect_index
+    ]
+    xs = geometry["x_positions"]
+    payload = _cell_payload(
+        _reline(kept),
+        (xs[anchor_column], xs[last_column + 1]),
+        geometry["typical_height"],
+    )
+    for cell in parent["cells"]:
+        if cell["row"] == anchor_row and cell["column"] == anchor_column:
+            cell.update(payload)
+            break
+    _refresh_totals(parent)
+
+
+def _link_nested_candidates(candidates: list[dict[str, Any]]) -> None:
+    """Link a drawn grid that sits wholly inside one cell of a larger drawn grid.
+
+    Only vector candidates carry cell geometry, so a link is made only when the
+    document's own rules place the child fully inside a single parent cell with a
+    clear inset. The child stays a separate, reviewable proposal because the
+    editor has no nested-table node; the parent cell loses the child's words so
+    the two proposals never duplicate content.
+    """
+    relations: dict[int, tuple[dict[str, Any], int, int, float]] = {}
+    for parent in candidates:
+        geometry = parent.get("_geometry")
+        if geometry is None:
+            continue
+        parent_source = parent["source"]
+        parent_area = parent_source["width"] * parent_source["height"]
+        if parent_area <= 0:
+            continue
+        for child in candidates:
+            if child is parent or child.get("_geometry") is None:
+                continue
+            child_source = child["source"]
+            child_area = child_source["width"] * child_source["height"]
+            if child_area <= 0 or child_area >= parent_area:
+                continue
+            centre_x = child_source["x"] + child_source["width"] / 2
+            centre_y = child_source["y"] + child_source["height"] / 2
+            row, column = _cell_at(geometry, centre_x, centre_y)
+            left, top, right, bottom = _cell_bounds(geometry, row, column)
+            if (
+                child_source["x"] < left + NESTED_INSET
+                or child_source["y"] < top + NESTED_INSET
+                or child_source["x"] + child_source["width"] > right - NESTED_INSET
+                or child_source["y"] + child_source["height"] > bottom - NESTED_INSET
+            ):
+                continue
+            current = relations.get(id(child))
+            if current is None or parent_area < current[3]:
+                relations[id(child)] = (parent, row, column, parent_area)
+
+    for child in candidates:
+        relation = relations.get(id(child))
+        if relation is None:
+            continue
+        parent, row, column, _area = relation
+        child["nested"] = {
+            "parent_key": parent["key"],
+            "parent_row": row,
+            "parent_column": column,
+        }
+        parent["nested_count"] = int(parent.get("nested_count", 0)) + 1
+        _remove_child_words(parent, child["source"], row, column)
 
 
 def _ensure_fresh_run(page, run) -> None:
@@ -1530,6 +1702,12 @@ def propose_page_tables(project_dir: Path, page_id: str) -> dict[str, Any]:
     combined.sort(
         key=lambda candidate: (candidate["source"]["y"], candidate["source"]["x"])
     )
+    selected = combined[:MAX_CANDIDATES]
+    # Link only what is actually returned, so a child cut by the cap never leaves
+    # a parent claiming a nested table whose proposal is gone.
+    _link_nested_candidates(selected)
+    for candidate in selected:
+        candidate.pop("_geometry", None)
 
     return {
         "page_id": page_id,
@@ -1537,5 +1715,5 @@ def propose_page_tables(project_dir: Path, page_id: str) -> dict[str, Any]:
         "engine": run["engine"],
         "page_width": page["width"],
         "page_height": page["height"],
-        "candidates": combined[:MAX_CANDIDATES],
+        "candidates": selected,
     }

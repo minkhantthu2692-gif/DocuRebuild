@@ -1115,6 +1115,90 @@ def test_vector_candidates_require_a_closed_grid() -> None:
     assert table_structure._vector_candidates(horizontals, verticals, words) == []
 
 
+def _nested_rule_grid() -> tuple[
+    list[tuple[float, float, float]], list[tuple[float, float, float]]
+]:
+    """A 2x2 parent grid with a separate 2x2 child grid in its first cell."""
+    parent_horizontals = [
+        (0.0, 0.0, 200.0),
+        (50.0, 0.0, 200.0),
+        (100.0, 0.0, 200.0),
+    ]
+    parent_verticals = [
+        (0.0, 0.0, 100.0),
+        (100.0, 0.0, 100.0),
+        (200.0, 0.0, 100.0),
+    ]
+    child_horizontals = [
+        (10.0, 10.0, 90.0),
+        (25.0, 10.0, 90.0),
+        (40.0, 10.0, 90.0),
+    ]
+    child_verticals = [
+        (10.0, 10.0, 40.0),
+        (50.0, 10.0, 40.0),
+        (90.0, 10.0, 40.0),
+    ]
+    return (
+        parent_horizontals + child_horizontals,
+        parent_verticals + child_verticals,
+    )
+
+
+def _nested_rule_words() -> list[tuple[str, dict]]:
+    return [
+        ("p1", _word("P2", 110, 5, width=40, height=16, confidence=None, line=0)),
+        ("p1", _word("P3", 5, 55, width=35, height=16, confidence=None, line=1)),
+        ("p1", _word("P4", 110, 55, width=40, height=16, confidence=None, line=1)),
+        ("c1", _word("C1", 12, 12, width=18, height=8, confidence=None, line=0)),
+        ("c1", _word("C2", 52, 12, width=18, height=8, confidence=None, line=0)),
+        ("c1", _word("C3", 12, 27, width=18, height=8, confidence=None, line=1)),
+        ("c1", _word("C4", 52, 27, width=18, height=8, confidence=None, line=1)),
+    ]
+
+
+def test_vector_candidates_link_a_nested_grid_to_its_parent_cell() -> None:
+    horizontals, verticals = _nested_rule_grid()
+    candidates = table_structure._vector_candidates(
+        horizontals, verticals, _nested_rule_words()
+    )
+
+    assert len(candidates) == 2
+    table_structure._link_nested_candidates(candidates)
+
+    parent = max(
+        candidates, key=lambda item: item["source"]["width"] * item["source"]["height"]
+    )
+    child = min(
+        candidates, key=lambda item: item["source"]["width"] * item["source"]["height"]
+    )
+    assert parent["source"]["width"] == 200.0
+    assert child["source"]["width"] == 80.0
+    assert child["nested"] == {
+        "parent_key": parent["key"],
+        "parent_row": 0,
+        "parent_column": 0,
+    }
+    assert parent["nested_count"] == 1
+
+    parent_cells = {(cell["row"], cell["column"]): cell for cell in parent["cells"]}
+    # The child's words moved to the child proposal, so the parent cell is empty
+    # instead of silently duplicating the nested table as flattened text.
+    assert parent_cells[(0, 0)]["text"] == ""
+    assert parent_cells[(0, 0)]["empty"] is True
+    assert parent_cells[(0, 1)]["text"] == "P2"
+    assert parent_cells[(1, 0)]["text"] == "P3"
+    assert parent_cells[(1, 1)]["text"] == "P4"
+    assert parent["empty_cells"] == 1
+    assert "empty_cells" in parent["warnings"]
+
+    child_cells = {(cell["row"], cell["column"]): cell for cell in child["cells"]}
+    assert child_cells[(0, 0)]["text"] == "C1"
+    assert child_cells[(0, 1)]["text"] == "C2"
+    assert child_cells[(1, 0)]["text"] == "C3"
+    assert child_cells[(1, 1)]["text"] == "C4"
+
+
 def test_covered_ratio_measures_the_share_inside_a_vector_grid() -> None:
     grid = {"x": 50.0, "y": 100.0, "width": 500.0, "height": 250.0}
     inside = {"x": 60.0, "y": 110.0, "width": 100.0, "height": 50.0}
@@ -1186,6 +1270,81 @@ def test_page_candidates_prefer_the_drawn_grid_with_merged_cells(
         f"/ocr/blocks/{block}/table-proposal"
     )
     assert single.status_code == 422
+
+
+def _nested_table_pdf() -> bytes:
+    """A ruled 2x2 table with a second 2x2 table drawn inside its first cell.
+
+    Drawn at 50-350 x 100-300 points, so the 2x import places the parent at
+    100-700 x 200-600 display pixels and the child inside parent cell (0, 0).
+    """
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=600, height=800)
+        black = (0, 0, 0)
+        for y in (100, 200, 300):
+            page.draw_line((50, y), (350, y), color=black, width=0.8)
+        for x in (50, 200, 350):
+            page.draw_line((x, 100), (x, 300), color=black, width=0.8)
+        for y in (125, 155, 185):
+            page.draw_line((75, y), (175, y), color=black, width=0.8)
+        for x in (75, 125, 175):
+            page.draw_line((x, 125), (x, 185), color=black, width=0.8)
+        page.insert_text((225, 115), "P2", fontsize=8)
+        page.insert_text((60, 215), "P3", fontsize=8)
+        page.insert_text((225, 215), "P4", fontsize=8)
+        page.insert_text((80, 130), "C1", fontsize=8)
+        page.insert_text((130, 130), "C2", fontsize=8)
+        page.insert_text((80, 160), "C3", fontsize=8)
+        page.insert_text((130, 160), "C4", fontsize=8)
+        return document.tobytes()
+    finally:
+        document.close()
+
+
+def test_page_candidates_link_a_nested_drawn_table(
+    client: TestClient, project: dict
+) -> None:
+    pages = upload_pdf(client, project["id"], "nested.pdf", _nested_table_pdf())
+    page = pages[0]
+
+    response = client.get(
+        f"/api/projects/{project['id']}/pages/{page['id']}/table-proposals"
+    )
+    assert response.status_code == 200, response.text
+    candidates = response.json()["candidates"]
+
+    assert len(candidates) == 2
+    parent = next(item for item in candidates if item["source"]["width"] > 500)
+    child = next(item for item in candidates if item["source"]["width"] < 500)
+
+    assert parent["key"].startswith("table-")
+    assert parent["nested"] is None
+    assert parent["nested_count"] == 1
+    assert "_geometry" not in parent
+
+    assert child["nested"] == {
+        "parent_key": parent["key"],
+        "parent_row": 0,
+        "parent_column": 0,
+    }
+    assert child["nested_count"] == 0
+    assert "_geometry" not in child
+
+    parent_cells = {(cell["row"], cell["column"]): cell for cell in parent["cells"]}
+    assert parent_cells[(0, 0)]["text"] == ""
+    assert parent_cells[(0, 0)]["empty"] is True
+    assert parent_cells[(0, 1)]["text"] == "P2"
+    assert parent_cells[(1, 0)]["text"] == "P3"
+    assert parent_cells[(1, 1)]["text"] == "P4"
+    assert parent["empty_cells"] == 1
+    assert "empty_cells" in parent["warnings"]
+
+    child_cells = {(cell["row"], cell["column"]): cell for cell in child["cells"]}
+    assert child_cells[(0, 0)]["text"] == "C1"
+    assert child_cells[(0, 1)]["text"] == "C2"
+    assert child_cells[(1, 0)]["text"] == "C3"
+    assert child_cells[(1, 1)]["text"] == "C4"
 
 
 def _merged_block_pdf() -> bytes:

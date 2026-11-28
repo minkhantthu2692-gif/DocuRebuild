@@ -8,6 +8,18 @@ supported 1.0 distribution.
 
 ### Added
 
+- **Nested table separation.** A table drawn wholly inside one cell of a larger
+  drawn table is now offered as a separate proposal linked to its parent cell
+  rather than being flattened into the parent or duplicated. Page table
+  candidates carry a stable key, the child's parent key and 1-based cell, and the
+  parent's nested count; the child's words are removed from the parent cell so
+  the two proposals never repeat content. The review dialog badges and explains
+  the relationship and records the parent/cell in the inserted source note. The
+  editor has no nested-table node, so the child is inserted as a separate table
+  with that note, the non-destructive fallback the task allowed. DOCX and PDF
+  exports keep both grids and the parent structure. Detection is limited to
+  closed drawn-rule grids; OCR word-box nesting without drawn rules remains a
+  manual crop.
 - **Page-wide equation proposals.** A page's OCR equation blocks are now listed
   in reading order through `GET /projects/{id}/pages/{page_id}/equation-proposals`
   and a new **Detect equations** dialog. Each candidate carries its source
