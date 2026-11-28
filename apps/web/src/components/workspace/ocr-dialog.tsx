@@ -924,6 +924,7 @@ export function OcrDialog({
                     className="gap-1.5"
                     onClick={() => void handleInsert()}
                     disabled={selectedBlocks.length === 0 || updateBlock.isPending}
+                    data-testid="ocr-insert"
                   >
                     <Check />
                     {t("ocr.insertSelected")}

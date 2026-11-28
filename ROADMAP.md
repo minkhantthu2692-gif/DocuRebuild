@@ -4,8 +4,9 @@ This is the short, current roadmap for the Windows x64 desktop release.
 `docs/roadmap.md` keeps the detailed phase-by-phase implementation history;
 `PROJECT_MEMORY.md` records architecture and handover context.
 
-Last updated: 2026-11-27 (large-document performance drill and real-scan OCR
-validation added after 1.1.0).
+Last updated: 2026-11-28 (automated desktop E2E smoke suite added; accessibility
+audit, large-document performance drill and real-scan OCR validation recorded
+after 1.1.0).
 
 ## Release status
 
@@ -101,18 +102,40 @@ numbers are dominated by reconstruction (thousands separators, column leaders,
 Burmese dot leaders), not by character recognition, so they describe the current
 adapter rather than the engine's ceiling.
 
+**Installed-app accessibility audit (27 November 2026).** Documented test matrix
+for the desktop journey, with contrast automation, component keyboard/focus
+tests, a skip link/main landmark, a labelled editor toolbar and dialog
+Escape/restoration checks. The installed executable launched on Windows NT
+10.0.26300.0. NVDA and Narrator were unavailable in this environment, so the
+interactive screen-reader pass is recorded as a blocked, not-certified item; see
+`PROGRESS.md` and `PROJECT_COMPLETION_REPORT.md` section 13.9.
+
+**Automated desktop E2E smoke suite (28 November 2026).** `npm run smoke:desktop`
+runs a deterministic, disposable-profile smoke suite against the packaged
+`win-unpacked` build: launch/sidecar → create project → import PDF → render
+source pages → OCR/review/insert → edit/save/reopen → export
+(Markdown/TXT/DOCX/PDF) → backup/restore → clean shutdown with sidecar stop
+verification. It writes a JSON report (`docs/smoke/desktop-smoke.json`, ignored),
+and the shutdown step tolerates the expected DevTools connection-close race.
+
 ## Remaining MUST HAVE before a wider (non-Windows) production release
 
 These are quality/reach gaps, not missing 1.x features. They are deliberately
 **not** implemented in this release.
 
-1. **Accessibility certification.** Contrast automation and component-level
-   keyboard/focus tests are present, including a skip link, editor toolbar
-   name and dialog Escape/restoration checks. An interactive keyboard-only
-   journey and NVDA/Narrator pass on the installed application remain open
-   because this environment has neither screen reader available.
-2. **Desktop end-to-end automation.** A repeatable installed-app smoke suite
-   (install → launch → import → OCR → export → backup/restore → uninstall).
+1. **Accessibility certification (audit done; screen-reader pass blocked).**
+   The 27 November 2026 audit delivered the test matrix, contrast automation,
+   component keyboard/focus tests, a skip link/main landmark, a labelled editor
+   toolbar and dialog Escape/restoration checks. The remaining item is an
+   interactive NVDA/Narrator pass on the installed application, which was not
+   possible here because neither screen reader was available. This is not
+   claimed as WCAG certification.
+2. **Desktop end-to-end automation.** ✅ Completed 2026-11-28. A repeatable
+   one-command smoke suite (`npm run smoke:desktop`) exercises launch/sidecar,
+   create project, import PDF, render source pages, OCR/review/insert,
+   edit/save/reopen, export (Markdown/TXT/DOCX/PDF), backup/restore and clean
+   shutdown with sidecar stop verification. Uses disposable data directories
+   and deterministic CDP-driven steps. Report at `docs/smoke/desktop-smoke.json`.
 3. **OCR cancellation and crash recovery.** OCR runs cannot be cancelled from
    the API or UI, and a run interrupted by a crash stays `running` after
    restart. Imports already recover as `import_interrupted`; OCR needs the same
@@ -158,7 +181,9 @@ See `PROJECT_MEMORY.md` §12 and `CHANGELOG.md` §1.1.0. The headline limits are
 Windows x64 only, ~204 MB installer / ~650 MB installed, a three-page real-scan
 OCR corpus (not a population estimate, one transcriber, no scored Burmese-only
 case), incomplete page-wide equation/figure recognition, no code signing, no
-desktop E2E suite, no OCR cancellation or stale-run recovery, and one accepted
-low-severity KaTeX advisory. Performance and memory were measured to 400 pages
-on one N100/16 GB machine (`docs/performance.md`); a 1,000-page import,
-low-memory hardware and low-power/thermal variations remain unmeasured.
+interactive screen-reader certification, no OCR cancellation or stale-run
+recovery, and one accepted low-severity KaTeX advisory. Performance and memory
+were measured to 400 pages on one N100/16 GB machine (`docs/performance.md`); a
+1,000-page import, low-memory hardware and low-power/thermal variations remain
+unmeasured. An automated desktop E2E smoke suite is now available
+(`npm run smoke:desktop`, section "Completed after 1.1.0").

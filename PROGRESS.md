@@ -180,6 +180,109 @@ an interactive Windows session with those tools and disposable test projects.
 
 Tested commit: `8cb208c` (the repository is currently on `main` at that commit).
 
+## Automated desktop E2E smoke suite - 2026-11-28
+
+### Scope
+
+Implemented and verified a repeatable one-command smoke suite for the shipped
+Windows x64 Electron app (`npm run smoke:desktop`). The suite exercises the
+complete user journey against the packaged `dist/desktop-installer/win-unpacked`
+build:
+
+1. Launch the Electron shell and wait for the bundled Python sidecar to become
+   healthy (token-authenticated `/api/health`).
+2. Create a project via the API.
+3. Navigate the workspace and verify the editor and import input are present.
+4. Import a small generated PDF through the UI (file input + change event).
+5. Verify source page rendering (full image + thumbnail).
+6. Run OCR with the bundled Tesseract engine, mark all blocks reviewed.
+7. Open the OCR review dialog and insert the verified text into the editor.
+8. Edit the document (append a unique marker), wait for autosave persistence.
+9. Reload the page and confirm the marker is restored.
+10. Export the document as Markdown, TXT, DOCX and PDF; validate content and
+    format magic bytes.
+11. Back up the project (ZIP), restore into a new project, verify pages and
+    document text survive.
+12. Close the app via CDP and verify the Electron process and the backend
+    sidecar both stop.
+
+### Results
+
+- **One-command execution**: `npm run smoke:desktop` (defaults to the local
+  unpacked build; `--app` overrides for an installed executable).
+- **Deterministic disposable profiles**: The suite creates an isolated temporary
+  directory tree (`%TEMP%\docurebuild-smoke-*`) for `APPDATA`, `LOCALAPPDATA`,
+  `TEMP`, and `DOCUREBUILD_DATA_DIR`. It never touches the user's real data.
+  On pass, the tree is deleted automatically; `--keep` retains it for inspection.
+- **Useful diagnostics**: The JSON report (`docs/smoke/desktop-smoke.json`)
+  includes per-step timings, health/engine versions, OCR block counts and
+  confidence, export sizes, sidecar PIDs, console errors, uncaught exceptions,
+  backend/electron log tails, and a failure screenshot when a step fails.
+- **Clean shutdown verified**: The final step enumerates the sidecar PIDs before
+  closing, then polls until they are gone. Runs stopped sidecar PIDs within 2
+  seconds each.
+- **Shutdown-step robustness fix**: an initial run failed intermittently at the
+  final step with `DevTools connection closed`. Closing the window tears down
+  the DevTools socket, so the in-flight `window.close()` evaluation can reject
+  with a connection-closed error — the expected result of a successful close.
+  The step now tolerates `DevTools connection closed` / `not open` for that one
+  call and relies on `waitForChildExit` plus the sidecar PID poll as the real
+  assertion. Three consecutive runs passed after the fix.
+- **CI-friendly**: No external services, no paid APIs, no hardcoded paths. The
+  suite requires Node 22+ (global `WebSocket`) and the packaged desktop payload.
+  Total runtime ~12 seconds on the reference machine (Intel N100, 16 GB RAM).
+
+### Commands and results
+
+```text
+npm run smoke:desktop
+[smoke] pass launch and authenticate
+[smoke] pass create project
+[smoke] pass open workspace
+[smoke] pass import PDF through the UI
+[smoke] pass render source page
+[smoke] pass run OCR and mark blocks reviewed
+[smoke] pass review and insert OCR in the dialog
+[smoke] pass edit and autosave
+[smoke] pass reopen and restore saved text
+[smoke] pass export Markdown, text, Word and PDF
+[smoke] pass back up and restore into a new project
+[smoke] pass close the app and stop the sidecar
+[smoke] report docs/smoke/desktop-smoke.json
+[smoke] passed in 12s
+```
+
+Three consecutive runs after the shutdown-step fix all passed in ~12 s each.
+
+### Files changed
+
+- `scripts/desktop-smoke.mjs` (pre-existing suite; verified end-to-end against
+  the packaged build and hardened the shutdown step against the expected
+  DevTools connection-close race)
+- `docs/smoke/desktop-smoke.json` (run artifact, git-ignored)
+- `ROADMAP.md` (updated "Desktop end-to-end automation" to ✅ Completed)
+- `CHANGELOG.md` (Unreleased → Verified)
+- `PROJECT_COMPLETION_REPORT.md` (section 15)
+- `PROJECT_MEMORY.md` (limitations updated)
+- `PROGRESS.md` (this entry)
+
+### Limitations
+
+- The test uses a generated single-page PDF fixture; it does not exercise
+  multi-page imports, image imports, table/figure/equation workflows or AI
+  features.
+- It drives the UI via CDP and the preload bridge token; it does not test
+  native OS-level keyboard shortcuts, menu items or system dialogs.
+- The devtools WebSocket connection requires Node 22+ (global `WebSocket`);
+  older runtimes will fail fast with a clear message.
+- Only the unpacked `win-unpacked` layout was exercised; an installed NSIS
+  executable can be targeted with `--app <path>` but was not re-verified in
+  this session.
+
+The acceptance criteria are met: a documented one-command smoke test
+(`npm run smoke:desktop`), repeatable clean-profile pass, and CI integration
+where supported (the script exits non-zero on failure and writes a JSON report).
+
 ## Real File Practical Check - 2026-11-27
 
 ### Files tested

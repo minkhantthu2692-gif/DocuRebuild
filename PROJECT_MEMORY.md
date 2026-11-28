@@ -4,7 +4,7 @@ This is the durable context file for DocuRebuild. A new AI agent (or a new human
 developer) should be able to read this document and `AGENTS.md`, clone the
 repository, run the checks and continue work without any previous conversation.
 
-Last updated: 2026-11-26 (v1.1.0 released with OCR layout reconstruction and editor typography).
+Last updated: 2026-11-28 (v1.1.0 with desktop E2E smoke suite verified).
 
 ## 1. What the product is
 
@@ -174,8 +174,10 @@ switch to the desktop app.
 
 Deferred or partial work is listed in `ROADMAP.md`. Notable gaps: a larger
 real-scan OCR corpus, page-wide automatic equation/figure recognition, nested
-tables, macOS/Linux packaging, code signing, screen-reader certification, desktop
-E2E automation, and account-level AI billing verification.
+tables, macOS/Linux packaging, code signing, interactive screen-reader
+certification (the audit itself is done), and account-level AI billing
+verification. A desktop E2E smoke suite is now available
+(`npm run smoke:desktop`; see section 11).
 
 ## 7. OCR details
 
@@ -328,7 +330,15 @@ npm run test:web                                          # 358 tests / 57 files
 npm run typecheck                                         # clean
 npm run lint                                              # clean
 npm run build                                             # production build
+npm run smoke:desktop                                     # desktop E2E smoke (needs a packaged build)
 ```
+
+`npm run smoke:desktop` drives the packaged `dist/desktop-installer/win-unpacked`
+build over the DevTools protocol with a disposable data profile. It covers
+launch/sidecar → create project → import PDF → render → OCR/review/insert →
+edit/save/reopen → export → backup/restore → clean shutdown, and exits non-zero
+on failure with a JSON report (`docs/smoke/desktop-smoke.json`, ignored). It
+requires Node 22+ (global `WebSocket`).
 
 Installed-build QA (1.0.0, Windows 11 x64, N100/16 GB) is recorded in
 `PROJECT_COMPLETION_REPORT.md`: install/uninstall/reinstall with data retention,
@@ -348,8 +358,12 @@ secret scan.
   edge cases remain incomplete.
 - Cloud AI depends on user keys and provider terms; quotas, prices and model
   availability are not guaranteed, and the app does not verify account billing.
-- No automated desktop E2E suite; the installed build was driven manually via
-  the DevTools protocol. Keyboard-only and screen-reader testing remain open.
+- ✅ Automated desktop E2E smoke suite completed 28 November 2026: `npm run smoke:desktop`
+  exercises launch/sidecar → create project → import PDF → render → OCR/review/insert
+  → edit/save/reopen → export (MD/TXT/DOCX/PDF) → backup/restore → clean shutdown
+  with sidecar stop verification. Uses disposable profiles, deterministic CDP-driven
+  steps, JSON report at `docs/smoke/desktop-smoke.json`.
+- Keyboard-only and screen-reader testing remain open.
 - One low-severity KaTeX advisory (prototype pollution through `trust`) is
   accepted: the app renders only user-authored equations with `trust: false`.
 - SQLite must not live on a network share.

@@ -22,6 +22,16 @@ correction of dates/numbers and low-confidence blocks. Mixed handwriting and
 English/Burmese annotations remained unreliable OCR proposals. No code or source
 file change was required. The brief evidence record is `PROGRESS.md`.
 
+**Desktop E2E smoke suite:** on 28 November 2026, a repeatable one-command
+automated smoke suite (`npm run smoke:desktop`) was verified against the
+packaged `dist/desktop-installer/win-unpacked` build. It exercises the complete
+user journey: launch/sidecar health, create project, import PDF, render source
+pages, OCR/review/insert, edit/save/reopen, export (Markdown/TXT/DOCX/PDF),
+backup/restore, and clean shutdown with sidecar stop verification. Uses
+disposable data directories, deterministic CDP-driven steps, and writes a JSON
+report (`docs/smoke/desktop-smoke.json`). Total runtime ~11-12 s on the
+reference machine (Intel N100, 16 GB RAM).
+
 ---
 
 ## 1. Executive summary
@@ -37,12 +47,14 @@ is implemented end to end, with automated coverage on both sides of the stack.
 | --- | --- | --- |
 | Overall project (all 12 phases incl. distribution and final QA) | **approx. 92%** | Phase-weighted, see section 3, revised after section 13 |
 | Core local-first MVP scope (phases 0-9) | **approx. 95%** | Functional coverage, verified by tests and code inspection |
-| Production-release readiness (Windows x64) | **approx. 88%** | Desktop packaging, licensing, the OCR baseline, installed-app QA, performance and security drills are delivered; real-scan accuracy and assistive-technology testing remain |
+| Production-release readiness (Windows x64) | **approx. 88%** | Desktop packaging, licensing, the synthetic and real-scan OCR baselines, installed-app QA, performance and security drills and the desktop E2E smoke suite are delivered; interactive assistive-technology certification and code signing remain |
 
-The application is usable today as an installed Windows application. The
-remaining production gaps are a redacted real-document OCR corpus,
-screen-reader testing, sustained-load measurement and code signing. None of them
-require re-architecting the product.
+The application is usable today as an installed Windows application. After the
+post-1.1.0 evidence work (real-scan OCR baseline, accessibility audit,
+large-document performance/cancellation drill and desktop E2E smoke suite), the
+remaining production gaps are an interactive screen-reader certification pass
+(blocked by unavailable tooling) and code signing. None of them require
+re-architecting the product.
 
 **Strongest areas:** project/storage model, import pipeline (including PDFs and
 background jobs), non-destructive image editing, editor/export (now with full
@@ -52,8 +64,10 @@ encrypted keys, and the packaged desktop shell with a private local API.
 **v1.1.0 adds:** layout-aware OCR paragraph/list/heading reconstruction at
 insertion time, prose-column splitting, and per-line PDF text measurement.
 
-**Weakest areas:** measured accuracy on real scans (phase 4), final QA
-(phase 11), and the remaining page-wide reconstruction work (equations/figures).
+**Weakest areas:** interactive assistive-technology certification (phase 11,
+blocked here), the remaining page-wide reconstruction work (equations/figures),
+and the small real-scan OCR corpus (three pages, one transcriber). Real-scan
+accuracy is now measured in `docs/ocr-benchmark.md`.
 
 ---
 
@@ -77,11 +91,16 @@ This section records the final numbers after the 1.1.0 release verification.
 | Packaged sidecar drill | `backend\.venv\Scripts\python.exe drill.py` | 30 checks passed (project, import, OCR 96.5% confidence, exports, backup/restore) |
 | Installer smoke test | Silent install → launch → uninstall → reinstall | Exit 0, data preserved, registry correct, version 1.1.0 |
 | Anonymous download verification | `Invoke-RestMethod` from GitHub Releases | 214,082,110 bytes, SHA-256 `EC1DF483F539A0DE40DD862A820FD653E1C406AE12921B58D9B5069131A325F4` |
+| **Desktop E2E smoke suite** | `npm run smoke:desktop` | **12/12 steps passed**, ~11 s; launch/sidecar → create project → import PDF → render → OCR/review/insert → edit/save/reopen → export (MD/TXT/DOCX/PDF) → backup/restore → clean shutdown; disposable profiles, JSON report at `docs/smoke/desktop-smoke.json` |
 
-Not verified by automation: real-document OCR accuracy, screen-reader and
-keyboard-only journeys, mobile device rendering, large-document performance, and
-a full backup/restore drill on a clean machine. These are phase 11 items, not
-claims that the features are broken.
+At the v1.1.0 snapshot, these were not yet automated: real-document OCR
+accuracy, screen-reader and keyboard-only journeys, mobile device rendering,
+large-document performance, and a full backup/restore drill on a clean machine.
+Since then, the real-scan OCR baseline (section 13.10 and `docs/ocr-benchmark.md`),
+the large-document performance/cancellation drill (section 14), and the desktop
+E2E smoke suite including backup/restore (section 15) were completed. The
+interactive screen-reader/keyboard-only journey remains blocked by unavailable
+assistive tooling. Mobile rendering is out of scope for the Windows x64 release.
 
 ---
 
@@ -682,17 +701,31 @@ result.
 
 ### 13.10 What is still open (v1.1.0)
 
-These are the honest remaining gaps; none require re-architecting:
+These are the honest remaining gaps; none require re-architecting. The four
+1.x MUST HAVE items below were closed after this snapshot; their status is
+updated here and recorded in sections 14-15, `PROGRESS.md`, `ROADMAP.md` and
+`docs/ocr-benchmark.md`.
 
-- A redacted real-scan OCR corpus (English, Burmese, mixed, at least one table
-  and one multi-column page) scored with the existing harness.
-- An interactive keyboard-only walkthrough and NVDA/Narrator accessibility pass
-  on the installed application. Contrast and component-level keyboard/focus
-  checks are now covered, but full AT certification remains open.
-- A sustained large-document performance and cancellation drill (hundreds of
-  pages, repeated cancelled imports).
-- An automated end-to-end desktop smoke suite; the desktop checks above were run
-  manually and are partly covered by backend tests.
+- **✅ Real-scan OCR baseline — completed.** `backend/tests/fixtures/ocr-real/`
+  holds three public-domain scans (English prose, a printed statistical table,
+  an English/Burmese mixed page) with transcripts typed from the page and
+  measured CER/WER in `docs/ocr-benchmark.md`. Documented limits remain: one
+  transcriber, no scored Burmese-only case, and no multi-column scored page yet.
+- **✅ Installed-app accessibility audit — documented.** Contrast automation,
+  component keyboard/focus tests, a skip link/main landmark, a labelled editor
+  toolbar and dialog Escape/restoration checks are in place (section 13.9 and
+  `PROGRESS.md`). NVDA and Narrator were unavailable in this environment, so an
+  interactive screen-reader pass remains a recorded blocker, not a WCAG
+  certification claim.
+- **✅ Large-document performance and cancellation drill — completed**
+  (section 14): raster PDFs to 400 pages, three repeated cancellations, concurrent
+  imports, a hard-kill recovery and shutdown-during-OCR, with two defects fixed.
+- **✅ Desktop E2E smoke suite — completed 28 November 2026** (section 15).
+  `npm run smoke:desktop` exercises launch/sidecar → create project → import PDF
+  → render source pages → OCR/review/insert → edit/save/reopen → export
+  (Markdown/TXT/DOCX/PDF) → backup/restore → clean shutdown with sidecar stop
+  verification. Uses disposable data directories, deterministic CDP-driven
+  steps, JSON report at `docs/smoke/desktop-smoke.json`.
 - macOS and Linux packaging. Only Windows x64 is built and tested.
 - Installer size and footprint. The installer is 204 MB and installs ~650 MB,
   because it carries Electron's full Chromium locale set (49 MB), a 178 MB
@@ -714,6 +747,8 @@ The remaining gap is evidence on real scans, assistive-technology testing,
 sustained-load measurement, and code signing, not missing foundations. Calling
 1.1 shipped is defensible for a Windows desktop release; the open list above is
 the honest release-note content.
+
+---
 
 ## 14. Addendum - large-document performance and cancellation (27 November 2026)
 
@@ -759,3 +794,109 @@ preparation PNG in `tmp/` or one unreferenced processed image from an in-flight
 page. A 1,000-page import, low-memory hardware, network storage and thermal/
 power variations remain unmeasured. The backend suite passes **439 tests** after
 these changes.
+
+---
+
+## 15. Addendum - Automated Desktop E2E Smoke Suite (28 November 2026)
+
+This closes the "Automated end-to-end desktop smoke suite" item listed as open in
+section 13.10 and the MUST HAVE 04 requirement.
+
+### Scope
+
+Implemented and verified a repeatable one-command smoke suite for the shipped
+Windows x64 Electron app (`npm run smoke:desktop`). The suite exercises the
+complete user journey against the packaged `dist/desktop-installer/win-unpacked`
+build:
+
+1. Launch the Electron shell and wait for the bundled Python sidecar to become
+   healthy (token-authenticated `/api/health`).
+2. Create a project via the API.
+3. Navigate the workspace and verify the editor and import input are present.
+4. Import a small generated PDF through the UI (file input + change event).
+5. Verify source page rendering (full image + thumbnail).
+6. Run OCR with the bundled Tesseract engine, mark all blocks reviewed.
+7. Open the OCR review dialog and insert the verified text into the editor.
+8. Edit the document (append a unique marker), wait for autosave persistence.
+9. Reload the page and confirm the marker is restored.
+10. Export the document as Markdown, TXT, DOCX and PDF; validate content and
+    format magic bytes.
+11. Back up the project (ZIP), restore into a new project, verify pages and
+    document text survive.
+12. Close the app via CDP and verify the Electron process and the backend
+    sidecar both stop.
+
+### Results
+
+- **One-command execution**: `npm run smoke:desktop` (defaults to the local
+  unpacked build; `--app` overrides for an installed executable).
+- **Deterministic disposable profiles**: The suite creates an isolated temporary
+  directory tree (`%TEMP%\docurebuild-smoke-*`) for `APPDATA`, `LOCALAPPDATA`,
+  `TEMP`, and `DOCUREBUILD_DATA_DIR`. It never touches the user's real data.
+  On pass, the tree is deleted automatically; `--keep` retains it for inspection.
+- **Useful diagnostics**: The JSON report (`docs/smoke/desktop-smoke.json`)
+  includes per-step timings, health/engine versions, OCR block counts and
+  confidence, export sizes, sidecar PIDs, console errors, uncaught exceptions,
+  backend/electron log tails, and a failure screenshot when a step fails.
+- **Clean shutdown verified**: The final step enumerates the sidecar PIDs before
+  closing, then polls until they are gone. Runs stopped the sidecar within 2
+  seconds each.
+- **Shutdown-step robustness fix**: an initial run failed intermittently at the
+  final step with `DevTools connection closed`. Closing the window tears down
+  the DevTools socket, so the in-flight `window.close()` evaluation can reject
+  with that expected error. The step now tolerates `DevTools connection closed`
+  / `not open` for that single call and relies on `waitForChildExit` plus the
+  sidecar PID poll as the real assertion. Three consecutive runs passed after
+  the fix (~12 s each).
+- **CI-friendly**: No external services, no paid APIs, no hardcoded paths. The
+  suite requires Node 22+ (global `WebSocket`) and the packaged desktop payload.
+  Total runtime ~11-12 seconds on the reference machine (Intel N100, 16 GB RAM).
+
+### Commands and results
+
+```text
+npm run smoke:desktop
+[smoke] pass launch and authenticate
+[smoke] pass create project
+[smoke] pass open workspace
+[smoke] pass import PDF through the UI
+[smoke] pass render source page
+[smoke] pass run OCR and mark blocks reviewed
+[smoke] pass review and insert OCR in the dialog
+[smoke] pass edit and autosave
+[smoke] pass reopen and restore saved text
+[smoke] pass export Markdown, text, Word and PDF
+[smoke] pass back up and restore into a new project
+[smoke] pass close the app and stop the sidecar
+[smoke] report docs/smoke/desktop-smoke.json
+[smoke] passed in 11s
+```
+
+### Files changed
+
+- `scripts/desktop-smoke.mjs` (pre-existing suite; verified end-to-end against
+  the packaged build and hardened the shutdown step against the expected
+  DevTools connection-close race)
+- `docs/smoke/desktop-smoke.json` (run artifact, git-ignored)
+- `ROADMAP.md` (updated "Desktop end-to-end automation" to ✅ Completed)
+- `PROGRESS.md` (detailed verification entry)
+- `CHANGELOG.md` (added to Unreleased section)
+- `PROJECT_MEMORY.md` (limitations updated)
+- `PROJECT_COMPLETION_REPORT.md` (this section)
+
+### Limitations
+
+- The test uses a generated single-page PDF fixture; it does not exercise
+  multi-page imports, image imports, table/figure/equation workflows or AI
+  features.
+- It drives the UI via CDP and the preload bridge token; it does not test
+  native OS-level keyboard shortcuts, menu items or system dialogs.
+- The devtools WebSocket connection requires Node 22+ (global `WebSocket`);
+  older runtimes will fail fast with a clear message.
+- Only the unpacked `win-unpacked` layout was exercised; an installed NSIS
+  executable can be targeted with `--app <path>` but was not re-verified in
+  this session.
+
+The acceptance criteria are met: a documented one-command smoke test
+(`npm run smoke:desktop`), repeatable clean-profile pass, and CI integration
+where supported (the script exits non-zero on failure and writes a JSON report).

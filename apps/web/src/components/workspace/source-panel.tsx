@@ -166,6 +166,7 @@ interface ToolButtonProps {
   disabled?: boolean;
   active?: boolean;
   className?: string;
+  testId?: string;
 }
 
 function ToolButton({
@@ -175,6 +176,7 @@ function ToolButton({
   disabled,
   active,
   className,
+  testId,
 }: ToolButtonProps) {
   return (
     <Tooltip>
@@ -187,6 +189,7 @@ function ToolButton({
           disabled={disabled}
           onClick={onClick}
           className={className}
+          data-testid={testId}
         >
           <Icon />
         </Button>
@@ -946,6 +949,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
         accept={allowPdf ? IMPORT_ACCEPT_ATTRIBUTE : IMAGE_ACCEPT_ATTRIBUTE}
         multiple
         className="sr-only"
+        data-testid="import-input"
         onChange={(event) => {
           if (event.target.files) handleFiles(event.target.files);
           event.target.value = "";
@@ -1054,6 +1058,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
               label={t("ocr.open")}
               icon={ScanText}
               onClick={() => setOcrOpen(true)}
+              testId="ocr-open"
             />
 
             <ToolButton
@@ -1306,6 +1311,7 @@ export function SourcePanel({ projectId, className, onContentInserted }: SourceP
                       src={imageSrc}
                       alt={currentPage.original_filename ?? labelFor(currentPage)}
                       draggable={false}
+                      data-testid="source-page-image"
                       onLoad={measureImage}
                       style={imageStyle}
                       className={cn(

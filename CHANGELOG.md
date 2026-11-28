@@ -17,6 +17,11 @@ supported 1.0 distribution.
   page numbers and fail with `UNIQUE constraint failed: pages.page_number`.
   Imports in the same project are serialised; different projects still import
   in parallel.
+- The desktop E2E smoke suite's shutdown step no longer fails intermittently
+  with `DevTools connection closed`. Closing the window tears down the DevTools
+  socket, so the in-flight `window.close()` evaluation can reject with that
+  expected error; the step now tolerates it and relies on the process-exit and
+  sidecar-PID checks as the real assertion.
 
 ### Verified
 
@@ -33,6 +38,15 @@ supported 1.0 distribution.
   photographed page remained limited by handwriting and mixed-script OCR.
   Editing, autosave/reload, and server-side plain-text export were verified.
   No code fix or original-file change was needed.
+- **Automated desktop E2E smoke suite** (`npm run smoke:desktop`). A repeatable
+  one-command suite exercises the complete user journey against the packaged
+  `win-unpacked` build: launch/sidecar health, create project, import PDF, render
+  source pages, OCR/review/insert, edit/save/reopen, export (Markdown/TXT/DOCX/PDF),
+  backup/restore, and clean shutdown with sidecar stop verification. Uses
+  disposable data directories, deterministic CDP-driven steps, and writes a JSON
+  report (`docs/smoke/desktop-smoke.json`) with timings, engine versions, export
+  sizes, sidecar PIDs, console errors and log tails. Total runtime ~12 s on the
+  reference machine (Intel N100, 16 GB RAM).
 
 ## [1.1.0] - 2026-11-26
 

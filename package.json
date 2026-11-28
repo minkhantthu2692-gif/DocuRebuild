@@ -18,8 +18,10 @@
     "test:api": "python -m pytest backend/tests -q",
     "lint": "npm run lint -w @docurebuild/web",
     "desktop:build": "node scripts/build-desktop.mjs",
+    "desktop:pack": "npm run desktop:build && npm run pack -w @docurebuild/desktop",
     "desktop:dist": "npm run desktop:build && npm run dist -w @docurebuild/desktop",
-    "desktop:start": "npm run start -w @docurebuild/desktop"
+    "desktop:start": "npm run start -w @docurebuild/desktop",
+    "smoke:desktop": "node scripts/desktop-smoke.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

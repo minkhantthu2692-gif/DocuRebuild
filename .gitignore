@@ -68,6 +68,8 @@ test-results/
 playwright-report/
 playwright/.cache/
 coverage/
+# Desktop E2E smoke run reports (machine-specific, regenerated per run)
+docs/smoke/
 
 # Editor / OS noise
 .vscode/*
