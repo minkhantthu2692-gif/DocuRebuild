@@ -51,6 +51,19 @@ to delete a project folder outside the data folder.
 
 ## Completed after 1.1.0
 
+**Opaque PDF drawing extraction (28 November 2026).** A PDF page that exposes no
+usable embedded image and no vector drawing is now analysed from its rendered
+page, so artwork stored as opaque page/form content (for example a scanned page)
+can produce a low-confidence figure proposal instead of nothing. Raster analysis
+runs only when exact PDF geometry is absent, which avoids offering the same figure
+twice and keeps the cost off vector-rich pages. The proposal keeps the page's
+display-pixel geometry and the existing crop path uses source pixels without
+upscaling; nothing is saved automatically, so review and manual selection remain
+the fallback. Rotated or edited PDF pages use the same rendered-page path. The
+limitation is explicit: a mixed page with one exact figure and one opaque drawing
+may propose only the exact figure, and light or very small drawings can be missed.
+Backend 450 tests and web 364 tests pass.
+
 **Nested table separation (28 November 2026).** A table drawn wholly inside one
 cell of a larger drawn table is now offered as a separate proposal linked to its
 parent cell, instead of being flattened into the parent or duplicated. The
@@ -182,8 +195,6 @@ These are quality/reach gaps, not missing 1.x features. They are deliberately
 
 ## Deferred — SHOULD HAVE
 
-- Opaque PDF drawing extraction when a page exposes no vector paths and no
-  embedded image (Task 04 of the SHOULD HAVE series).
 - Automatic page-wide table detection beyond the current row-block, drawn-rule,
   nested-drawn-grid and crop paths.
 - A bundled offline LaTeX typesetter for PDF export (equations currently export
@@ -219,7 +230,8 @@ Windows x64 only, ~204 MB installer / ~650 MB installed, a three-page real-scan
 OCR corpus (not a population estimate, one transcriber, no scored Burmese-only
 case), page-wide equation proposals depend on OCR equation blocks, nested tables
 are inserted as separate linked tables because the editor has no nested-table
-node, opaque PDF drawings may need manual selection, no code signing, no
+node, opaque PDF artwork is proposed from the rendered page at low confidence and
+may still need manual selection, no code signing, no
 interactive screen-reader certification, no OCR cancellation or stale-run
 recovery, and one accepted low-severity KaTeX advisory. Performance and memory
 were measured to 400 pages on one N100/16 GB machine (`docs/performance.md`); a

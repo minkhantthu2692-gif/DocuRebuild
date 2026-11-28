@@ -148,6 +148,35 @@ def _page_artwork_png(*, text_only: bool = False, caption: str | None = None) ->
     return buffer.getvalue()
 
 
+def _opaque_pdf(*, chart: bool = True) -> bytes:
+    """A PDF whose page is one full-page raster image and no vector paths.
+
+    The image fills the page, so the embedded-image filter treats it as a
+    background and there are no drawings to read; the rendered page is the only
+    signal left for an opaque drawing.
+    """
+    image = Image.new("RGB", (1200, 800), (252, 252, 252))
+    draw = ImageDraw.Draw(image)
+    for y in range(100, 180, 26):
+        draw.rectangle((100, y, 520, y + 10), fill=(30, 30, 30))
+    if chart:
+        draw.line((700, 560, 1060, 560), fill=(20, 20, 20), width=2)
+        draw.line((700, 260, 700, 560), fill=(20, 20, 20), width=2)
+        for x, top in ((740, 420), (800, 340), (860, 260)):
+            draw.rectangle((x, top, x + 34, 560), fill=(40, 80, 160))
+        draw.line((700, 440, 1060, 300), fill=(160, 40, 40), width=3)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    data = buffer.getvalue()
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=600, height=400)
+        page.insert_image(pymupdf.Rect(0, 0, 600, 400), stream=data)
+        return document.tobytes()
+    finally:
+        document.close()
+
+
 def _upload_png(
     client: TestClient, project_id: str, name: str, data: bytes
 ) -> dict:
@@ -600,6 +629,67 @@ def test_page_artwork_region_ignores_text_the_ocr_layout_explains(
     )
     page = _upload_png(
         client, project["id"], "text-page.png", _page_artwork_png(text_only=True)
+    )
+    _run_ocr(client, project["id"], page["id"])
+
+    _, figures = _figure_proposals(client, project["id"], page["id"])
+
+    assert figures == []
+
+
+def test_opaque_pdf_uses_the_rendered_page_for_figure_proposals(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(
+        ocr,
+        "_perform_ocr",
+        lambda *args, **kwargs: _fake_result(
+            [_block(1, "paragraph", "Body text.", 90, 90, 450, 100)]
+        ),
+    )
+    page = _upload_pdf(client, project["id"], "opaque.pdf", _opaque_pdf())
+    _run_ocr(client, project["id"], page["id"])
+
+    body, figures = _figure_proposals(client, project["id"], page["id"])
+
+    assert body["status"] == "ready"
+    # The page's only content is a full-page raster image, so the embedded-image
+    # filter rejects it as a background and there are no vector rules. The
+    # rendered page still exposes the chart's ink, offered for review at low
+    # confidence.
+    assert len(figures) == 1
+    figure = figures[0]
+    assert figure["reason"] == "page_artwork_region"
+    assert figure["confidence"] == "low"
+    assert figure["caption"] == ""
+    # The 1200x800 source image fills the 600x400-point page, so its pixels are
+    # scaled by the render DPI before the box is measured.
+    scale_x = page["width"] / 1200
+    scale_y = page["height"] / 800
+    assert abs(figure["x"] - 700 * scale_x) <= 30
+    assert abs(figure["y"] - 260 * scale_y) <= 30
+    assert abs(figure["x"] + figure["width"] - 1060 * scale_x) <= 40
+    assert abs(figure["y"] + figure["height"] - 560 * scale_y) <= 40
+
+
+def test_opaque_pdf_without_a_drawing_proposes_no_figure(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    from app.services import ocr
+
+    monkeypatch.setattr(ocr, "detect_engine", lambda force=False: _engine_available())
+    monkeypatch.setattr(
+        ocr,
+        "_perform_ocr",
+        lambda *args, **kwargs: _fake_result(
+            [_block(1, "paragraph", "Body text.", 90, 90, 450, 100)]
+        ),
+    )
+    page = _upload_pdf(
+        client, project["id"], "opaque-text.pdf", _opaque_pdf(chart=False)
     )
     _run_ocr(client, project["id"], page["id"])
 

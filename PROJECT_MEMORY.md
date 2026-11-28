@@ -163,7 +163,7 @@ switch to the desktop app.
 | PDF text layer | Complete | Reviewable `pdf-text` runs in the same OCR review flow; invalidated on rotation |
 | Layout hints and overlay | Complete | Deterministic heading/list/caption/equation/table/header/footer/page-number hints and measured overlay |
 | Table proposals | Complete for the supported scope | Word-box grids, page-level row-block grouping, PDF/raster drawn rules with merged cells, nested drawn grids linked to a parent cell as separate reviewable tables, review/edit/acknowledge before insert |
-| Element extraction | Complete | Manual crops, local region text, PDF image/vector and raster ink proposals, figure/table/equation insertion, verification, repair; page-wide figure proposals scored against ground truth (precision/recall 1.00 on the controlled corpus, `docs/figure-detection.md`); page-wide equation proposals from OCR equation blocks in reading order |
+| Element extraction | Complete | Manual crops, local region text, PDF image/vector and raster ink proposals (including opaque-PDF rendered-page figures), figure/table/equation insertion, verification, repair; page-wide figure proposals scored against ground truth (precision/recall 1.00 on the controlled corpus, `docs/figure-detection.md`); page-wide equation proposals from OCR equation blocks in reading order |
 | Equations | Complete for the supported scope | Typed LaTeX with offline KaTeX, numbering, cross-references, Word OMML, reviewed equation-crop insertion and optional vision transcription |
 | Editor and export | Complete | Headings, lists, quotes, code, links, find/replace, tables, figures, inline images, equations, footnotes, headers/footers; Markdown/TXT/DOCX/PDF export |
 | History and backup | Complete | Revisions, restore/compare, activity log with CSV/JSON export, verified zip/drbz backup, additive and selective restore, local vault with retention, opt-in scheduled copies |
@@ -173,8 +173,8 @@ switch to the desktop app.
 | Form controls and dialogs | Complete | Shared native `Checkbox`/`Switch`/`Radio` primitives, one owner per open dialog, in-place image previews |
 
 Deferred or partial work is listed in `ROADMAP.md`. Notable gaps: a larger
-real-scan OCR corpus, opaque-PDF figure extraction, macOS/Linux packaging, code
-signing, interactive screen-reader certification
+real-scan OCR corpus, macOS/Linux packaging, code signing, interactive
+screen-reader certification
 (the audit itself is done), and account-level AI billing verification. A desktop
 E2E smoke suite is now available (`npm run smoke:desktop`; see section 11).
 
@@ -353,10 +353,12 @@ secret scan.
 - Installer ~202 MB, installed footprint ~643 MB (Chromium locales, Tesseract,
   sidecar). Trimming is future work.
 - OCR accuracy is measured on synthetic pages only.
-- Opaque-PDF figure extraction and some OMML edge cases remain incomplete. A
-  nested table drawn inside a parent cell is linked as a separate table because
-  the editor has no nested-table node; OCR word-box nesting without drawn rules
-  stays a manual crop.
+- Some OMML edge cases remain incomplete. Opaque PDF artwork is proposed from
+  the rendered page at low confidence only when no exact PDF geometry exists, so
+  a mixed page may still need manual selection. A nested table drawn inside a
+  parent cell is linked as a separate table because the editor has no
+  nested-table node; OCR word-box nesting without drawn rules stays a manual
+  crop.
 - Cloud AI depends on user keys and provider terms; quotas, prices and model
   availability are not guaranteed, and the app does not verify account billing.
 - ✅ Automated desktop E2E smoke suite completed 28 November 2026: `npm run smoke:desktop`

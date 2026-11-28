@@ -8,6 +8,15 @@ supported 1.0 distribution.
 
 ### Added
 
+- **Opaque PDF drawing proposals.** A PDF page with no usable embedded image and
+  no vector drawing is now analysed from its rendered page, so artwork stored as
+  opaque page/form content (for example a scanned page) can be proposed for
+  review at low confidence. Raster analysis runs only when exact PDF geometry is
+  absent, avoiding duplicate figures and unnecessary work; rotated or
+  geometry-edited PDFs use the same rendered-page path. Crops keep source pixels
+  (no upscaling) and nothing is saved automatically. Mixed pages with both exact
+  and opaque artwork, and light or very small drawings, remain a documented
+  limitation with manual selection.
 - **Nested table separation.** A table drawn wholly inside one cell of a larger
   drawn table is now offered as a separate proposal linked to its parent cell
   rather than being flattened into the parent or duplicated. Page table

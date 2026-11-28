@@ -15,7 +15,7 @@ combines four local signals:
 | --- | --- | --- | --- |
 | Embedded PDF raster image | `pdf.image_regions` | medium | Precise placement of an image XObject. |
 | PDF vector artwork | `pdf.drawing_regions` | medium | Curves, diagonals and filled shapes; axis-aligned rules are ignored so table grids and page frames are not figures. |
-| Raster ink cluster | `artwork.artwork_regions` | low | For photographed/scanned pages: ink the OCR text layout does not explain. |
+| Raster ink cluster | `artwork.artwork_regions` | low | For photographed/scanned pages and opaque PDF pages: ink the OCR text layout does not explain. |
 | Caption band | `regions._figure_rects` | medium | The empty band above a `Figure`/`Fig`/`Diagram`/`Chart` caption. |
 
 Assembly rules:
@@ -25,6 +25,8 @@ Assembly rules:
 - A vector drawing is dropped when an image or a detected table/equation already
   covers it (shading, backing, borders).
 - Raster ink inside a detected table/equation is dropped.
+- On a PDF page the rendered page is analysed only when the document exposed no
+  embedded image and no vector rectangle, so a figure is not offered twice.
 - Proposals are clamped to the page, sorted by reading position, deduped at
   IoU >= 0.85, and suppressed when an existing element already covers them.
 - Nothing is persisted or accepted automatically.
@@ -86,8 +88,13 @@ backend\.venv\Scripts\python.exe -m pytest backend/tests/test_figure_eval.py -q 
   geometry edits; otherwise those boxes would be in the wrong place.
 - Region proposals require an OCR run. A PDF page with no OCR run returns
   `no_ocr_run` even though PDF artwork is deterministic.
-- Opaque PDF figures with no readable vector paths and no embedded raster image
-  are not proposed yet; that is the separate opaque-PDF task.
+- Opaque PDF artwork is proposed from the rendered page only when the document
+  exposed no readable embedded image and no vector rectangle. A mixed page with
+  one exact figure and one opaque drawing may propose only the exact figure;
+  manual selection remains available.
+- Raster regions are low-confidence and include some whitespace around the ink;
+  the user reviews and adjusts the crop before saving. Crops use the source page
+  pixels and are never upscaled.
 - The corpus is synthetic/controlled; real book pages with photographs, halftones
   and complex multi-figure layouts need a larger labelled set before quoting a
   general precision/recall figure.

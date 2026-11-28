@@ -25,7 +25,7 @@ Working rules for every task (from the prompt pack):
 | 01 | Page-wide figure detection | done | this task commit |
 | 02 | Page-wide equation proposals | done | this task commit |
 | 03 | Nested table separation | done | this task commit |
-| 04 | Opaque PDF drawing extraction | not started | — |
+| 04 | Opaque PDF drawing extraction | done | this task commit |
 
 ## How to resume
 
@@ -399,7 +399,7 @@ Files changed: `backend/app/services/table_structure.py`,
 ## Task 04 — Opaque PDF drawing extraction
 
 **Prompt:** `02_SHOULD_HAVE/04_Opaque_PDF_Drawing_Extraction.md`
-**Status:** not started.
+**Status:** done.
 
 ### Findings before changing code
 
@@ -439,6 +439,61 @@ a dependable manual fallback.
   vector/image figure evidence.
 - Avoid double-proposing a figure already found by vector/image signals.
 
+### Result
+
+- `backend/app/services/regions.py` now resolves the **display asset** for every
+  page, including PDF pages (previously only non-PDF pages kept a raster source).
+  On a PDF page the rendered page is analysed with `artwork.artwork_regions` only
+  when the document exposed no usable embedded-image box and no vector drawing
+  box (`not image_rects and not drawing_rects`). This covers scanned/opaque PDF
+  pages and PDFs whose artwork is form content with no readable vector paths,
+  while avoiding a second proposal on pages that already have exact PDF geometry.
+- Rotated or geometry-edited PDF pages already skip PDF image/vector evidence, so
+  the rendered display asset (which includes rotation/edits) is used instead.
+- Raster regions stay `reason="page_artwork_region"` with `confidence="low"`,
+  empty caption and no block ids; `assemble_figures` still drops raster ink inside
+  a detected table/equation. Nothing is auto-saved, so the normal review/crop
+  path and manual selection remain the fallback.
+- The proposal is measured in the page's display pixels; the existing crop path
+  uses the source page pixels, so there is no upscaling. The crop geometry is
+  clamped to the page by the existing `clamp_rect` step.
+- Updated the `propose_regions` docstring and `docs/figure-detection.md`
+  (evidence table, assembly rule, limitations).
+- Tests in `backend/tests/test_regions.py`:
+  - `test_opaque_pdf_uses_the_rendered_page_for_figure_proposals`: a PDF whose
+    only content is one full-page raster image (1200x800) on a 600x400-point page;
+    the embedded-image filter rejects the full-page image, no drawings exist, and
+    the rendered page proposes the chart at low confidence. The box is compared
+    with the source image position scaled by the render size.
+  - `test_opaque_pdf_without_a_drawing_proposes_no_figure`: the same opaque PDF
+    with only text (masked by the OCR block) proposes no figure.
+
+Files changed: `backend/app/services/regions.py`,
+`backend/tests/test_regions.py`, `docs/figure-detection.md`, `CHANGELOG.md`,
+`ROADMAP.md`, `PROJECT_MEMORY.md`, `docs/should-have/PROGRESS.md`.
+
+### Commands / evidence
+
+- `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_regions.py -q -k opaque`
+  -> `2 passed in 8.51s`.
+- `... -m pytest backend/tests/test_regions.py backend/tests/test_artwork.py backend/tests/test_figure_eval.py -q`
+  -> `25 passed in 50.83s` (existing figure/raster behaviour preserved).
+- `... -m pytest backend/tests -q` -> `450 passed in 461.54s` (was 448; +2).
+- `npm run test:web` -> `59 files / 364 tests passed`.
+- `npm run typecheck` and `npm run lint` -> exit 0.
+
+### Limitations
+
+- Raster analysis runs only when the PDF has no usable embedded image and no
+  vector drawing. A mixed page with one exact figure and one opaque drawing may
+  propose only the exact figure; the manual crop remains available.
+- Raster regions are low-confidence and include whitespace around the ink; the
+  user reviews the rectangle before saving.
+- A very light drawing, a drawing smaller than the raster minimums, or a page
+  whose background is too dark to threshold is still not proposed.
+- The corpus is synthetic/controlled; no general precision/recall claim is made
+  for opaque real-world scans.
+
 ---
 
 ## Verification commands (all tasks)
@@ -461,3 +516,5 @@ unless the owner asks).
   361 tests passed; typecheck/lint clean. Task 03 is next.
 - 2026-11-28: Task 03 done (this task commit). Backend 448 passed; web 59 files /
   364 tests passed; typecheck/lint clean. Task 04 is next.
+- 2026-11-28: Task 04 done (this task commit). Backend 450 passed; web 59 files /
+  364 tests passed; typecheck/lint clean. The SHOULD HAVE series is complete.

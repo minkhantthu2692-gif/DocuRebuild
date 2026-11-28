@@ -508,10 +508,13 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
     embedded raster images and the shapes of vector drawings, which are
     deterministic signals that a region contains artwork even without a caption.
     On a photographed page, large ink clusters outside the OCR text blocks are the
-    remaining local signal and are offered as low-confidence figures. Proposals are
-    not persisted and never become elements on their own: the user reviews the
-    rectangle and caption, then saves it through the normal crop path, so a bad
-    suggestion costs nothing and is never treated as verified content.
+    remaining local signal and are offered as low-confidence figures. The same
+    raster signal is used on a PDF page when its artwork is opaque: no readable
+    embedded image and no vector rectangle, for example a scanned page or artwork
+    stored as form content. Proposals are not persisted and never become elements
+    on their own: the user reviews the rectangle and caption, then saves it through
+    the normal crop path, so a bad suggestion costs nothing and is never treated as
+    verified content.
     """
     with project_db(project_dir) as conn:
         page = _get_page(conn, page_id)
@@ -561,13 +564,18 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
                             pdf_path,
                             max(0, int(page["pdf_page_number"] or 1) - 1),
                         )
-        # A photographed page has no PDF layer. Its current render is read so
-        # ink that the OCR text layout does not explain can be proposed too.
+        # A photographed page has no PDF layer, so its current render is read.
+        # A PDF page also keeps a rendered display asset; it is the only signal
+        # left when the artwork is stored as opaque page/form content with no
+        # readable embedded image or vector rectangle.
         raster_source: Path | None = None
+        raster_asset_id = page["display_asset_id"]
         if page["source_kind"] != "pdf":
+            raster_asset_id = raster_asset_id or page["original_asset_id"]
+        if raster_asset_id:
             asset = conn.execute(
                 "SELECT relative_path FROM assets WHERE id = ?",
-                (page["display_asset_id"] or page["original_asset_id"],),
+                (raster_asset_id,),
             ).fetchone()
             if asset is not None:
                 try:
@@ -643,7 +651,16 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
                 )
             finally:
                 pdf_service.close_document(document)
-    elif raster_source is not None:
+
+    # A PDF page is rendered as well. When the document exposed no embedded image
+    # or vector rectangle, that render is the only evidence left for an opaque
+    # drawing (a scanned page, or artwork stored as form content). Raster ink is
+    # weaker than PDF geometry, so it is offered with low confidence and never
+    # saved on its own; when PDF evidence already exists it is skipped to avoid
+    # proposing the same figure twice.
+    if raster_source is not None and (
+        pdf_source is None or not (image_rects or drawing_rects)
+    ):
         raster_rects = artwork_service.artwork_regions(
             raster_source, blocks, int(page_width), int(page_height)
         )
