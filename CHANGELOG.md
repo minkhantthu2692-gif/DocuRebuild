@@ -55,6 +55,22 @@ supported 1.0 distribution.
 
 ### Documentation
 
+- Extended `docs/optional-future/PROGRESS.md` with three report-only
+  evaluations. **Provider quota/billing:** a capability matrix of all 14
+  providers found verified official endpoints only for OpenAI and Anthropic
+  (admin/analytics keys), OpenRouter (management/per-key) and DeepSeek (balance);
+  the decision is to stay report-only and label any future data as
+  provider-reported, local estimate or unavailable. **Installer footprint:**
+  measured the existing 1.1.1 build (204.19 MB installer, 646.64 MB installed;
+  Chromium locales 48.82 MB, Tesseract 178.10 MB) and identified ~48 MB of locale
+  trimming plus a slimmer Tesseract build, but made no packaging change without a
+  verified rebuild. **macOS/Linux:** a platform matrix and blocker list (build
+  targets, per-platform Tesseract, hardcoded `tesseract.exe`/`icon.ico`,
+  process-group shutdown, PyInstaller cross-compile limits, data-path
+  reconciliation, signing/notarization) with a rough effort estimate and no
+  implementation. The PaddleOCR evaluation is recorded as deferred because it
+  needs a heavy local install and a measured benchmark. No application behaviour,
+  schema, API, UI or dependency changed.
 - Added `docs/optional-future/PROGRESS.md` with the evaluation of persisting
   OCR-derived region proposals for cross-page batch review. It documents the
   current derived-on-demand model and its stale-safety trade-off, a stable

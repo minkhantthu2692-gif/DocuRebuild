@@ -18,10 +18,10 @@ not claim any unverified result.
 | # | Task | Status | Outcome |
 | --- | --- | --- | --- |
 | 01 | Persisted region proposals and batch review | evaluated | Design + stale-safety trade-off documented; **no persistence change** (see decision); two regression tests lock the invariants |
-| 02 | PaddleOCR adapter evaluation | not started | Benchmark report first |
-| 03 | Provider quota introspection | not started | Capability matrix first |
-| 04 | Windows installer footprint optimisation | not started | Measure first |
-| 05 | macOS/Linux feasibility study | not started | Report only |
+| 02 | PaddleOCR adapter evaluation | deferred | Needs a heavy local install + a measured real-scan benchmark; plan documented, no result claimed |
+| 03 | Provider quota introspection | evaluated | Capability matrix delivered; report-only, no provider calls implemented |
+| 04 | Windows installer footprint optimisation | measured | Component sizes measured; optimisations identified; no packaging change (needs a verified rebuild) |
+| 05 | macOS/Linux feasibility study | evaluated | Platform matrix, risks and effort estimate; report only, no implementation |
 
 ---
 
@@ -259,6 +259,153 @@ npm run typecheck; npm run lint                               # both exit 0
 
 Baseline and full-suite results are recorded in the session log below.
 
+---
+
+## Task 02 — PaddleOCR adapter evaluation (deferred)
+
+Status: **deferred, not started.** PaddleOCR needs a large local install
+(PaddlePaddle runtime plus models) and a benchmark environment. The prompt
+requires a measured comparison against the real-scan corpus before any adapter
+work, and availability alone is not justification. Running it here would consume
+significant download/CPU/time without a controlled baseline, and this optional
+task must not delay the release.
+
+Plan when scheduled:
+1. Install PaddleOCR in a throwaway virtual environment.
+2. Run `backend/tests/fixtures/ocr-real/` through the existing benchmark harness
+   with English and Burmese models, at the same modes used for Tesseract.
+3. Record CER/WER, model size, CPU/RAM, licence, and offline-packaging cost.
+4. Keep Tesseract as the default unless a repeatable, measured gain justifies the
+   installer size and maintenance.
+
+No benchmark result is claimed. The real-scan baseline in `docs/ocr-benchmark.md`
+(Tesseract PSM 11: 22.64% overall CER) is the comparison target.
+
+---
+
+## Task 03 — Provider quota/billing introspection
+
+**Inventory (verified):** `backend/app/services/ai_providers.py` defines 14
+providers — Ollama (local), custom OpenAI-compatible, OpenAI, Anthropic, Gemini,
+OpenRouter, Groq, Mistral, DeepSeek, xAI, Together, Fireworks, Cerebras and
+Perplexity. The usage ledger already stores metadata only and separates a local
+estimate via `estimated_cost_usd` + `cost_source`
+(`backend/app/services/ai_usage.py`); it never claims provider-verified quota.
+
+**Capability matrix** (official documented APIs only; endpoints verified
+2026-11-28):
+
+| Provider | Official usage/quota/billing API | Credential required | What it returns | Usable in-app? |
+| --- | --- | --- | --- | --- |
+| OpenAI | `GET /v1/organization/usage/*`, `GET /v1/organization/costs` | **Admin** key, not a normal project key | Token-usage buckets and daily costs (USD) | Only with an admin key; otherwise unavailable |
+| Anthropic | `GET /v1/organizations/usage_report/messages` + `/v1/organizations/cost_report` (legacy), or `/v1/organizations/analytics/{usage,cost}` | **Admin/Analytics** key | Organisation usage and cost (USD) | Only with an admin/analytics key; otherwise unavailable |
+| OpenRouter | `GET /api/v1/credits` (management key) and `GET /api/v1/key` (per-key limit/remaining) | Management key for credits; the normal key for `/key` | Total credits/usage; per-key limit and remaining | Narrowly usable via `/key` with the configured key |
+| DeepSeek | `GET /user/balance` | Normal API key | Balance in CNY/USD (total/granted/topped-up) | Narrowly usable with the configured key |
+| Gemini | No simple per-key usage API identified; usage comes from Google Cloud billing/quotas | Google Cloud credentials | Cloud billing/quota | Unavailable in-app |
+| Ollama (local) | None (local server) | n/a | No billing; local ledger only | Show local ledger; never a quota |
+| Custom OpenAI-compatible | Provider-dependent, not guaranteed | Provider-dependent | Unknown | Unavailable unless the server documents an endpoint |
+| Groq, Mistral, xAI, Together, Fireworks, Cerebras, Perplexity | No simple documented per-key usage/billing endpoint identified in this pass | Console/dashboard | Console-only | Unavailable; do not scrape dashboards or infer from token history |
+
+**Decision: report-only, no provider calls implemented.** The reliable endpoints
+need admin/management keys that differ from the key the app already stores, the
+rest have no verified official endpoint, and the task must not block the release.
+If implemented later, keep it read-only and explicit: run only on user action,
+use the user's own key, label data as **provider-reported**, **local estimate** or
+**unavailable**, never scrape dashboards or infer quota from incomplete history,
+and degrade to "unavailable" on any error. Start with DeepSeek `/user/balance`
+and OpenRouter `/api/v1/key` (they work with the configured key); OpenAI and
+Anthropic require an explicit admin-key opt-in. No code, dependency or test
+changed.
+
+---
+
+## Task 04 — Windows installer footprint optimisation
+
+**Measured** from the existing packaged 1.1.1 build in `dist/desktop-installer/`:
+
+| Component | Measured size |
+| --- | --- |
+| Installer `DocuRebuild-1.1.1-setup.exe` | 204.19 MB |
+| NSIS payload `@docurebuilddesktop-1.1.0-x64.nsis.7z` | 203.63 MB |
+| Installed `win-unpacked` total | 646.64 MB |
+| `resources/` | 289.81 MB |
+| `resources/backend` (PyInstaller sidecar) | 108.61 MB |
+| `resources/tesseract` | 178.10 MB |
+| `resources/web` | 2.93 MB |
+| Chromium `locales/` (55 `.pak` files) | 48.82 MB |
+| `DocuRebuild.exe` | 238.40 MB |
+
+Tesseract breakdown: `libtesseract-5.dll` 96.77 MB, `libicudt75.dll` 29.32 MB,
+`tessdata/osd` 10.07 MB, `tessdata/mya` 4.43 MB, `tessdata/eng` 3.92 MB, plus
+supporting DLLs. All three required languages are present.
+
+**Candidate optimisations (measured potential, not applied):**
+1. **Chromium locales.** Keep `en-US.pak` (578 KB) and drop the other 54 `.pak`
+   files: potential saving ~48.26 MB installed. Requires
+   `electronLanguages: ["en-US"]` (or `["en-US","en-GB"]`) in
+   `apps/desktop/package.json` plus a rebuild to verify. App-level English/Burmese
+   comes from the web bundle, not Chromium `.pak` files, but a packaged build must
+   still be smoke-tested.
+2. **Tesseract build.** The bundled UB-Mannheim runtime is dominated by
+   `libtesseract-5.dll` and ICU. A slimmer compatible build could shrink it, but
+   `eng`, `mya` and `osd` must be re-verified with the OCR benchmark and the
+   desktop smoke suite before any swap.
+
+**Decision: measurement complete; no packaging change.** The acceptance bar is a
+measurable reduction with no loss of OCR languages, functionality, security or
+install/upgrade reliability, which requires a full `npm run desktop:dist` +
+`npm run smoke:desktop` cycle. That rebuild is deferred to a build-capable
+session. No size reduction is claimed.
+
+---
+
+## Task 05 — macOS/Linux feasibility study
+
+Scope: assess, do not implement. Windows x64 remains the supported target.
+
+**Already portable:** the React/Vite client and FastAPI backend are OS-neutral;
+`backend/app/core/config.py` uses `platformdirs.user_data_dir`; the backend
+executable already drops the `.exe` suffix off Windows
+(`apps/desktop/src/main.cjs:66-69`); `scripts/build-desktop.mjs` already uses
+`python`/`python3` and `npm` per platform.
+
+**Blockers for a build today:**
+- `apps/desktop/package.json` defines only a `win`/NSIS target — no `mac`/`linux`
+  targets, icons or signing config.
+- `scripts/prepare-tesseract.mjs` downloads and extracts the Windows NSIS
+  Tesseract installer and is Windows-only; macOS/Linux need per-platform
+  Tesseract binaries/data.
+- `apps/desktop/src/main.cjs` hardcodes `tesseract.exe` (`:120`, `:140`) and
+  `icon.ico` (`:347`); macOS needs `tesseract` + `.icns`, Linux `tesseract` + `.png`.
+- `stopBackend()` uses `taskkill /t` on Windows and `backend.kill()` elsewhere,
+  which can leave a Tesseract child alive on POSIX; needs process-group handling.
+- PyInstaller does not cross-compile: the sidecar must be frozen on each target
+  OS, so a CI matrix (Windows/macOS/Linux runners) is required.
+- `getDataDirectory()` builds `app.getPath("appData")/DocuRebuild/DocuRebuild`,
+  which matches `platformdirs` on Windows but would double-nest and diverge from
+  the backend default on macOS/Linux; reconcile so dev and packaged agree.
+- macOS needs codesigning + notarization; Linux packaging (AppImage/deb) and
+  sandbox/permission behaviour need their own testing.
+
+**Platform matrix:**
+
+| Concern | Windows x64 (current) | macOS | Linux |
+| --- | --- | --- | --- |
+| Electron target | NSIS (shipped) | dmg/zip + hardened runtime | AppImage/deb |
+| Sidecar freeze | PyInstaller one-folder (shipped) | PyInstaller on macOS runner | PyInstaller on Linux runner |
+| OCR runtime | bundled Tesseract 5.4 (`eng`/`mya`/`osd`) | build/homebrew Tesseract + tessdata | distro/build Tesseract + tessdata |
+| Data location | `%LOCALAPPDATA%\DocuRebuild\DocuRebuild` | `~/Library/Application Support/...` (reconcile) | `~/.local/share/...` (reconcile) |
+| Signing | unsigned (known gap) | Developer ID + notarization | optional |
+| CI | Windows runner | macOS runner | Linux runner |
+| Risk | low (baseline) | medium-high (signing, OCR binaries) | medium (packaging, OCR binaries) |
+
+**Effort estimate (rough, not a commitment):** CI + build scripts +
+per-platform Tesseract sourcing + path/icon/binary-name fixes + process-group
+shutdown ≈ a few focused sessions; macOS signing/notarization adds an Apple
+account and certificate; full QA (install/upgrade/OCR/export/backup) per platform
+is the largest cost. **Decision: report only; no implementation until separately
+approved.**
+
 ## Session log
 
 - 2026-11-28: Task 01 evaluated. Documented the safety trade-off, the stable
@@ -267,3 +414,9 @@ Baseline and full-suite results are recorded in the session log below.
   stale/regeneration invariants. No production code changed. Baseline 450
   backend / 364 web tests passed; after the two new tests the backend suite is
   452 passed, web unchanged at 59 files / 364 tests, typecheck and lint clean.
+- 2026-11-28: Tasks 03, 04 and 05 evaluated (report-only). Provider
+  quota/billing capability matrix verified against official docs; installer
+  component sizes measured from the existing 1.1.1 build; macOS/Linux platform
+  matrix and blockers documented. Task 02 (PaddleOCR) deferred with a plan
+  because it needs a heavy local install and a measured benchmark. No application
+  code, schema, API, UI, locale or dependency changed.

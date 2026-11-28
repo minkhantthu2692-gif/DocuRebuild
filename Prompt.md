@@ -41,29 +41,34 @@ carry it.
 ## 2. Paste this into the new session
 
 ```text
-Continue DocuRebuild from the documented state. Read AGENTS.md, CONTINUE_PROMPT.md
-and PROJECT_MEMORY.md; opencode.jsonc already loads the progress files. Do not start
-a new project and do not re-initialise the repository.
+Continue DocuRebuild from the documented state. Read AGENTS.md, CONTINUE_PROMPT.md,
+PROJECT_MEMORY.md and ROADMAP.md; opencode.jsonc already loads the progress files.
+Do not start a new project and do not re-initialise the repository.
 
-Run git status -sb and git log --oneline -10 first; the tree is clean, main is 2
-commits ahead of origin/main, and e7966d4 is a docs/config commit. Treat unfamiliar
-work as the owner's work.
+Run git status -sb and git log --oneline -10 first; verify the tree state and do not
+discard unfamiliar work.
 
 Verify the baseline before changing code:
-  backend\.venv\Scripts\python.exe -m pytest backend/tests -q   # 450 passed
+  backend\.venv\Scripts\python.exe -m pytest backend/tests -q   # 452 passed
   npm run test:web                                             # 364 tests / 59 files
   npm run typecheck
   npm run lint
 
-Then pick exactly ONE item from the "Remaining work" table in CONTINUE_PROMPT.md.
-Next is 03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md; read that
-prompt file in the prompt pack and follow its acceptance criteria. That task is
-design/evaluation first — no persistence change until the design and stale-safety
-trade-off are written down.
+All 01_MUST_HAVE, 02_SHOULD_HAVE and 04_QUICK_WINS prompt-pack tasks are complete.
+Optional tasks 01, 03, 04 and 05 are evaluated; task 02 (PaddleOCR) is deferred
+because it needs a heavy local install and a measured real-scan benchmark. Do not
+re-implement a completed or evaluated item without an explicit owner decision.
 
-Use disposable test data. Add tests and both English and Burmese locale keys for any
-UI string. Update the progress docs, ROADMAP.md, CHANGELOG.md and CONTINUE_PROMPT.md
-with exact commands, results and limitations. Commit only that task, stop after it,
-and report what remains. Do not publish a release and do not claim any test, build or
-push result without evidence.
+If the owner approves further optional work, pick exactly ONE item from the
+"Remaining work" table in CONTINUE_PROMPT.md, read its prompt file in the prompt
+pack, and follow its acceptance criteria. Prefer low-cost work: the footprint task
+only needs a verified `npm run desktop:dist` + `npm run smoke:desktop` rebuild
+before any size claim.
+
+Use disposable test data; keep originals and user projects untouched. Add tests and
+both English and Burmese locale keys for any UI string. Update the progress docs,
+ROADMAP.md, CHANGELOG.md and CONTINUE_PROMPT.md with exact commands, results,
+limitations and files changed. Commit only that task, stop after it, and report what
+remains. Do not publish a release and do not claim any test, build or push result
+without evidence.
 ```

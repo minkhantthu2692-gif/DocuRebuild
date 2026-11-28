@@ -6,10 +6,10 @@ This is the short, current roadmap for the Windows x64 desktop release.
 
 Last updated: 2026-11-28 (v1.1.1 released; all `01_MUST_HAVE` and
 `02_SHOULD_HAVE` prompt-pack tasks complete; the quick-win regression audit is
-done with no confirmed defect and no code change; the optional persisted-region
-proposals task is evaluated with a decision to keep proposals derived and
-non-persisted; status docs and the paste-ready handover refreshed in
-`CONTINUE_PROMPT.md`).
+done with no confirmed defect and no code change; optional tasks 01, 03, 04 and
+05 are evaluated (region proposals kept derived; provider quota matrix; installer
+footprint measured; macOS/Linux feasibility) and task 02 (PaddleOCR) is deferred;
+status docs and the paste-ready handover refreshed in `CONTINUE_PROMPT.md`).
 
 ## Release status
 
@@ -264,20 +264,20 @@ what remain.
 
 ## Remaining prompt-pack work (resumable)
 
-The quick-win audit is complete and optional task 01 is evaluated. Run one task
-per session and follow the paste-ready instructions in
-[`CONTINUE_PROMPT.md`](CONTINUE_PROMPT.md); record evidence in
-`docs/should-have/PROGRESS.md`, `docs/quick-wins/PROGRESS.md`,
+The quick-win audit is complete and optional tasks 01, 03, 04 and 05 are
+evaluated; task 02 is deferred. Run one task per session and follow the
+paste-ready instructions in [`CONTINUE_PROMPT.md`](CONTINUE_PROMPT.md); record
+evidence in `docs/should-have/PROGRESS.md`, `docs/quick-wins/PROGRESS.md`,
 `docs/optional-future/PROGRESS.md` or a new series-specific progress file.
 
 | Order | Task | Next action |
 | --- | --- | --- |
 | 1 | `04_QUICK_WINS_AND_REGRESSION_CHECKS/01_Audit_Previously_Requested_Fixes.md` | done — all seven VERIFIED WORKING; no confirmed defect, no code change; `docs/quick-wins/PROGRESS.md` |
 | 2 | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | evaluated — design and stale-safety trade-off documented; decision: keep proposals derived and non-persisted; a read-only cross-page aggregation is the recommended next step only if approved; two regression tests lock the invariants; `docs/optional-future/PROGRESS.md` |
-| 3 | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | Benchmark against the real-scan corpus before any adapter implementation. |
-| 4 | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | Official documented APIs only; report unavailable when data is not reliable. |
-| 5 | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | Measure components first; keep OCR languages, licences and upgrade reliability. |
-| 6 | `03_OPTIONAL_FUTURE/05_macOS_Linux_Feasibility.md` | Report and platform matrix only; no implementation without approval. |
+| 3 | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | deferred — needs a heavy local install and a measured real-scan benchmark; plan documented, no result claimed; `docs/optional-future/PROGRESS.md` |
+| 4 | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | evaluated — capability matrix delivered; report-only, no provider calls; only OpenAI/Anthropic (admin keys), OpenRouter and DeepSeek have verified official endpoints; `docs/optional-future/PROGRESS.md` |
+| 5 | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | measured — component sizes recorded; locale trimming (~48 MB potential) needs a verified rebuild; no packaging change yet; `docs/optional-future/PROGRESS.md` |
+| 6 | `03_OPTIONAL_FUTURE/05_macOS_Linux_Feasibility.md` | evaluated — platform matrix, blockers and effort estimate; report only, no implementation; `docs/optional-future/PROGRESS.md` |
 
 ## Explicitly out of scope for 1.x
 

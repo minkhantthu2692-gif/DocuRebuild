@@ -6,12 +6,13 @@ that must not be broken; `PROJECT_COMPLETION_REPORT.md` is the historical QA
 record; `docs/should-have/PROGRESS.md` holds the per-task evidence for the
 `02_SHOULD_HAVE` series.
 
-**State at this update:** 2026-11-28, branch `main` after `e7966d4`, plus the
-quick-win audit and the optional persisted-region-proposals evaluation commits,
-version `1.1.1` released (28 November 2026). The post-release task work is
-committed on `main` but is **not** a published release. Verify with
-`git status -sb` and `git log --oneline -10` before starting; do not discard
-unfamiliar work.
+**State at this update:** 2026-11-28, branch `main` after the quick-win audit and
+the optional-evaluation commits, version `1.1.1` released (28 November 2026). The
+post-release task work is committed on `main` but is **not** a published release.
+All `01_MUST_HAVE`, `02_SHOULD_HAVE` and `04_QUICK_WINS` tasks are complete;
+optional tasks 01, 03, 04 and 05 are evaluated and task 02 (PaddleOCR) is
+deferred. Verify with `git status -sb` and `git log --oneline -10` before
+starting; do not discard unfamiliar work.
 
 ## Paste-ready prompt
 
@@ -34,14 +35,21 @@ Verify the baseline before changing code:
   npm run typecheck
   npm run lint
 
-All four 01_MUST_HAVE and all four 02_SHOULD_HAVE prompt-pack tasks are done
-(see the tables in CONTINUE_PROMPT.md). Pick exactly ONE unfinished item from
-the "Remaining work" table in CONTINUE_PROMPT.md, read its prompt file in
+All 01_MUST_HAVE, 02_SHOULD_HAVE and 04_QUICK_WINS prompt-pack tasks are done
+(see the tables in CONTINUE_PROMPT.md). Optional tasks 01, 03, 04 and 05 are
+evaluated; task 02 (PaddleOCR) is deferred because it needs a heavy local install
+and a measured real-scan benchmark. Do not implement a deferred or evaluated
+item without an explicit owner decision.
+
+If the owner approves further optional work, pick exactly ONE item from the
+"Remaining work" table, read its prompt file in
 C:\Users\minkh\Downloads\Telegram Desktop\DocuRebuild_Remaining_Work_Prompts\DocuRebuild_Prompt_Pack,
-and follow that prompt's acceptance criteria. Use disposable test data; keep
-originals and user projects untouched. Add or update tests and both English and
-Burmese locale keys for any UI string. Update docs/should-have/PROGRESS.md or a
-new docs/<series>/PROGRESS.md, ROADMAP.md, CHANGELOG.md and CONTINUE_PROMPT.md
+and follow that prompt's acceptance criteria. Prefer low-cost work: the footprint
+task only needs a verified `npm run desktop:dist` + `npm run smoke:desktop`
+rebuild before any size claim. Use disposable test data; keep originals and user
+projects untouched. Add or update tests and both English and Burmese locale keys
+for any UI string. Update docs/should-have/PROGRESS.md or a new
+docs/<series>/PROGRESS.md, ROADMAP.md, CHANGELOG.md and CONTINUE_PROMPT.md
 (status table and session log) with exact commands, results, limitations and
 files changed. Commit only that task. Stop after it and report what remains.
 ```
@@ -94,10 +102,10 @@ has a `done` row above without an explicit owner decision.
 | --- | --- | --- | --- |
 | 1 | Audit earlier requested fixes; fix at most one confirmed defect | `04_QUICK_WINS_AND_REGRESSION_CHECKS/01_Audit_Previously_Requested_Fixes.md` | done — all verified; no code change |
 | 2 | Persisted region proposals and batch review | `03_OPTIONAL_FUTURE/01_Persisted_Region_Proposals_Batch_Review.md` | evaluated — design + stale-safety documented; decision: keep proposals derived/non-persisted; read-only aggregation is the next step only if approved; `docs/optional-future/PROGRESS.md` |
-| 3 | PaddleOCR adapter evaluation | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | benchmark report first |
-| 4 | Provider quota/billing introspection | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | capability matrix first |
-| 5 | Windows installer footprint optimisation | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | not started |
-| 6 | macOS/Linux feasibility study | `03_OPTIONAL_FUTURE/05_macOS_Linux_Feasibility.md` | report only; no implementation until approved |
+| 3 | PaddleOCR adapter evaluation | `03_OPTIONAL_FUTURE/02_PaddleOCR_Adapter_Evaluation.md` | deferred — needs a heavy local install and a measured real-scan benchmark; plan documented, no result claimed |
+| 4 | Provider quota/billing introspection | `03_OPTIONAL_FUTURE/03_Provider_Quota_Introspection.md` | evaluated — capability matrix; report-only, no provider calls; verified endpoints only for OpenAI/Anthropic (admin keys), OpenRouter and DeepSeek |
+| 5 | Windows installer footprint optimisation | `03_OPTIONAL_FUTURE/04_Windows_Installer_Footprint_Optimisation.md` | measured — component sizes recorded; ~48 MB locale trimming possible; no packaging change without a verified rebuild |
+| 6 | macOS/Linux feasibility study | `03_OPTIONAL_FUTURE/05_macOS_Linux_Feasibility.md` | evaluated — platform matrix, blockers and effort estimate; report only, no implementation |
 
 Other honest gaps already recorded in `ROADMAP.md` and `PROJECT_MEMORY.md` §12:
 interactive NVDA/Narrator pass and code signing (wider-release blockers); OCR
@@ -140,4 +148,5 @@ npm run smoke:desktop         # after a new packaged build
 | 2026-11-28 | `02_SHOULD_HAVE` 01-04 | all complete; 450 backend / 364 web tests | `04f0b5f`, `0708826`, `25ffbc7`, `0d2aa0e` |
 | 2026-11-28 | Status documentation refresh | this handover created; docs aligned; no release published | `0ef502d` |
 | 2026-11-28 | `04_QUICK_WINS` 01 audit | seven earlier requests all VERIFIED WORKING; no confirmed defect; no application/test/locale changes; audit record added | this commit |
-| 2026-11-28 | `03_OPTIONAL_FUTURE` 01 evaluation | design + stale-safety trade-off documented; decision to keep proposals derived/non-persisted; two regression tests added; no production code change | this commit |
+| 2026-11-28 | `03_OPTIONAL_FUTURE` 01 evaluation | design + stale-safety trade-off documented; decision to keep proposals derived/non-persisted; two regression tests added; no production code change | `a933ff6` |
+| 2026-11-28 | `03_OPTIONAL_FUTURE` 02-05 evaluation | 02 deferred (heavy install + benchmark); 03 provider-quota matrix, 04 footprint measurement, 05 macOS/Linux feasibility documented; report-only, no application code change | this commit |

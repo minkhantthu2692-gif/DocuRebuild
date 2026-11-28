@@ -5,8 +5,9 @@ developer) should be able to read this document and `AGENTS.md`, clone the
 repository, run the checks and continue work without any previous conversation.
 
 Last updated: 2026-11-28 (v1.1.1 released with desktop E2E smoke suite verified;
-optional persisted-region-proposals task evaluated with a decision to keep
-proposals derived and non-persisted — see §10 item 16).
+optional tasks evaluated: region proposals kept derived (§10 item 16), provider
+quota report-only (§10 item 17), platform/footprint posture (§10 items 18-19);
+PaddleOCR deferred).
 
 ## 1. What the product is
 
@@ -340,6 +341,31 @@ AI credentials are configured in the application, not in environment files.
     `propose_regions` and carries the same `ocr_run_id` + `source_asset_id` +
     `rotation` identity; persist only user dismissals if demand is proven. Full
     design and the invariants any persistence must keep: `docs/optional-future/PROGRESS.md`.
+17. **Provider quota is report-only until a verified, key-compatible feature is
+    approved.** The optional task was evaluated on 2026-11-28 and deliberately
+    added no provider calls. Verified official endpoints exist only for OpenAI
+    and Anthropic (both need an admin/analytics key, not the normal project key),
+    OpenRouter (management key for credits; the normal key for per-key limits)
+    and DeepSeek (balance with the normal key). Gemini and the remaining
+    providers have no verified simple per-key usage API, and scraping dashboards
+    or inferring quota from incomplete history is forbidden. Any future feature
+    must be user-triggered, use the user's own key, label data as
+    **provider-reported**, **local estimate** or **unavailable**, and degrade to
+    "unavailable" on error. Full matrix: `docs/optional-future/PROGRESS.md`.
+18. **macOS/Linux remain out of scope; feasibility is documented, not built.** A
+    study on 2026-11-28 recorded the blockers: only a Windows NSIS target exists,
+    `prepare-tesseract.mjs` is Windows-only, `main.cjs` hardcodes `tesseract.exe`
+    and `icon.ico`, POSIX shutdown lacks process-group handling, PyInstaller does
+    not cross-compile (needs a CI matrix), the packaged data path would diverge
+    from `platformdirs` on macOS/Linux, and macOS needs signing/notarization.
+    Nothing is implemented until the owner approves a platform scope change.
+19. **Installer footprint is measured, not yet optimised.** The 1.1.1 build
+    measures 204.19 MB installer / 646.64 MB installed; Chromium locales are
+    48.82 MB (keeping only `en-US` would save ~48.26 MB) and Tesseract is
+    178.10 MB. No packaging change was made because any reduction must be proven
+    with `npm run desktop:dist` + `npm run smoke:desktop` and must keep `eng`,
+    `mya`, `osd`, licences and upgrade reliability. Details:
+    `docs/optional-future/PROGRESS.md`.
 
 ## 11. Verification commands and current results
 
