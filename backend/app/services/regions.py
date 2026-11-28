@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,7 @@ from app.core.errors import AppError
 from app.core.storage import resolve_within
 from app.db.project_schema import project_db
 from app.services import artwork as artwork_service
+from app.services import equation_latex
 from app.services import image_edits as edits_service
 from app.services import pdf as pdf_service
 
@@ -63,6 +65,19 @@ def _block_dict(row) -> dict[str, Any] | None:
         "width": width,
         "height": height,
     }
+
+
+def _row_words(row) -> list[dict[str, Any]]:
+    """Read the stored word boxes for one block, tolerating older rows."""
+    try:
+        raw = row["words"]
+    except (IndexError, KeyError):
+        return []
+    try:
+        data = json.loads(raw or "[]")
+    except (TypeError, ValueError):
+        return []
+    return data if isinstance(data, list) else []
 
 
 def _right(block: dict[str, Any]) -> float:
@@ -810,12 +825,14 @@ def propose_page_equations(project_dir: Path, page_id: str) -> dict[str, Any]:
             (page_id,),
         ).fetchone()
         blocks: list[dict[str, Any]] = []
+        words_by_block: dict[str, list[dict[str, Any]]] = {}
         if run is not None:
             rows = conn.execute(
                 "SELECT * FROM ocr_blocks WHERE run_id = ? ORDER BY block_index ASC",
                 (run["id"],),
             ).fetchall()
             blocks = [block for row in rows if (block := _block_dict(row)) is not None]
+            words_by_block = {row["id"]: _row_words(row) for row in rows}
         existing = [
             {
                 "x": float(row["x"]),
@@ -872,6 +889,17 @@ def propose_page_equations(project_dir: Path, page_id: str) -> dict[str, Any]:
         text = " ".join(
             block["text"].strip() for block in contributing if block["text"].strip()
         )
+        # The LaTeX starting point is rebuilt from the stored word boxes when
+        # they exist, so superscripts and subscripts survive. It falls back to
+        # normalising the OCR text, and never guesses a character Tesseract did
+        # not read: the preview still decides what may be inserted.
+        latex_parts = [
+            equation_latex.equation_latex_from_words(
+                words_by_block.get(block["id"], []), block["text"].strip()
+            )
+            for block in contributing
+        ]
+        latex = " ".join(part for part in latex_parts if part).strip()
         proposals.append(
             {
                 "key": (
@@ -883,6 +911,7 @@ def propose_page_equations(project_dir: Path, page_id: str) -> dict[str, Any]:
                 "width": clamped["width"],
                 "height": clamped["height"],
                 "text": text,
+                "latex": latex,
                 # An OCR equation block is a standalone block, so the proposal is
                 # display math. Inline math inside a paragraph never becomes a
                 # block of its own, so it is not guessed at here.

@@ -6,6 +6,25 @@ supported 1.0 distribution.
 
 ## [Unreleased]
 
+### Changed
+
+- **Equation extraction starts from normalised LaTeX.** The **Detect equations**
+  candidates no longer hand the review dialog raw OCR text as the LaTeX source.
+  Each proposal now carries a `latex` starting point rebuilt from the stored OCR
+  word boxes, so superscripts and subscripts the boxes expose are kept
+  (`I^{0}`, `x_{i}`) and Unicode math glyphs are mapped to their commands
+  (`θ` → `\theta`, `²` → `^2`, `cos` → `\cos`, `×` → `\times`, `≤` → `\leq`),
+  with stray `%`, `#`, `&` and `$` escaped so the local preview renders. The
+  mapping is deterministic and never guesses: a character the engine misread
+  stays exactly as read, the raw OCR text is still shown in the candidate list,
+  and the KaTeX preview still decides what may be inserted. Blocks with no
+  usable word boxes fall back to the same normalisation of their text.
+- **Clearer equation transcription prompt.** The optional AI equation prompt now
+  asks for visible structure to be preserved (`\frac{...}{...}`, `^{...}`,
+  `_{...}`, `\left( ... \right)`, Greek and operator commands) and for every
+  term before the first equals sign to be kept in order. It still forbids adding
+  anything not clearly visible.
+
 ## [1.1.2] - 2026-11-28
 
 A Windows x64 maintenance build that carries the post-v1.1.1 work in a

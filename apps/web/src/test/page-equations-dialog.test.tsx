@@ -117,6 +117,7 @@ function readyProposals(): PageEquationProposals {
         width: 340,
         height: 52,
         text: "E = mc^2",
+        latex: "E = mc^{2}",
         display: true,
         confidence: "high",
         reason: "equation_text",
@@ -159,6 +160,22 @@ describe("PageEquationsDialog", () => {
         caption: "",
       });
     });
+    await waitFor(() => {
+      // The normalised LaTeX starting point is handed to the review dialog, not
+      // the raw OCR text shown in the candidate list.
+      expect(onReview).toHaveBeenCalledWith(created, "E = mc^{2}");
+    });
+  });
+
+  it("falls back to the OCR text when a proposal carries no LaTeX", async () => {
+    mocks.proposals = readyProposals();
+    mocks.proposals.proposals[0].latex = "";
+    const created = element();
+    mocks.createElement.mockResolvedValue(created);
+    const { onReview } = renderDialog();
+
+    fireEvent.click(screen.getByText("Equation 1"));
+
     await waitFor(() => {
       expect(onReview).toHaveBeenCalledWith(created, "E = mc^2");
     });

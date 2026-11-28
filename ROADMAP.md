@@ -109,6 +109,19 @@ candidates; reviewing one saves its crop and opens the existing equation dialog,
 where the KaTeX preview must pass before anything is inserted. Transcription stays
 optional and user-confirmed. Backend 444 tests and web 361 tests pass.
 
+**Equation LaTeX normalisation (28 November 2026).** Each equation proposal now
+carries a `latex` starting point alongside the raw OCR `text`, so the **Detect
+equations** review opens on LaTeX that renders instead of raw OCR glyphs. It is
+rebuilt deterministically from the stored OCR word boxes when they exist —
+clearly smaller words become `^{...}`/`_{...}` — and Unicode math glyphs are
+mapped to their commands (`θ` → `\theta`, `²` → `^2`, `cos` → `\cos`, `×` →
+`\times`, `≤` → `\leq`), with `%`, `#`, `&` and `$` escaped. Nothing is guessed:
+a misread character stays as read, the raw text remains in the candidate list,
+and the KaTeX preview still gates insertion. Blocks without usable word boxes
+fall back to the same normalisation of their text. The optional AI equation
+prompt now also asks for fractions, scripts, brackets and pre-equals terms to be
+preserved. Backend 468 tests and web 60 files / 369 tests pass.
+
 **Page-wide figure detection evaluation (28 November 2026).** The figure
 proposal pipeline is now scored against hand-labelled boxes with IoU matching
 across ten representative layouts (embedded image, vector chart, captioned image,

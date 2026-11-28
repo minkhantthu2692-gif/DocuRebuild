@@ -17,8 +17,9 @@ EquationProposalStatus = Literal[
 class PageEquationProposalOut(BaseModel):
     """One equation region read from the latest OCR layout.
 
-    The text is unverified OCR output used as a LaTeX starting point; it never
-    becomes document content until the user reviews the rendered preview.
+    The text is unverified OCR output and ``latex`` is that text normalised into
+    a LaTeX starting point from the stored word boxes. Neither becomes document
+    content until the user reviews the rendered preview.
     """
 
     key: str
@@ -27,6 +28,7 @@ class PageEquationProposalOut(BaseModel):
     width: int
     height: int
     text: str
+    latex: str
     display: bool
     confidence: Literal["high", "medium", "low"]
     reason: Literal["equation_text"]

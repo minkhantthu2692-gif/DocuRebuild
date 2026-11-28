@@ -41,10 +41,11 @@ interface PageEquationsDialogProps {
 /**
  * Lists the equation regions the backend read from this page's OCR layout.
  *
- * A candidate is only a rectangle plus unverified OCR text. Reviewing one saves
- * the crop as an element and hands it to the existing equation dialog, so the
- * user still sees the KaTeX preview and confirms the insert. Inline math inside a
- * paragraph is never proposed because it is not a separate block.
+ * A candidate is only a rectangle plus unverified OCR text and the LaTeX
+ * starting point normalised from it. Reviewing one saves the crop as an element
+ * and hands it to the existing equation dialog, so the user still sees the
+ * KaTeX preview and confirms the insert. Inline math inside a paragraph is never
+ * proposed because it is not a separate block.
  */
 export function PageEquationsDialog({
   projectId,
@@ -95,7 +96,7 @@ export function PageEquationsDialog({
         height: candidate.height,
         caption: "",
       });
-      onReview(element, candidate.text);
+      onReview(element, candidate.latex || candidate.text);
     } catch (error) {
       toast.error(errorMessage(error));
     } finally {

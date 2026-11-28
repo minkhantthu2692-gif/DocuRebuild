@@ -52,6 +52,12 @@ def test_page_equations_list_equation_blocks_in_reading_order(
     # ordered by their position on the page.
     assert [item["reading_index"] for item in proposals] == [0, 1]
     assert [item["text"] for item in proposals] == ["a^2 + b^2 = c^2", "E = mc^2"]
+    # With no stored word boxes the LaTeX starting point is the normalised OCR
+    # text, so plain ASCII equations come back unchanged.
+    assert [item["latex"] for item in proposals] == [
+        "a^2 + b^2 = c^2",
+        "E = mc^2",
+    ]
     assert proposals[0]["y"] < proposals[1]["y"]
     assert all(item["display"] is True for item in proposals)
     assert all(item["reason"] == "equation_text" for item in proposals)
@@ -117,3 +123,35 @@ def test_page_equations_skip_saved_elements(
     body = _page_equations(client, project["id"], page["id"])
     assert [item["text"] for item in body["proposals"]] == ["E = mc^2"]
     assert [item["reading_index"] for item in body["proposals"]] == [0]
+
+
+def test_page_equations_normalise_the_latex_starting_point(
+    client: TestClient, project: dict, monkeypatch
+) -> None:
+    # Unicode math glyphs the OCR engine emits become their LaTeX commands, so
+    # the review dialog opens on a source that can be previewed instead of raw
+    # glyphs. The characters that were read are preserved exactly.
+    _configure_ocr(
+        monkeypatch,
+        [
+            _block(
+                1,
+                "equation",
+                "I(2θ) = (I⁰/r²) K [1 + cos²(2θ)] / 2",
+                100,
+                200,
+                420,
+                40,
+            ),
+        ],
+    )
+    page = upload_pages(client, project["id"], ["equations-unicode.png"])[0]
+    _run_ocr(client, project["id"], page["id"])
+
+    body = _page_equations(client, project["id"], page["id"])
+    assert body["status"] == "ready"
+    proposal = body["proposals"][0]
+    assert proposal["text"] == "I(2θ) = (I⁰/r²) K [1 + cos²(2θ)] / 2"
+    assert proposal["latex"] == (
+        r"I(2\theta) = (I^0/r^2) K [1 + \cos^2(2\theta)] / 2"
+    )

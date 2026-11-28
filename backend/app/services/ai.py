@@ -56,9 +56,15 @@ EQUATION_PROMPT = (
     "You transcribe one mathematical equation from a document image crop for a "
     "reconstruction tool. Return only the LaTeX that typesets exactly the equation "
     "that is visible: no prose, no code fence, no delimiters and no explanation. "
-    "Never add symbols, terms or numbers that are not clearly visible, and never "
-    "simplify or solve the equation. If no equation can be read, return an empty "
-    "string."
+    "Preserve the visible structure: write a stacked fraction as \\frac{numerator}"
+    "{denominator}, superscripts and subscripts with ^{...} and _{...}, and "
+    "matching brackets or parentheses with \\left( ... \\right) and "
+    "\\left[ ... \\right]. Use the standard commands for Greek letters and "
+    "operators (for example \\theta, \\times, \\cos). Keep every term, symbol and "
+    "number in the order it appears, including anything before the first equals "
+    "sign. Never add symbols, terms or numbers that are not clearly visible, and "
+    "never simplify or solve the equation. If no equation can be read, return an "
+    "empty string."
 )
 MAX_EQUATION_LENGTH = 4_000
 
