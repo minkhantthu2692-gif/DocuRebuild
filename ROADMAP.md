@@ -51,6 +51,17 @@ to delete a project folder outside the data folder.
 
 ## Completed after 1.1.0
 
+**Page-wide equation proposals (28 November 2026).** Equation blocks from the
+latest OCR layout are now listed for a page through
+`GET /projects/{id}/pages/{page_id}/equation-proposals`, ordered top-to-bottom and
+left-to-right with source coordinates, block ids, confidence and the OCR text as a
+LaTeX starting point. Only blocks the layout classifier labelled `equation` are
+proposed, so tables and paragraphs are never offered, and inline math inside a
+paragraph is not guessed at. A new **Detect equations** dialog lists the
+candidates; reviewing one saves its crop and opens the existing equation dialog,
+where the KaTeX preview must pass before anything is inserted. Transcription stays
+optional and user-confirmed. Backend 444 tests and web 361 tests pass.
+
 **Page-wide figure detection evaluation (28 November 2026).** The figure
 proposal pipeline is now scored against hand-labelled boxes with IoU matching
 across ten representative layouts (embedded image, vector chart, captioned image,
@@ -157,7 +168,8 @@ These are quality/reach gaps, not missing 1.x features. They are deliberately
 
 ## Deferred — SHOULD HAVE
 
-- Page-wide automatic equation and figure recognition as reviewable proposals.
+- Opaque PDF drawing extraction when a page exposes no vector paths and no
+  embedded image (Task 04 of the SHOULD HAVE series).
 - Nested-table detection and automatic page-wide table detection beyond the
   current row-block/drawn-rule/crop paths.
 - A bundled offline LaTeX typesetter for PDF export (equations currently export
@@ -191,7 +203,8 @@ These are quality/reach gaps, not missing 1.x features. They are deliberately
 See `PROJECT_MEMORY.md` §12 and `CHANGELOG.md` §1.1.0. The headline limits are:
 Windows x64 only, ~204 MB installer / ~650 MB installed, a three-page real-scan
 OCR corpus (not a population estimate, one transcriber, no scored Burmese-only
-case), incomplete page-wide equation/figure recognition, no code signing, no
+case), page-wide equation proposals depend on OCR equation blocks, opaque PDF
+drawings may need manual selection, no code signing, no
 interactive screen-reader certification, no OCR cancellation or stale-run
 recovery, and one accepted low-severity KaTeX advisory. Performance and memory
 were measured to 400 pages on one N100/16 GB machine (`docs/performance.md`); a

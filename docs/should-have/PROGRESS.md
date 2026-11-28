@@ -23,7 +23,7 @@ Working rules for every task (from the prompt pack):
 | # | Task | Status | Commit |
 | --- | --- | --- | --- |
 | 01 | Page-wide figure detection | done | this task commit |
-| 02 | Page-wide equation proposals | not started | — |
+| 02 | Page-wide equation proposals | done | this task commit |
 | 03 | Nested table separation | not started | — |
 | 04 | Opaque PDF drawing extraction | not started | — |
 
@@ -118,7 +118,7 @@ Files changed: `backend/app/services/regions.py`,
 ## Task 02 — Page-wide equation proposals
 
 **Prompt:** `02_SHOULD_HAVE/02_Page_Wide_Equation_Proposals.md`
-**Status:** not started.
+**Status:** done.
 
 ### Findings before changing code
 
@@ -175,6 +175,88 @@ review flow; manual crop transcription still works.
   offline and transcription must stay optional.
 - Do not duplicate the existing `equation_text` region proposals; either reuse
   the region endpoint or share the clustering helper.
+
+### Result
+
+- Added `regions.propose_page_equations` (`backend/app/services/regions.py`),
+  reusing the existing `_cluster`, `clamp_rect`, `already_extracted` and `iou`
+  helpers plus the same OCR status/staleness checks as `propose_regions`. It
+  returns `status`, `page_id`, page dimensions, OCR run/engine and proposals with
+  `key`, `x/y/width/height`, `text`, `display`, `confidence`, `reason`,
+  `block_ids` and `reading_index`. Only OCR blocks labelled `equation` are
+  proposed, so tables and paragraphs are never offered as equations.
+- Nearby equation blocks are merged with the region gap ratio (0.35). After
+  filtering, `reading_index` is assigned top-to-bottom, left-to-right. Candidates
+  covered by an existing element (>=90% coverage and IoU >=0.5) are skipped, the
+  same rule region proposals use.
+- `display` is always `true` for an equation OCR block because it is a standalone
+  block. Inline math inside a paragraph is not a block of its own, so it is never
+  guessed at.
+- Added schemas `PageEquationProposalOut`/`PageEquationProposalsOut`
+  (`backend/app/schemas/equations.py`), route
+  `GET /projects/{id}/pages/{page_id}/equation-proposals`
+  (`backend/app/api/routes/equations.py`), registered in `backend/app/main.py`.
+- Added shared types `PageEquationProposal`/`PageEquationProposals`
+  (`packages/shared-types/src/index.ts`), API client `getPageEquationProposals`
+  (`apps/web/src/lib/api.ts`) and hook `usePageEquationProposals`
+  (`apps/web/src/hooks/use-equation-proposals.ts`).
+- Added `PageEquationsDialog`
+  (`apps/web/src/components/workspace/page-equations-dialog.tsx`): lists
+  candidates with reading index, display/confidence badges and an OCR text
+  preview, plus loading/error/empty/status states. Selecting one saves an
+  equation crop with `useCreateElement` and hands it to the existing
+  `RegionFormulaDialog`, where the user edits/previews the LaTeX and confirms the
+  insert. Added an optional `initialLatex` prop to `RegionFormulaDialog` so the
+  OCR text pre-fills the editor without changing the manual crop flow.
+- Wired a "Detect equations" button and both dialogs into
+  `apps/web/src/components/workspace/ocr-dialog.tsx`.
+- Added `ocr.equation.*` keys to both `en` and `my` workspace locales.
+- Tests: `backend/tests/test_equation_proposals.py` (4 cases: reading order and
+  non-equation false positives, stacked-block clustering, missing OCR run,
+  saved-element filtering) and
+  `apps/web/src/test/page-equations-dialog.test.tsx` (3 cases: review flow
+  creates the crop and calls `onReview`, stale OCR status, empty state). Invalid
+  LaTeX rejection is already covered by
+  `apps/web/src/test/equation-node.test.ts:177-186`; `RegionFormulaDialog` still
+  blocks insert while `renderEquationPreview` reports an error (KaTeX
+  `trust: false`).
+
+Files changed: `backend/app/services/regions.py`,
+`backend/app/schemas/equations.py` (new),
+`backend/app/api/routes/equations.py` (new), `backend/app/main.py`,
+`backend/tests/test_equation_proposals.py` (new),
+`packages/shared-types/src/index.ts`, `apps/web/src/lib/api.ts`,
+`apps/web/src/hooks/use-equation-proposals.ts` (new),
+`apps/web/src/components/workspace/page-equations-dialog.tsx` (new),
+`apps/web/src/components/workspace/region-formula-dialog.tsx`,
+`apps/web/src/components/workspace/ocr-dialog.tsx`,
+`apps/web/src/test/page-equations-dialog.test.tsx` (new),
+`apps/web/src/i18n/locales/en/workspace.json`,
+`apps/web/src/i18n/locales/my/workspace.json`, `CHANGELOG.md`, `ROADMAP.md`,
+`docs/should-have/PROGRESS.md`.
+
+### Commands / evidence
+
+- `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_equation_proposals.py -q`
+  -> `4 passed in 10.82s`.
+- `... -m pytest backend/tests -q` -> `444 passed in 401.57s` (was 440; +4 new).
+- `npm run test:web` -> `58 files / 361 tests passed` (was 57/358; +1 file,
+  +3 tests).
+- `npm run typecheck` and `npm run lint` -> exit 0.
+
+### Limitations
+
+- Proposals depend on the OCR layout labelling a block `equation`; inline math in
+  a paragraph is not proposed (manual crop remains available).
+- Reviewing a candidate saves an equation crop element immediately (an explicit
+  user action). Cancelling the formula dialog leaves that crop in Elements, the
+  same behaviour as saving a manual crop before inserting it.
+- AI transcription stays optional and requires a configured vision model; the
+  list itself works fully offline.
+- `display` is always `true` for equation blocks; the inline/display distinction
+  is not guessed from geometry.
+- Candidates covered by an existing element are hidden, so a re-review means
+  editing or deleting that element first.
 
 ---
 
@@ -285,4 +367,6 @@ unless the owner asks).
 ## Session log
 
 - 2026-11-28: Task 01 done and pushed (`04f0b5f`). Tasks 02-04 not started.
+- 2026-11-28: Task 02 done (this task commit). Backend 444 passed; web 58 files /
+  361 tests passed; typecheck/lint clean. Task 03 is next.
   Add a dated line here after each task with the commit hash and test counts.

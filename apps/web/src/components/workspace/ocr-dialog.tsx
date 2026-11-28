@@ -6,6 +6,7 @@ import {
   Play,
   RefreshCw,
   ScanText,
+  Sigma,
   Sparkles,
   Table2,
   X,
@@ -15,7 +16,7 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
-import type { AiSuggestion, OcrBlock, OcrBlockKind, PageSummary } from "@docurebuild/shared-types";
+import type { AiSuggestion, ElementSummary, OcrBlock, OcrBlockKind, PageSummary } from "@docurebuild/shared-types";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,9 +51,11 @@ import {
   preferredSegmentationMode,
 } from "@/lib/ocr-display";
 import { cn } from "@/lib/utils";
+import { PageEquationsDialog } from "./page-equations-dialog";
 import { PageTablesDialog } from "./page-tables-dialog";
 import { usePaidAiGuard } from "./paid-ai-confirm-dialog";
 import { ProposalDiff } from "./proposal-diff";
+import { RegionFormulaDialog } from "./region-formula-dialog";
 import { TableProposalDialog } from "./table-proposal-dialog";
 import { useWorkspaceActions } from "./workspace-actions-context";
 
@@ -101,6 +104,11 @@ export function OcrDialog({
   const [includeNote, setIncludeNote] = useState(true);
   const [tableBlock, setTableBlock] = useState<OcrBlock | null>(null);
   const [tablesOpen, setTablesOpen] = useState(false);
+  const [equationsOpen, setEquationsOpen] = useState(false);
+  const [formulaElement, setFormulaElement] = useState<ElementSummary | null>(
+    null,
+  );
+  const [formulaText, setFormulaText] = useState("");
   const initializedRun = useRef<string | null>(null);
 
   const run = latestQuery.data ?? null;
@@ -130,6 +138,9 @@ export function OcrDialog({
       initializedRun.current = null;
       setTableBlock(null);
       setTablesOpen(false);
+      setEquationsOpen(false);
+      setFormulaElement(null);
+      setFormulaText("");
       return;
     }
     if (!capabilities) return;
@@ -596,6 +607,16 @@ export function OcrDialog({
                                 <Table2 />
                                 {t("ocr.table.detect")}
                               </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={() => setEquationsOpen(true)}
+                                disabled={run.stale}
+                              >
+                                <Sigma />
+                                {t("ocr.equation.detect")}
+                              </Button>
                               <label className="flex items-center gap-1.5 text-2xs text-muted-foreground">
                                 <Checkbox
                                   checked={allSelected}
@@ -950,6 +971,31 @@ export function OcrDialog({
         page={page}
         open={tablesOpen}
         onOpenChange={setTablesOpen}
+        onInserted={onInserted}
+      />
+      <PageEquationsDialog
+        projectId={projectId}
+        page={page}
+        open={equationsOpen}
+        onOpenChange={setEquationsOpen}
+        onReview={(element, text) => {
+          setEquationsOpen(false);
+          setFormulaElement(element);
+          setFormulaText(text);
+        }}
+      />
+      <RegionFormulaDialog
+        projectId={projectId}
+        element={formulaElement}
+        pageNumber={page?.page_number ?? null}
+        initialLatex={formulaText}
+        open={formulaElement !== null}
+        onOpenChange={(next) => {
+          if (!next) {
+            setFormulaElement(null);
+            setFormulaText("");
+          }
+        }}
         onInserted={onInserted}
       />
       {paidAi.paidDialog}

@@ -33,6 +33,12 @@ interface RegionFormulaDialogProps {
   /** The saved equation region whose reviewed text becomes the LaTeX source. */
   element: ElementSummary | null;
   pageNumber: number | null;
+  /**
+   * Starting LaTeX when the crop was proposed from the page layout. It replaces
+   * the empty text of a freshly created element; the user still edits and
+   * previews it before inserting.
+   */
+  initialLatex?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onInserted?: () => void;
@@ -50,6 +56,7 @@ export function RegionFormulaDialog({
   projectId,
   element,
   pageNumber,
+  initialLatex,
   open,
   onOpenChange,
   onInserted,
@@ -97,11 +104,11 @@ export function RegionFormulaDialog({
 
   useEffect(() => {
     if (!open) return;
-    setLatex(element?.text ?? "");
+    setLatex(initialLatex ?? element?.text ?? "");
     setNumbered(false);
     setIncludeNote(true);
     setAiProposal(null);
-  }, [open, element?.id, element?.text]);
+  }, [open, element?.id, element?.text, initialLatex]);
 
   const preview = useMemo(() => renderEquationPreview(latex, "block"), [latex]);
   const source = latex.trim();

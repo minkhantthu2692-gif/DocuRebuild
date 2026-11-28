@@ -572,6 +572,34 @@
       "back": "Back to list",
       "sourceNotePage": "Source: page {{page}} · detected table · review each cell"
     },
+    "equation": {
+      "detect": "Detect equations",
+      "detectTitle": "Equations on page {{page}}",
+      "detectDescription": "Built from blocks this page's OCR labelled as equations, in reading order. The OCR text is only a starting point: reviewing a candidate saves its crop and opens the equation dialog, where you check the rendered preview before anything is inserted.",
+      "statusTitle": "Equations are not available yet",
+      "status": {
+        "noOcrRun": "Run OCR on this page first.",
+        "notReady": "OCR is still running. Try again when it finishes.",
+        "failed": "The latest OCR run failed. Re-run OCR and try again.",
+        "stale": "The page or its OCR has changed. Re-run OCR to refresh these candidates.",
+        "noGeometry": "This page has no usable text geometry, so no equation regions can be proposed."
+      },
+      "loading": "Finding equations…",
+      "errorTitle": "Could not read equation candidates",
+      "retry": "Retry",
+      "emptyTitle": "No equations detected",
+      "emptyDescription": "No block on this page was labelled as an equation. Inline math inside a paragraph is not proposed; select it manually if needed.",
+      "count": "{{count}} equation candidate(s)",
+      "candidate": "Equation {{index}}",
+      "display": "Display",
+      "confidence": {
+        "high": "High confidence",
+        "medium": "Medium confidence",
+        "low": "Low confidence"
+      },
+      "noText": "No OCR text; review the crop.",
+      "dismiss": "Close"
+    },
     "ai": {
       "cleanup": "Ask AI to clean up",
       "running": "Requesting proposal…",

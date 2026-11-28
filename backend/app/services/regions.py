@@ -697,3 +697,124 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
         "engine": run["engine"],
         "proposals": filtered,
     }
+
+
+EQUATION_GAP_RATIO = 0.35
+
+
+def propose_page_equations(project_dir: Path, page_id: str) -> dict[str, Any]:
+    """List equation regions on a page for user review.
+
+    Only blocks the layout classifier labelled ``equation`` are proposed; inline
+    math inside a paragraph is not a block of its own and is never invented. Nearby
+    equation blocks are clustered the same way region proposals cluster them, then
+    ordered top-to-bottom and left-to-right. The OCR text is a starting point only:
+    nothing is saved, transcribed or inserted, and the caller must review the LaTeX
+    preview through the normal equation dialog.
+    """
+    with project_db(project_dir) as conn:
+        page = _get_page(conn, page_id)
+        page_width = page["width"]
+        page_height = page["height"]
+        run = conn.execute(
+            "SELECT * FROM ocr_runs WHERE page_id = ? ORDER BY created_at DESC LIMIT 1",
+            (page_id,),
+        ).fetchone()
+        blocks: list[dict[str, Any]] = []
+        if run is not None:
+            rows = conn.execute(
+                "SELECT * FROM ocr_blocks WHERE run_id = ? ORDER BY block_index ASC",
+                (run["id"],),
+            ).fetchall()
+            blocks = [block for row in rows if (block := _block_dict(row)) is not None]
+        existing = [
+            {
+                "x": float(row["x"]),
+                "y": float(row["y"]),
+                "width": float(row["width"]),
+                "height": float(row["height"]),
+            }
+            for row in conn.execute(
+                "SELECT x, y, width, height FROM elements WHERE page_id = ?",
+                (page_id,),
+            ).fetchall()
+        ]
+
+    base_width = int(page_width) if page_width else None
+    base_height = int(page_height) if page_height else None
+
+    def payload(status: str, proposals: list[dict[str, Any]]) -> dict[str, Any]:
+        return {
+            "status": status,
+            "page_id": page_id,
+            "page_width": base_width,
+            "page_height": base_height,
+            "ocr_run_id": run["id"] if run is not None else None,
+            "engine": run["engine"] if run is not None else None,
+            "proposals": proposals,
+        }
+
+    if run is None:
+        return payload("no_ocr_run", [])
+    if run["status"] in {"queued", "running"}:
+        return payload("ocr_not_ready", [])
+    if run["status"] != "succeeded":
+        return payload("ocr_failed", [])
+    current_asset = page["display_asset_id"] or page["original_asset_id"]
+    if run["source_asset_id"] != current_asset or int(run["rotation"]) != int(
+        page["rotation"]
+    ):
+        return payload("ocr_stale", [])
+    if not base_width or not base_height:
+        return payload("no_geometry", [])
+    if not blocks:
+        return payload("no_geometry", [])
+
+    members = [block for block in blocks if block["kind"] == "equation"]
+    proposals: list[dict[str, Any]] = []
+    for rect in _cluster(members, EQUATION_GAP_RATIO):
+        clamped = clamp_rect(rect, base_width, base_height)
+        if clamped is None:
+            continue
+        contributing = sorted(
+            (block for block in members if _intersection(rect, block) > 0),
+            key=lambda block: (block["y"], block["x"]),
+        )
+        text = " ".join(
+            block["text"].strip() for block in contributing if block["text"].strip()
+        )
+        proposals.append(
+            {
+                "key": (
+                    f"equation-{clamped['x']}-{clamped['y']}-"
+                    f"{clamped['width']}-{clamped['height']}"
+                ),
+                "x": clamped["x"],
+                "y": clamped["y"],
+                "width": clamped["width"],
+                "height": clamped["height"],
+                "text": text,
+                # An OCR equation block is a standalone block, so the proposal is
+                # display math. Inline math inside a paragraph never becomes a
+                # block of its own, so it is not guessed at here.
+                "display": True,
+                "confidence": "high",
+                "reason": "equation_text",
+                "block_ids": [block["id"] for block in contributing],
+                "reading_index": 0,
+            }
+        )
+
+    proposals.sort(key=lambda item: (item["y"], item["x"]))
+    filtered: list[dict[str, Any]] = []
+    for proposal in proposals:
+        if any(already_extracted(proposal, element) for element in existing):
+            continue
+        if any(iou(proposal, kept) >= DEDUPE_IOU for kept in filtered):
+            continue
+        proposal["reading_index"] = len(filtered)
+        filtered.append(proposal)
+        if len(filtered) >= MAX_PROPOSALS:
+            break
+
+    return payload("ready", filtered)

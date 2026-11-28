@@ -1082,6 +1082,35 @@ export interface RegionProposals {
   proposals: RegionProposal[];
 }
 
+/**
+ * One equation region read from the latest OCR layout. `text` is unverified OCR
+ * output used as a LaTeX starting point, never document content on its own.
+ */
+export interface PageEquationProposal {
+  key: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text: string;
+  display: boolean;
+  confidence: "high" | "medium" | "low";
+  reason: "equation_text";
+  block_ids: string[];
+  /** Zero-based top-to-bottom, left-to-right order within one response. */
+  reading_index: number;
+}
+
+export interface PageEquationProposals {
+  status: RegionProposalStatus;
+  page_id: string;
+  page_width: number | null;
+  page_height: number | null;
+  ocr_run_id: string | null;
+  engine: string | null;
+  proposals: PageEquationProposal[];
+}
+
 /* -------------------------------------------------------------------------- */
 /*                               Document model                               */
 /* -------------------------------------------------------------------------- */

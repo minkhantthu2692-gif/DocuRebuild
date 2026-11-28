@@ -65,6 +65,7 @@ import type {
   PageAssetRepairResult,
   PageEdits,
   OcrRun,
+  PageEquationProposals,
   PageRestoreResult,
   PageSummary,
   PageTableProposals,
@@ -488,6 +489,10 @@ export const api = {
     ),
   getPageTableProposals: (projectId: string, pageId: string) =>
     request<PageTableProposals>(`/projects/${projectId}/pages/${pageId}/table-proposals`),
+  getPageEquationProposals: (projectId: string, pageId: string) =>
+    request<PageEquationProposals>(
+      `/projects/${projectId}/pages/${pageId}/equation-proposals`,
+    ),
   createAiRegionProposals: (
     projectId: string,
     pageId: string,

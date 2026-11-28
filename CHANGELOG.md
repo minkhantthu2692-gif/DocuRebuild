@@ -8,6 +8,14 @@ supported 1.0 distribution.
 
 ### Added
 
+- **Page-wide equation proposals.** A page's OCR equation blocks are now listed
+  in reading order through `GET /projects/{id}/pages/{page_id}/equation-proposals`
+  and a new **Detect equations** dialog. Each candidate carries its source
+  rectangle, block ids, confidence and OCR text; reviewing one saves the crop and
+  opens the existing equation dialog, where the KaTeX preview must pass before
+  insert. Only blocks the layout classifier labelled as equations are proposed, so
+  tables and paragraphs are not offered, and inline math is not guessed at.
+  Transcription stays optional and user-confirmed.
 - **Page-wide figure detection evaluation.** The figure proposal pipeline is now
   scored against hand-labelled boxes with IoU matching and precision/recall
   (`backend/tests/test_figure_eval.py`, `docs/figure-detection.md`). Ten

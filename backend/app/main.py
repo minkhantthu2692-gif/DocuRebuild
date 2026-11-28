@@ -17,6 +17,7 @@ from app.db.session import get_session_factory, run_migrations
 from app.api.routes import (
     ai,
     elements,
+    equations,
     fonts,
     health,
     ocr,
@@ -118,6 +119,7 @@ def create_app() -> FastAPI:
     app.include_router(ocr.router, prefix="/api")
     app.include_router(elements.router, prefix="/api")
     app.include_router(regions.router, prefix="/api")
+    app.include_router(equations.router, prefix="/api")
     app.include_router(tables.router, prefix="/api")
     app.include_router(ai.router, prefix="/api")
 
