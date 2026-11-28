@@ -163,7 +163,7 @@ switch to the desktop app.
 | PDF text layer | Complete | Reviewable `pdf-text` runs in the same OCR review flow; invalidated on rotation |
 | Layout hints and overlay | Complete | Deterministic heading/list/caption/equation/table/header/footer/page-number hints and measured overlay |
 | Table proposals | Complete for the supported scope | Word-box grids, page-level row-block grouping, PDF/raster drawn rules with merged cells, review/edit/acknowledge before insert |
-| Element extraction | Complete | Manual crops, local region text, PDF image/vector and raster ink proposals, figure/table/equation insertion, verification, repair |
+| Element extraction | Complete | Manual crops, local region text, PDF image/vector and raster ink proposals, figure/table/equation insertion, verification, repair; page-wide figure proposals scored against ground truth (precision/recall 1.00 on the controlled corpus, `docs/figure-detection.md`) |
 | Equations | Complete for the supported scope | Typed LaTeX with offline KaTeX, numbering, cross-references, Word OMML, reviewed equation-crop insertion and optional vision transcription |
 | Editor and export | Complete | Headings, lists, quotes, code, links, find/replace, tables, figures, inline images, equations, footnotes, headers/footers; Markdown/TXT/DOCX/PDF export |
 | History and backup | Complete | Revisions, restore/compare, activity log with CSV/JSON export, verified zip/drbz backup, additive and selective restore, local vault with retention, opt-in scheduled copies |
@@ -173,10 +173,10 @@ switch to the desktop app.
 | Form controls and dialogs | Complete | Shared native `Checkbox`/`Switch`/`Radio` primitives, one owner per open dialog, in-place image previews |
 
 Deferred or partial work is listed in `ROADMAP.md`. Notable gaps: a larger
-real-scan OCR corpus, page-wide automatic equation/figure recognition, nested
-tables, macOS/Linux packaging, code signing, interactive screen-reader
-certification (the audit itself is done), and account-level AI billing
-verification. A desktop E2E smoke suite is now available
+real-scan OCR corpus, page-wide automatic equation proposals, nested tables,
+opaque-PDF figure extraction, macOS/Linux packaging, code signing, interactive
+screen-reader certification (the audit itself is done), and account-level AI
+billing verification. A desktop E2E smoke suite is now available
 (`npm run smoke:desktop`; see section 11).
 
 ## 7. OCR details

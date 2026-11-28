@@ -4,6 +4,26 @@ All notable changes to DocuRebuild are recorded here. This project follows
 [Semantic Versioning](https://semver.org/) and the desktop application is the
 supported 1.0 distribution.
 
+## [Unreleased]
+
+### Added
+
+- **Page-wide figure detection evaluation.** The figure proposal pipeline is now
+  scored against hand-labelled boxes with IoU matching and precision/recall
+  (`backend/tests/test_figure_eval.py`, `docs/figure-detection.md`). Ten
+  representative cases cover embedded images, vector charts, captions, shaded
+  backing, backgrounds, logos, multi-column pages, two-figure pages and raster
+  ink. Measured result: precision 1.00, recall 1.00 (TP=8, FP=0, FN=0) on the
+  controlled corpus. The figure assembly is now a pure `assemble_figures`
+  helper.
+
+### Fixed
+
+- A short caption under a wide image no longer produces two figure proposals.
+  The caption band is an estimate and can be narrower or shifted relative to the
+  artwork, so it now merges with the artwork box when the two share most of the
+  smaller box on both axes (`regions._caption_band_matches`).
+
 ## [1.1.1] - 2026-11-28
 
 A maintenance release for the Windows x64 desktop application. It ships the

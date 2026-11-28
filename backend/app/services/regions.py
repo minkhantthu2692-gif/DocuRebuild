@@ -300,6 +300,31 @@ def _same_area(first: Rect, second: Rect) -> bool:
     return smaller > 0 and intersection / smaller >= 0.6
 
 
+def _caption_band_matches(artwork: Rect, band: Rect) -> bool:
+    """True when a caption band describes the same artwork box.
+
+    The band is an estimate built from the caption and the text above it, so it
+    can be narrower or shifted relative to the real artwork. Comparing area
+    alone then under-matches a wide image under a short caption and offers the
+    user two boxes for one figure. The band and the artwork must instead share
+    most of the smaller box on both axes.
+    """
+    left = max(artwork["x"], band["x"])
+    top = max(artwork["y"], band["y"])
+    right = min(artwork["x"] + artwork["width"], band["x"] + band["width"])
+    bottom = min(artwork["y"] + artwork["height"], band["y"] + band["height"])
+    if right <= left or bottom <= top:
+        return False
+    smaller_width = min(artwork["width"], band["width"])
+    smaller_height = min(artwork["height"], band["height"])
+    if smaller_width <= 0 or smaller_height <= 0:
+        return False
+    return (
+        (right - left) / smaller_width >= 0.5
+        and (bottom - top) / smaller_height >= 0.5
+    )
+
+
 def _inside(rect: Rect, container: Rect) -> bool:
     """True when most of ``rect`` lies inside ``container``."""
     area = rect["width"] * rect["height"]
@@ -386,6 +411,94 @@ def _empty(
         "engine": run["engine"] if run is not None else None,
         "proposals": [],
     }
+
+
+def assemble_figures(
+    page_width: int,
+    page_height: int,
+    blocks: list[dict[str, Any]],
+    image_rects: list[Rect],
+    drawing_rects: list[Rect],
+    raster_rects: list[Rect],
+    text_regions: list[Rect],
+) -> list[dict[str, Any]]:
+    """Combine artwork evidence into reviewable figure candidates.
+
+    An embedded image gives the precise artwork box. A caption band gives the
+    text but only approximates the artwork, so when both describe the same area
+    the image rectangle is kept and the caption is attached to it. A caption
+    without matching artwork still becomes its own suggestion. Raster ink is
+    dropped when it sits inside a table or equation the OCR layout already
+    explains, and vector drawings are dropped when an image or a table already
+    covers the same area. Nothing here is persisted or accepted: the caller
+    exposes the boxes for review.
+    """
+    figures: list[dict[str, Any]] = [
+        {
+            "rect": rect,
+            "caption": "",
+            "reason": "pdf_image_region",
+            "confidence": "medium",
+            "block_ids": [],
+        }
+        for rect in image_rects
+    ]
+    # Ink outside the OCR text blocks is the only local signal left on a
+    # photographed page. It is weaker than PDF geometry: a ruled table the engine
+    # did not read as a table, or a header, can look like artwork. The region is
+    # therefore offered as a low-confidence figure and never saved on its own.
+    for rect in raster_rects:
+        if any(_inside(rect, proposal) for proposal in text_regions):
+            continue
+        figures.append(
+            {
+                "rect": rect,
+                "caption": "",
+                "reason": "page_artwork_region",
+                "confidence": "low",
+                "block_ids": [],
+            }
+        )
+    # A drawing is a weaker signal than an image: it may be shading or a border
+    # around content that is already proposed. It is only kept when it is not
+    # the same area as an image and does not sit inside a detected table, which
+    # is where cell shading and rules usually appear.
+    for rect in _drawing_figures(drawing_rects, image_rects, text_regions):
+        figures.append(
+            {
+                "rect": rect,
+                "caption": "",
+                "reason": "pdf_drawing_region",
+                "confidence": "medium",
+                "block_ids": [],
+            }
+        )
+    for rect, caption in _figure_rects(blocks, page_width, page_height):
+        caption_text = caption["text"].strip()[:500]
+        matched = next(
+            (
+                candidate
+                for candidate in figures
+                if _same_area(candidate["rect"], rect)
+                or _caption_band_matches(candidate["rect"], rect)
+            ),
+            None,
+        )
+        if matched is not None:
+            if not matched["caption"]:
+                matched["caption"] = caption_text
+                matched["block_ids"] = [caption["id"]]
+            continue
+        figures.append(
+            {
+                "rect": rect,
+                "caption": caption_text,
+                "reason": "figure_caption_gap",
+                "confidence": "medium",
+                "block_ids": [caption["id"]],
+            }
+        )
+    return figures
 
 
 def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
@@ -535,79 +648,20 @@ def propose_regions(project_dir: Path, page_id: str) -> dict[str, Any]:
             raster_source, blocks, int(page_width), int(page_height)
         )
 
-    # An embedded image gives the precise artwork box. A caption band gives the
-    # text but only approximates the artwork, so when both describe the same
-    # area the image rectangle is kept and the caption is attached to it. A
-    # caption without matching artwork still becomes its own suggestion.
-    figures: list[dict[str, Any]] = [
-        {
-            "rect": rect,
-            "caption": "",
-            "reason": "pdf_image_region",
-            "confidence": "medium",
-            "block_ids": [],
-        }
-        for rect in image_rects
-    ]
     text_regions = [
         proposal
         for proposal in proposals
         if proposal["kind"] in {"table", "equation"}
     ]
-    # Ink outside the OCR text blocks is the only local signal left on a
-    # photographed page. It is weaker than PDF geometry: a ruled table the engine
-    # did not read as a table, or a header, can look like artwork. The region is
-    # therefore offered as a low-confidence figure and never saved on its own.
-    for rect in raster_rects:
-        if any(_inside(rect, proposal) for proposal in text_regions):
-            continue
-        figures.append(
-            {
-                "rect": rect,
-                "caption": "",
-                "reason": "page_artwork_region",
-                "confidence": "low",
-                "block_ids": [],
-            }
-        )
-    # A drawing is a weaker signal than an image: it may be shading or a border
-    # around content that is already proposed. It is only kept when it is not
-    # the same area as an image and does not sit inside a detected table, which
-    # is where cell shading and rules usually appear.
-    for rect in _drawing_figures(drawing_rects, image_rects, text_regions):
-        figures.append(
-            {
-                "rect": rect,
-                "caption": "",
-                "reason": "pdf_drawing_region",
-                "confidence": "medium",
-                "block_ids": [],
-            }
-        )
-    for rect, caption in _figure_rects(blocks, int(page_width), int(page_height)):
-        caption_text = caption["text"].strip()[:500]
-        matched = next(
-            (
-                candidate
-                for candidate in figures
-                if _same_area(candidate["rect"], rect)
-            ),
-            None,
-        )
-        if matched is not None:
-            if not matched["caption"]:
-                matched["caption"] = caption_text
-                matched["block_ids"] = [caption["id"]]
-            continue
-        figures.append(
-            {
-                "rect": rect,
-                "caption": caption_text,
-                "reason": "figure_caption_gap",
-                "confidence": "medium",
-                "block_ids": [caption["id"]],
-            }
-        )
+    figures = assemble_figures(
+        int(page_width),
+        int(page_height),
+        blocks,
+        image_rects,
+        drawing_rects,
+        raster_rects,
+        text_regions,
+    )
 
     for figure in figures:
         clamped = clamp_rect(figure["rect"], int(page_width), int(page_height))

@@ -51,6 +51,17 @@ to delete a project folder outside the data folder.
 
 ## Completed after 1.1.0
 
+**Page-wide figure detection evaluation (28 November 2026).** The figure
+proposal pipeline is now scored against hand-labelled boxes with IoU matching
+across ten representative layouts (embedded image, vector chart, captioned image,
+shaded backing, background, logo, multi-column, two figures, raster chart,
+text-only raster). Measured precision 1.00 and recall 1.00 (TP=8, FP=0, FN=0) on
+the controlled corpus. The evaluation exposed and fixed a duplicate-proposal
+defect: a short caption under a wide image produced two boxes; the caption band
+now merges with the artwork when the two share most of the smaller box on both
+axes. Method, results and limitations are in `docs/figure-detection.md`; the
+resumable record is `docs/should-have/PROGRESS.md`.
+
 **Practical-file validation (27 November 2026).** A lightweight normal-workflow
 check imported 8 PDF pages and 5 supplied JPG scans. Source rendering,
 PDF text extraction, Burmese and mixed-script OCR proposals, editing,
